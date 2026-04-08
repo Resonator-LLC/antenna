@@ -1,0 +1,199 @@
+@prefix station: <http://station.local/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+# ========== MASTHEAD ==========
+
+<urn:news:masthead> a station:Object ;
+    station:x "0.0"^^xsd:double ;
+    station:y "-170.0"^^xsd:double ;
+    station:worldWidth "430.0"^^xsd:double ;
+    station:worldHeight "50.0"^^xsd:double ;
+    station:lod [
+        station:below "100.0"^^xsd:double ;
+        station:widget "Text{value=FRACTAL STATION,fontSize=10,color=#F0F0F4,style=bold,fontFamily=monospace}"
+    ] ;
+    station:lod [
+        station:below "99999.0"^^xsd:double ;
+        station:widget "Container{color=#1E1E30,padding=10}[Column[Row[Text{value=FRACTAL STATION,fontSize=20,color=#F0F0F4,style=bold,fontFamily=monospace},Text{value=  \u2605  \u2605  \u2605,fontSize=14,color=#7799CC}],Row[Text{value=THE SPATIAL INTERFACE DAILY,fontSize=9,color=#7799CC,fontFamily=monospace},Text{value=  --  VOL.I  NO.1  --  2026,fontSize=9,color=#7799CC,fontFamily=monospace}]]]"
+    ] .
+
+# ========== CONTACTS ==========
+
+<urn:news:contacts> a station:Object ;
+    station:x "-160.0"^^xsd:double ;
+    station:y "-20.0"^^xsd:double ;
+    station:worldWidth "110.0"^^xsd:double ;
+    station:worldHeight "250.0"^^xsd:double ;
+    station:lod [
+        station:below "40.0"^^xsd:double ;
+        station:widget "Column[Icon{name=people,size=20,color=#77BBFF},Text{value=CONTACTS,fontSize=7,color=#77BBFF,fontFamily=monospace}]"
+    ] ;
+    station:lod [
+        station:below "350.0"^^xsd:double ;
+        station:widget "Container{color=#1C1C34,padding=10}[Column[Text{value=CONTACTS,fontSize=8,color=#77BBFF,style=bold,fontFamily=monospace},Container{color=#3A5878,height=1}[],Container{height=4}[],Row[Icon{name=circle,size=8,color=#66FFAA},Text{value= Alice,fontSize=11,color=#E8E8F0}],Row[Icon{name=circle,size=8,color=#FFCC66},Text{value= Bob,fontSize=11,color=#E8E8F0}],Row[Icon{name=circle,size=8,color=#66FFAA},Text{value= Carol,fontSize=11,color=#E8E8F0}],Row[Icon{name=circle,size=8,color=#8888AA},Text{value= Dave,fontSize=11,color=#E8E8F0}],Row[Icon{name=circle,size=8,color=#66FFAA},Text{value= Eve,fontSize=11,color=#E8E8F0}],Row[Icon{name=circle,size=8,color=#66FFAA},Text{value= Frank,fontSize=11,color=#E8E8F0}],Row[Icon{name=circle,size=8,color=#FFCC66},Text{value= Grace,fontSize=11,color=#E8E8F0}],Row[Icon{name=circle,size=8,color=#8888AA},Text{value= Hank,fontSize=11,color=#E8E8F0}],Row[Icon{name=circle,size=8,color=#66FFAA},Text{value= Iris,fontSize=11,color=#E8E8F0}],Row[Icon{name=circle,size=8,color=#8888AA},Text{value= Jack,fontSize=11,color=#E8E8F0}]]]"
+    ] ;
+    station:lod [
+        station:below "99999.0"^^xsd:double ;
+        station:widget "Container{color=#1C1C34,padding=10}[Column[Text{value=CONTACTS,fontSize=8,color=#77BBFF,style=bold,fontFamily=monospace},Container{color=#3A5878,height=1}[]]]"
+    ] .
+
+# ---------- Contact: Alice ----------
+
+<urn:contact:alice> a station:Object ;
+    station:x "-160.0"^^xsd:double ;
+    station:y "-100.0"^^xsd:double ;
+    station:worldWidth "20.0"^^xsd:double ;
+    station:worldHeight "20.0"^^xsd:double ;
+    station:lod [
+        station:below "60.0"^^xsd:double ;
+        station:widget "Row[Icon{name=circle,size=6,color=#66FFAA},Text{value= Alice,fontSize=7,color=#E8E8F0,fontFamily=monospace}]"
+    ] ;
+    station:lod [
+        station:below "99999.0"^^xsd:double ;
+        station:widget "Container{color=#222240,padding=6}[Column[Row[Icon{name=circle,size=8,color=#66FFAA},Text{value= Alice,fontSize=9,color=#E8E8F0,style=bold,fontFamily=monospace}],Container{color=#3A5878,height=1}[],Container{height=3}[],Container{color=#303058,borderRadius=4,padding=4}[Text{value=Hey! Whats the plan?,fontSize=9,color=#CCCCFF}],Container{height=2}[],Container{color=#1E381E,borderRadius=4,padding=4}[Text{value=Building the station UI,fontSize=9,color=#AAFFAA}],Container{height=2}[],Container{color=#303058,borderRadius=4,padding=4}[Text{value=Sounds great! Let me know if you need help,fontSize=9,color=#CCCCFF}]]]"
+    ] .
+
+# ---------- Contact: Bob ----------
+
+<urn:contact:bob> a station:Object ;
+    station:x "-160.0"^^xsd:double ;
+    station:y "-76.0"^^xsd:double ;
+    station:worldWidth "20.0"^^xsd:double ;
+    station:worldHeight "20.0"^^xsd:double ;
+    station:lod [
+        station:below "60.0"^^xsd:double ;
+        station:widget "Row[Icon{name=circle,size=6,color=#FFCC66},Text{value= Bob,fontSize=7,color=#E8E8F0,fontFamily=monospace}]"
+    ] ;
+    station:lod [
+        station:below "99999.0"^^xsd:double ;
+        station:widget "Container{color=#222240,padding=6}[Column[Row[Icon{name=circle,size=8,color=#FFCC66},Text{value= Bob,fontSize=9,color=#E8E8F0,style=bold,fontFamily=monospace}],Container{color=#3A5878,height=1}[],Container{height=3}[],Container{color=#303058,borderRadius=4,padding=4}[Text{value=Incredible work everyone,fontSize=9,color=#CCCCFF}],Container{height=2}[],Container{color=#1E381E,borderRadius=4,padding=4}[Text{value=Thanks! More coming soon,fontSize=9,color=#AAFFAA}],Container{height=2}[],Container{color=#303058,borderRadius=4,padding=4}[Text{value=Can't wait to see v2,fontSize=9,color=#CCCCFF}]]]"
+    ] .
+
+# ---------- Contact: Carol ----------
+
+<urn:contact:carol> a station:Object ;
+    station:x "-160.0"^^xsd:double ;
+    station:y "-52.0"^^xsd:double ;
+    station:worldWidth "20.0"^^xsd:double ;
+    station:worldHeight "20.0"^^xsd:double ;
+    station:lod [
+        station:below "60.0"^^xsd:double ;
+        station:widget "Row[Icon{name=circle,size=6,color=#66FFAA},Text{value= Carol,fontSize=7,color=#E8E8F0,fontFamily=monospace}]"
+    ] ;
+    station:lod [
+        station:below "99999.0"^^xsd:double ;
+        station:widget "Container{color=#222240,padding=6}[Column[Row[Icon{name=circle,size=8,color=#66FFAA},Text{value= Carol,fontSize=9,color=#E8E8F0,style=bold,fontFamily=monospace}],Container{color=#3A5878,height=1}[],Container{height=3}[],Container{color=#303058,borderRadius=4,padding=4}[Text{value=When is the launch?,fontSize=9,color=#CCCCFF}],Container{height=2}[],Container{color=#1E381E,borderRadius=4,padding=4}[Text{value=Very soon. Stay tuned!,fontSize=9,color=#AAFFAA}],Container{height=2}[],Container{color=#303058,borderRadius=4,padding=4}[Text{value=Exciting! I'll spread the word,fontSize=9,color=#CCCCFF}]]]"
+    ] .
+
+# ---------- Contact: Dave ----------
+
+<urn:contact:dave> a station:Object ;
+    station:x "-160.0"^^xsd:double ;
+    station:y "-28.0"^^xsd:double ;
+    station:worldWidth "20.0"^^xsd:double ;
+    station:worldHeight "20.0"^^xsd:double ;
+    station:lod [
+        station:below "60.0"^^xsd:double ;
+        station:widget "Row[Icon{name=circle,size=6,color=#8888AA},Text{value= Dave,fontSize=7,color=#E8E8F0,fontFamily=monospace}]"
+    ] ;
+    station:lod [
+        station:below "99999.0"^^xsd:double ;
+        station:widget "Container{color=#222240,padding=6}[Column[Row[Icon{name=circle,size=8,color=#8888AA},Text{value= Dave,fontSize=9,color=#E8E8F0,style=bold,fontFamily=monospace}],Container{color=#3A5878,height=1}[],Container{height=3}[],Container{color=#303058,borderRadius=4,padding=4}[Text{value=Any ETA on v2?,fontSize=9,color=#CCCCFF}],Container{height=2}[],Container{color=#1E381E,borderRadius=4,padding=4}[Text{value=Working on it now,fontSize=9,color=#AAFFAA}],Container{height=2}[],Container{color=#303058,borderRadius=4,padding=4}[Text{value=Cool keep me posted,fontSize=9,color=#CCCCFF}]]]"
+    ] .
+
+# ---------- Contact: Eve ----------
+
+<urn:contact:eve> a station:Object ;
+    station:x "-160.0"^^xsd:double ;
+    station:y "-4.0"^^xsd:double ;
+    station:worldWidth "20.0"^^xsd:double ;
+    station:worldHeight "20.0"^^xsd:double ;
+    station:lod [
+        station:below "60.0"^^xsd:double ;
+        station:widget "Row[Icon{name=circle,size=6,color=#66FFAA},Text{value= Eve,fontSize=7,color=#E8E8F0,fontFamily=monospace}]"
+    ] ;
+    station:lod [
+        station:below "99999.0"^^xsd:double ;
+        station:widget "Container{color=#222240,padding=6}[Column[Row[Icon{name=circle,size=8,color=#66FFAA},Text{value= Eve,fontSize=9,color=#E8E8F0,style=bold,fontFamily=monospace}],Container{color=#3A5878,height=1}[],Container{height=3}[],Container{color=#303058,borderRadius=4,padding=4}[Text{value=The fractal zoom is wild,fontSize=9,color=#CCCCFF}],Container{height=2}[],Container{color=#1E381E,borderRadius=4,padding=4}[Text{value=Right? Infinite depth,fontSize=9,color=#AAFFAA}],Container{height=2}[],Container{color=#303058,borderRadius=4,padding=4}[Text{value=I keep discovering new layers,fontSize=9,color=#CCCCFF}]]]"
+    ] .
+
+# ========== CHAT ==========
+
+<urn:news:chat> a station:Object ;
+    station:x "-5.0"^^xsd:double ;
+    station:y "-20.0"^^xsd:double ;
+    station:worldWidth "200.0"^^xsd:double ;
+    station:worldHeight "250.0"^^xsd:double ;
+    station:lod [
+        station:below "60.0"^^xsd:double ;
+        station:widget "Column[Icon{name=reply,size=20,color=#77BBFF},Text{value=CHAT,fontSize=7,color=#77BBFF,fontFamily=monospace}]"
+    ] ;
+    station:lod [
+        station:below "99999.0"^^xsd:double ;
+        station:widget "Container{color=#1C1C34,padding=12}[Column[Text{value=CHAT,fontSize=8,color=#77BBFF,style=bold,fontFamily=monospace},Container{color=#3A5878,height=1}[],Container{height=4}[],Container{color=#303058,borderRadius=4,padding=6}[Text{value=Alice: Hello! Whats the plan?,fontSize=11,color=#CCCCFF}],Container{height=3}[],Container{color=#1E381E,borderRadius=4,padding=6}[Text{value=You: Building the station UI,fontSize=11,color=#AAFFAA}],Container{height=3}[],Container{color=#303058,borderRadius=4,padding=6}[Text{value=Carol: When is the launch?,fontSize=11,color=#CCCCFF}],Container{height=3}[],Container{color=#1E381E,borderRadius=4,padding=6}[Text{value=You: Very soon. Stay tuned!,fontSize=11,color=#AAFFAA}],Container{height=3}[],Container{color=#303058,borderRadius=4,padding=6}[Text{value=Bob: Incredible work everyone,fontSize=11,color=#CCCCFF}],Container{height=3}[],Container{color=#1E381E,borderRadius=4,padding=6}[Text{value=Dave: Any ETA on v2?,fontSize=11,color=#AAFFAA}],Container{height=3}[],Container{color=#303058,borderRadius=4,padding=6}[Text{value=Alice: Watch the feed for updates,fontSize=11,color=#CCCCFF}],Container{height=6}[],Container{color=#303050,borderRadius=4,padding=8}[Row[Icon{name=edit,size=12,color=#7788AA},Text{value= Reply...,fontSize=11,color=#7788AA}]]]]"
+    ] .
+
+# ========== DASHBOARD ==========
+
+<urn:news:dashboard> a station:Object ;
+    station:x "155.0"^^xsd:double ;
+    station:y "-105.0"^^xsd:double ;
+    station:worldWidth "120.0"^^xsd:double ;
+    station:worldHeight "80.0"^^xsd:double ;
+    station:lod [
+        station:below "40.0"^^xsd:double ;
+        station:widget "Column[Icon{name=star,size=20,color=#77BBFF},Text{value=DASHBOARD,fontSize=7,color=#77BBFF,fontFamily=monospace}]"
+    ] ;
+    station:lod [
+        station:below "99999.0"^^xsd:double ;
+        station:widget "Container{color=#1C1C34,padding=10}[Column[Text{value=DASHBOARD,fontSize=8,color=#77BBFF,style=bold,fontFamily=monospace},Container{color=#3A5878,height=1}[],Container{height=4}[],Row[Icon{name=circle,size=9,color=#66FFAA},Text{value= Active: 128,fontSize=10,color=#E8E8F0}],Row[Icon{name=people,size=9,color=#77BBFF},Text{value= Online: 42,fontSize=10,color=#E8E8F0}],Row[Icon{name=star,size=9,color=#FFCC66},Text{value= Alerts: 7,fontSize=10,color=#E8E8F0}],Row[Icon{name=visibility,size=9,color=#66DDBB},Text{value= Uptime: 99%,fontSize=10,color=#E8E8F0}]]]"
+    ] .
+
+# ========== TERMINAL ==========
+
+<urn:news:terminal> a station:Object ;
+    station:x "155.0"^^xsd:double ;
+    station:y "-25.0"^^xsd:double ;
+    station:worldWidth "120.0"^^xsd:double ;
+    station:worldHeight "80.0"^^xsd:double ;
+    station:lod [
+        station:below "40.0"^^xsd:double ;
+        station:widget "Column[Icon{name=code,size=20,color=#66FF88},Text{value=TERMINAL,fontSize=7,color=#66FF88,fontFamily=monospace}]"
+    ] ;
+    station:lod [
+        station:below "99999.0"^^xsd:double ;
+        station:widget "Container{color=#142818,padding=10}[Column[Text{value=TERMINAL,fontSize=8,color=#66FF88,style=bold,fontFamily=monospace},Container{color=#3A6A4A,height=1}[],Container{height=4}[],Text{value=> fractal-station,fontSize=9,color=#66FF88,fontFamily=monospace},Text{value=connected to ws://9903,fontSize=9,color=#BBBBBB,fontFamily=monospace},Text{value=store: in-memory,fontSize=9,color=#BBBBBB,fontFamily=monospace},Text{value=seed.ttl loaded,fontSize=9,color=#BBBBBB,fontFamily=monospace},Text{value=> _,fontSize=9,color=#66FF88,fontFamily=monospace}]]"
+    ] .
+
+# ========== SETTINGS ==========
+
+<urn:news:settings> a station:Object ;
+    station:x "155.0"^^xsd:double ;
+    station:y "60.0"^^xsd:double ;
+    station:worldWidth "120.0"^^xsd:double ;
+    station:worldHeight "90.0"^^xsd:double ;
+    station:lod [
+        station:below "40.0"^^xsd:double ;
+        station:widget "Column[Icon{name=settings,size=20,color=#AAAABB},Text{value=SETTINGS,fontSize=7,color=#AAAABB,fontFamily=monospace}]"
+    ] ;
+    station:lod [
+        station:below "99999.0"^^xsd:double ;
+        station:widget "Container{color=#202036,padding=10}[Column[Text{value=SETTINGS,fontSize=8,color=#AAAABB,style=bold,fontFamily=monospace},Container{color=#4A4A6A,height=1}[],Container{height=4}[],Row[Icon{name=cable,size=9,color=#77BBFF},Text{value= ws://9903,fontSize=10,color=#E8E8F0}],Row[Icon{name=visibility,size=9,color=#66FFAA},Text{value= debug: ON,fontSize=10,color=#E8E8F0}],Row[Icon{name=settings,size=9,color=#AAAABB},Text{value= profile: my.tox,fontSize=10,color=#E8E8F0}],Row[Icon{name=code,size=9,color=#66DDBB},Text{value= store: in-memory,fontSize=10,color=#E8E8F0}]]]"
+    ] .
+
+# ========== GPU SHADER ==========
+
+<urn:news:shader> a station:Object ;
+    station:x "0.0"^^xsd:double ;
+    station:y "155.0"^^xsd:double ;
+    station:worldWidth "430.0"^^xsd:double ;
+    station:worldHeight "100.0"^^xsd:double ;
+    station:lod [
+        station:below "80.0"^^xsd:double ;
+        station:widget "Text{value=MANDELBROT,fontSize=8,color=#77BBFF,fontFamily=monospace}"
+    ] ;
+    station:lod [
+        station:below "99999.0"^^xsd:double ;
+        station:widget "Shader{asset=shaders/mandelbrot.frag,animated=true}"
+    ] .

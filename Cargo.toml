@@ -1,0 +1,27 @@
+[package]
+name = "antenna"
+version = "0.2.0"
+edition = "2021"
+
+[lib]
+name = "antenna"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "antenna"
+path = "src/main.rs"
+
+[dependencies]
+oxigraph = "0.4"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+libc = "0.2"
+tungstenite = "0.24"
+ureq = "2"
+
+[build-dependencies]
+cc = "1"
+
+[profile.release]
+lto = true
+strip = true
