@@ -1,5 +1,4 @@
-///! QuickJS VM via C FFI. Each ScriptNode gets its own JSRuntime + JSContext.
-
+//! QuickJS VM via C FFI. Each ScriptNode gets its own JSRuntime + JSContext.
 use anyhow::{anyhow, bail, Result};
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::sync::mpsc::{self, Sender};
@@ -44,9 +43,6 @@ type JSCFunction = unsafe extern "C" fn(
 ) -> JSValue;
 
 const JS_EVAL_TYPE_GLOBAL: c_int = 0;
-const JS_TAG_INT: i64 = 0;
-const JS_TAG_OBJECT: i64 = -1;
-const JS_TAG_STRING: i64 = -7;
 const JS_TAG_UNDEFINED: i64 = 3;
 const JS_TAG_EXCEPTION: i64 = 6;
 
@@ -54,13 +50,6 @@ fn js_undefined() -> JSValue {
     JSValue {
         u: JSValueUnion { int32: 0 },
         tag: JS_TAG_UNDEFINED,
-    }
-}
-
-fn js_mkval(tag: i64, val: i32) -> JSValue {
-    JSValue {
-        u: JSValueUnion { int32: val },
-        tag,
     }
 }
 
@@ -111,7 +100,12 @@ extern "C" {
     fn JS_GetContextOpaque(ctx: *mut JSContext) -> *mut c_void;
     fn JS_NewObject(ctx: *mut JSContext) -> JSValue;
     fn JS_NewArray(ctx: *mut JSContext) -> JSValue;
-    fn JS_SetPropertyUint32(ctx: *mut JSContext, this_obj: JSValue, idx: u32, val: JSValue) -> c_int;
+    fn JS_SetPropertyUint32(
+        ctx: *mut JSContext,
+        this_obj: JSValue,
+        idx: u32,
+        val: JSValue,
+    ) -> c_int;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +121,11 @@ struct VmOpaque {
 // C callback: emit(turtle_string)
 // ---------------------------------------------------------------------------
 
+/// # Safety
+///
+/// Called by QuickJS when JS code invokes `emit()`. `ctx` must be a valid
+/// context with a VmOpaque stored in its opaque slot. `argv` must point to
+/// `argc` valid JSValues.
 unsafe extern "C" fn js_emit(
     ctx: *mut JSContext,
     _this: JSValue,
@@ -158,6 +157,9 @@ unsafe extern "C" fn js_emit(
 // C callback: print(...)
 // ---------------------------------------------------------------------------
 
+/// # Safety
+///
+/// Called by QuickJS when JS code invokes `print()`. Same invariants as `js_emit`.
 unsafe extern "C" fn js_print(
     ctx: *mut JSContext,
     _this: JSValue,
@@ -184,6 +186,11 @@ unsafe extern "C" fn js_print(
 // C callback: store.query(sparql) → array of objects
 // ---------------------------------------------------------------------------
 
+/// # Safety
+///
+/// Called by QuickJS when JS code invokes `store.query()`. Same invariants as
+/// `js_emit`. Sends a query request through the VmOpaque's query_sender channel
+/// and blocks up to 5 seconds for a response.
 unsafe extern "C" fn js_store_query(
     ctx: *mut JSContext,
     _this: JSValue,
@@ -243,32 +250,55 @@ pub struct ScriptVm {
     _opaque: Box<VmOpaque>,
 }
 
+// SAFETY: ScriptVm is only used from one thread at a time (each DAG node
+// thread owns its VM). The QuickJS runtime is not thread-safe, but we never
+// share a VM across threads — Send is needed to move it into the node thread.
 unsafe impl Send for ScriptVm {}
 
 impl ScriptVm {
-    pub fn new(emit_sender: Sender<String>, query_sender: Sender<QueryRequest>, memory_limit: usize) -> Result<Self> {
+    pub fn new(
+        emit_sender: Sender<String>,
+        query_sender: Sender<QueryRequest>,
+        memory_limit: usize,
+    ) -> Result<Self> {
+        // SAFETY: JS_NewRuntime returns a heap-allocated runtime or NULL.
+        // We check for NULL and own the pointer exclusively.
         let rt = unsafe { JS_NewRuntime() };
         if rt.is_null() {
             bail!("JS_NewRuntime failed");
         }
 
         if memory_limit > 0 {
+            // SAFETY: rt is a valid, non-null runtime pointer.
             unsafe { JS_SetMemoryLimit(rt, memory_limit) };
         }
 
+        // SAFETY: rt is valid; JS_NewContext returns a context or NULL.
         let ctx = unsafe { JS_NewContext(rt) };
         if ctx.is_null() {
             unsafe { JS_FreeRuntime(rt) };
             bail!("JS_NewContext failed");
         }
 
-        let opaque = Box::new(VmOpaque { emit_sender, query_sender });
+        // SAFETY: We store a pointer to VmOpaque in the context's opaque slot.
+        // The Box<VmOpaque> is kept alive in `_opaque` for the lifetime of this
+        // ScriptVm, so the pointer remains valid for all callback invocations.
+        let opaque = Box::new(VmOpaque {
+            emit_sender,
+            query_sender,
+        });
         unsafe {
             JS_SetContextOpaque(ctx, &*opaque as *const VmOpaque as *mut c_void);
         }
 
+        // SAFETY: ctx is valid; global object is ref-counted by QuickJS.
+        // We free it at the end of this block after registering functions.
         let global = unsafe { JS_GetGlobalObject(ctx) };
 
+        // SAFETY: All CString::new("...").unwrap() calls are safe because the
+        // string literals contain no interior null bytes. JS_NewCFunction2 and
+        // JS_SetPropertyStr are standard QuickJS API; the function pointers
+        // (js_emit, js_print, js_store_query) match the expected signature.
         unsafe {
             let name = CString::new("emit").unwrap();
             let func = JS_NewCFunction2(ctx, js_emit, name.as_ptr(), 1, 0, 0);
@@ -297,8 +327,12 @@ impl ScriptVm {
     }
 
     pub fn exec(&self, source: &str, input: &str, channel_uri: &str) -> Result<()> {
+        // SAFETY: self.ctx is valid for the lifetime of this ScriptVm.
         let global = unsafe { JS_GetGlobalObject(self.ctx) };
 
+        // SAFETY: Setting global properties on a valid context. CString values
+        // are kept alive until after JS_SetPropertyStr copies them. QuickJS
+        // takes ownership of the JSValue (JS_NewString result).
         unsafe {
             let input_c = CString::new(input).unwrap_or_default();
             let input_val = JS_NewString(self.ctx, input_c.as_ptr());
@@ -313,9 +347,12 @@ impl ScriptVm {
 
         // Wrap in IIFE so const/let don't pollute the global scope across repeated calls
         let wrapped = format!("(function(){{\n{}\n}})();", source);
-        let source_c = CString::new(wrapped.as_str()).map_err(|_| anyhow!("script contains null byte"))?;
+        let source_c =
+            CString::new(wrapped.as_str()).map_err(|_| anyhow!("script contains null byte"))?;
         let filename_c = CString::new("<script>").unwrap();
 
+        // SAFETY: source_c and filename_c are valid CStrings kept alive for
+        // the duration of JS_Eval. The context is valid and single-threaded.
         let result = unsafe {
             JS_Eval(
                 self.ctx,
@@ -355,12 +392,25 @@ impl ScriptVm {
 
 impl Drop for ScriptVm {
     fn drop(&mut self) {
+        // SAFETY: We clear the opaque pointer first so no callback can
+        // dereference VmOpaque after the Box is dropped. Then we remove the
+        // C function properties (emit, print, store) from the global object
+        // to release their ref counts before GC runs — this prevents the
+        // QuickJS assertion failure on JS_FreeRuntime. Finally we free
+        // both context and runtime, avoiding the ~100KB-per-VM leak.
         unsafe {
             JS_SetContextOpaque(self.ctx, std::ptr::null_mut());
+
+            let global = JS_GetGlobalObject(self.ctx);
+            let undef = js_undefined();
+            for name in ["emit", "print", "store"] {
+                let cname = CString::new(name).unwrap();
+                JS_SetPropertyStr(self.ctx, global, cname.as_ptr(), undef);
+            }
+            JS_FreeValue(self.ctx, global);
+
             JS_FreeContext(self.ctx);
-            // Skip JS_FreeRuntime — leaks ~100KB per VM but avoids
-            // assert on GC objects (C functions on global). Acceptable
-            // since VMs live until process exit.
+            JS_FreeRuntime(self.rt);
         }
     }
 }

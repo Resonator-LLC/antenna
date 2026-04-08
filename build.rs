@@ -1,45 +1,86 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Locate QuickJS install directory.
+///
+/// QuickJS does not ship a .pc file, so we check (in order):
+///   1. `QUICKJS_DIR` env var
+///   2. Homebrew prefix on macOS
+///   3. Common system paths
+fn find_quickjs() -> PathBuf {
+    if let Ok(val) = std::env::var("QUICKJS_DIR") {
+        return PathBuf::from(val);
+    }
+
+    // Homebrew: quickjs installs under <prefix>/lib/quickjs and <prefix>/include/quickjs
+    if let Ok(output) = std::process::Command::new("brew")
+        .args(["--prefix", "quickjs"])
+        .output()
+    {
+        if output.status.success() {
+            let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let p = PathBuf::from(&prefix);
+            if p.join("include/quickjs/quickjs.h").exists() {
+                return p;
+            }
+        }
+    }
+
+    // Fallback: system paths
+    for base in &["/usr/local", "/usr"] {
+        let p = PathBuf::from(base);
+        if p.join("include/quickjs/quickjs.h").exists() {
+            return p;
+        }
+    }
+
+    panic!(
+        "Could not find QuickJS. Install it (e.g. `brew install quickjs`) \
+         or set QUICKJS_DIR to its prefix."
+    );
+}
 
 fn main() {
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let root = Path::new(&manifest).parent().unwrap();
+    let manifest_dir = Path::new(&manifest);
 
-    let serd_src = root.join("serd").join("src");
-    let serd_inc = root.join("serd").join("include");
-    let carrier_src = root.join("carrier").join("src");
-    let carrier_inc = root.join("carrier").join("include");
-    let deps_inc = root.join("deps").join("include");
-    let deps_lib = root.join("deps").join("lib");
-    let quickjs_dir = root.join("quickjs");
+    // --- Serd (system library via pkg-config) ---
+    let serd = pkg_config::Config::new()
+        .atleast_version("0.30")
+        .statik(true)
+        .probe("serd-0")
+        .expect("Could not find serd. Install it (e.g. `brew install serd`) or set PKG_CONFIG_PATH.");
 
-    // --- Serd (Turtle parser, C11, no deps) ---
-    let serd_sources: Vec<_> = [
-        "base64.c",
-        "byte_source.c",
-        "env.c",
-        "n3.c",
-        "node.c",
-        "read_utf8.c",
-        "reader.c",
-        "string.c",
-        "system.c",
-        "uri.c",
-        "writer.c",
-    ]
-    .iter()
-    .map(|f| serd_src.join(f))
-    .collect();
+    // --- Toxcore (system library via pkg-config) ---
+    let toxcore = pkg_config::Config::new()
+        .statik(true)
+        .probe("toxcore")
+        .expect("Could not find toxcore. Install it (e.g. `brew install toxcore`) or set PKG_CONFIG_PATH.");
 
+    // --- QuickJS (no pkg-config, manual lookup) ---
+    let quickjs_prefix = find_quickjs();
+    let quickjs_inc = quickjs_prefix.join("include").join("quickjs");
+    let quickjs_lib = quickjs_prefix.join("lib").join("quickjs");
+
+    println!("cargo:rustc-link-search=native={}", quickjs_lib.display());
+    println!("cargo:rustc-link-lib=static=quickjs");
+
+    // Compile the shim that wraps static-inline QuickJS functions for FFI
+    let src_dir = manifest_dir.join("src");
     cc::Build::new()
-        .files(&serd_sources)
-        .include(&serd_inc)
-        .include(&serd_src)
-        .define("SERD_STATIC", None)
-        .std("c11")
+        .file(src_dir.join("quickjs_shim.c"))
+        .include(&quickjs_inc)
         .warnings(false)
-        .compile("serd");
+        .compile("quickjs_shim");
 
-    // --- Carrier (Tox wrapper, C11) ---
+    // --- Carrier (compiled from submodule) ---
+    let carrier_dir = if let Ok(val) = std::env::var("CARRIER_DIR") {
+        PathBuf::from(val)
+    } else {
+        manifest_dir.join("third_party").join("carrier")
+    };
+    let carrier_src = carrier_dir.join("src");
+    let carrier_inc = carrier_dir.join("include");
+
     cc::Build::new()
         .files(&[
             carrier_src.join("carrier.c"),
@@ -47,53 +88,15 @@ fn main() {
         ])
         .include(&carrier_inc)
         .include(&carrier_src)
-        .include(&deps_inc)
-        .include(&serd_inc)
+        // Carrier needs serd and toxcore headers
+        .includes(serd.include_paths.iter())
+        .includes(toxcore.include_paths.iter())
         .define("SERD_STATIC", None)
         .std("c11")
         .warnings(false)
         .compile("carrier");
 
-    // --- QuickJS (JS engine) ---
-    let src_dir = Path::new(&manifest).join("src");
-    cc::Build::new()
-        .files(&[
-            quickjs_dir.join("quickjs.c"),
-            quickjs_dir.join("cutils.c"),
-            quickjs_dir.join("dtoa.c"),
-            quickjs_dir.join("libregexp.c"),
-            quickjs_dir.join("libunicode.c"),
-            quickjs_dir.join("quickjs-libc.c"),
-            src_dir.join("quickjs_shim.c"),
-        ])
-        .include(&quickjs_dir)
-        .define("_GNU_SOURCE", None)
-        .define("CONFIG_VERSION", Some("\"2025-04-26\""))
-        .define("CONFIG_BIGNUM", None)
-        .warnings(false)
-        .opt_level(2)
-        .compile("quickjs");
-
-    // --- Link toxcore and its transitive deps ---
-    println!("cargo:rustc-link-search=native={}", deps_lib.display());
-    println!("cargo:rustc-link-lib=static=toxcore");
-
-    for lib in &["libsodium", "opus", "vpx"] {
-        if let Ok(output) = std::process::Command::new("pkg-config")
-            .args(["--libs-only-L", lib])
-            .output()
-        {
-            let paths = String::from_utf8_lossy(&output.stdout);
-            for token in paths.split_whitespace() {
-                if let Some(path) = token.strip_prefix("-L") {
-                    println!("cargo:rustc-link-search=native={}", path);
-                }
-            }
-        }
-    }
-    println!("cargo:rustc-link-lib=sodium");
-    println!("cargo:rustc-link-lib=opus");
-    println!("cargo:rustc-link-lib=vpx");
+    // pthread (always needed by toxcore)
     println!("cargo:rustc-link-lib=pthread");
 
     // Link math lib on non-macOS
@@ -103,7 +106,8 @@ fn main() {
     // Rebuild triggers
     println!("cargo:rerun-if-changed={}", carrier_src.display());
     println!("cargo:rerun-if-changed={}", carrier_inc.display());
-    println!("cargo:rerun-if-changed={}", serd_src.display());
-    println!("cargo:rerun-if-changed={}", quickjs_dir.display());
-    println!("cargo:rerun-if-changed={}", src_dir.join("quickjs_shim.c").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        src_dir.join("quickjs_shim.c").display()
+    );
 }

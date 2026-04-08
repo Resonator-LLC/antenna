@@ -1,0 +1,52 @@
+# Semantic Router — LLM-powered RDF synthesis between two input streams.
+#
+# The router latches the latest message from each input channel (inA, inB).
+# When both have data, it sends both graphs to an LLM backend and emits
+# the synthesized RDF result.
+#
+# Requires an Ollama instance running locally with the model pulled:
+#   ollama pull qwen2.5-coder:7b
+#
+# Load with: antenna -p my.tox --pipeline examples/semantic_router.ttl
+#
+@prefix antenna: <http://resonator.network/v2/antenna#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Two input channels
+<urn:channel:stream-a> a antenna:Channel .
+<urn:channel:stream-b> a antenna:Channel .
+
+# Feed beforeInsert into stream-a
+<urn:src:splitter-a> a antenna:ScriptSource ;
+    antenna:language "javascript" ;
+    antenna:body "emit(input);" .
+
+<urn:node:splitter-a> a antenna:ScriptNode ;
+    antenna:scriptSource <urn:src:splitter-a> ;
+    antenna:in antenna:beforeInsert ;
+    antenna:out <urn:channel:stream-a> .
+
+# Feed afterInsert into stream-b
+<urn:src:splitter-b> a antenna:ScriptSource ;
+    antenna:language "javascript" ;
+    antenna:body "emit(input);" .
+
+<urn:node:splitter-b> a antenna:ScriptNode ;
+    antenna:scriptSource <urn:src:splitter-b> ;
+    antenna:in antenna:afterInsert ;
+    antenna:out <urn:channel:stream-b> .
+
+# LLM backend configuration
+<urn:backend:ollama> a antenna:LlmBackend ;
+    antenna:backendType "ollama" ;
+    antenna:endpoint "http://localhost:11434" ;
+    antenna:model "qwen2.5-coder:7b" .
+
+# Semantic router: synthesizes relationship between stream-a and stream-b
+<urn:router:synth> a antenna:SemanticRouter ;
+    antenna:inA <urn:channel:stream-a> ;
+    antenna:inB <urn:channel:stream-b> ;
+    antenna:out antenna:mainOut ;
+    antenna:llmBackend <urn:backend:ollama> ;
+    antenna:systemPrompt "Focus on causal and temporal relationships between the two graphs." ;
+    antenna:maxTokens 256 .

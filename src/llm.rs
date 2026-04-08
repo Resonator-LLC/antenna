@@ -1,10 +1,9 @@
-///! LLM backend abstraction for SemanticRouter.
-///!
-///! Trait + implementations:
-///!   - OllamaBackend:   POST /api/generate (local Ollama)
-///!   - HttpBackend:     POST /v1/chat/completions (OpenAI-compatible)
-///!   - PlatformBackend: channel bridge to host app (iOS/Android on-device LLM)
-
+//! LLM backend abstraction for SemanticRouter.
+//!
+//! Trait + implementations:
+//!   - OllamaBackend:   POST /api/generate (local Ollama)
+//!   - HttpBackend:     POST /v1/chat/completions (OpenAI-compatible)
+//!   - PlatformBackend: channel bridge to host app (iOS/Android on-device LLM)
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
@@ -142,7 +141,7 @@ impl LlmBackend for PlatformBackend {
             max_tokens,
         );
 
-        self.request_writer.send(&request_turtle);
+        let _ = self.request_writer.send(&request_turtle);
 
         // Block until response arrives (poll with timeout)
         let deadline = std::time::Instant::now() + Duration::from_secs(120);
@@ -159,6 +158,9 @@ impl LlmBackend for PlatformBackend {
                 return Err(anyhow!("platform LLM timeout (120s)"));
             }
 
+            // SAFETY: pfd is a valid stack-allocated pollfd; the clock_fd
+            // comes from a ChannelReader owned by this backend. poll() blocks
+            // until data arrives or the timeout expires.
             unsafe {
                 libc::poll(&mut pfd, 1, remaining.min(500));
             }
@@ -367,4 +369,186 @@ fn simple_id() -> String {
         .unwrap_or_default()
         .as_millis() as u64;
     format!("{:x}-{:x}", t, n)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- json_escape --
+
+    #[test]
+    fn json_escape_simple() {
+        assert_eq!(json_escape("hello"), "\"hello\"");
+    }
+
+    #[test]
+    fn json_escape_quotes_and_backslash() {
+        assert_eq!(json_escape("say \"hi\""), "\"say \\\"hi\\\"\"");
+        assert_eq!(json_escape("a\\b"), "\"a\\\\b\"");
+    }
+
+    #[test]
+    fn json_escape_newlines_tabs() {
+        assert_eq!(json_escape("a\nb\tc"), "\"a\\nb\\tc\"");
+    }
+
+    #[test]
+    fn json_escape_control_chars() {
+        assert_eq!(json_escape("\x01"), "\"\\u0001\"");
+    }
+
+    // -- parse_json_string --
+
+    #[test]
+    fn parse_json_string_basic() {
+        assert_eq!(parse_json_string("\"hello\"").unwrap(), "hello");
+    }
+
+    #[test]
+    fn parse_json_string_escapes() {
+        assert_eq!(parse_json_string(r#""a\"b\\c\n""#).unwrap(), "a\"b\\c\n");
+    }
+
+    #[test]
+    fn parse_json_string_unicode_escape() {
+        assert_eq!(parse_json_string(r#""\u0041""#).unwrap(), "A");
+    }
+
+    #[test]
+    fn parse_json_string_unterminated() {
+        assert!(parse_json_string("\"hello").is_err());
+    }
+
+    #[test]
+    fn parse_json_string_not_a_string() {
+        assert!(parse_json_string("42").is_err());
+    }
+
+    // -- extract_json_field --
+
+    #[test]
+    fn extract_json_field_basic() {
+        let json = r#"{"response":"hello world","done":true}"#;
+        assert_eq!(extract_json_field(json, "response").unwrap(), "hello world");
+    }
+
+    #[test]
+    fn extract_json_field_with_escapes() {
+        let json = r#"{"response":"line1\nline2"}"#;
+        assert_eq!(
+            extract_json_field(json, "response").unwrap(),
+            "line1\nline2"
+        );
+    }
+
+    #[test]
+    fn extract_json_field_missing() {
+        let json = r#"{"other":"val"}"#;
+        assert!(extract_json_field(json, "response").is_err());
+    }
+
+    #[test]
+    fn extract_json_field_not_string() {
+        let json = r#"{"count":42}"#;
+        assert!(extract_json_field(json, "count").is_err());
+    }
+
+    // -- extract_nested_content --
+
+    #[test]
+    fn extract_nested_content_openai() {
+        let json = r#"{"choices":[{"message":{"content":"hello"}}]}"#;
+        assert_eq!(extract_nested_content(json).unwrap(), "hello");
+    }
+
+    // -- extract_turtle_completion --
+
+    #[test]
+    fn extract_turtle_completion_triple_quoted() {
+        let turtle = r#"_:resp a antenna:LlmResponse ; antenna:completion """[] a res:Foo .""" ."#;
+        assert_eq!(extract_turtle_completion(turtle).unwrap(), "[] a res:Foo .");
+    }
+
+    #[test]
+    fn extract_turtle_completion_single_quoted() {
+        let turtle = r#"_:resp a antenna:LlmResponse ; antenna:completion "hello" ."#;
+        assert_eq!(extract_turtle_completion(turtle).unwrap(), "hello");
+    }
+
+    #[test]
+    fn extract_turtle_completion_missing() {
+        let turtle = "_:resp a antenna:LlmResponse .";
+        assert!(extract_turtle_completion(turtle).is_err());
+    }
+
+    // -- turtle_escape (llm version) --
+
+    #[test]
+    fn turtle_escape_triple_quote() {
+        let result = turtle_escape("hello\nworld");
+        assert_eq!(result, "\"\"\"hello\nworld\"\"\"");
+    }
+
+    #[test]
+    fn turtle_escape_preserves_content() {
+        let result = turtle_escape("simple");
+        assert_eq!(result, "\"\"\"simple\"\"\"");
+    }
+
+    // -- build_prompt --
+
+    #[test]
+    fn build_prompt_format() {
+        let result = build_prompt("[] a :A .", "[] a :B .", "@prefix : <http://x/> .");
+        assert!(result.contains("Graph A:"));
+        assert!(result.contains("Graph B:"));
+        assert!(result.contains("[] a :A ."));
+        assert!(result.contains("[] a :B ."));
+        assert!(result.contains("@prefix : <http://x/> ."));
+    }
+
+    // -- create_backend --
+
+    #[test]
+    fn create_backend_unknown_type() {
+        assert!(create_backend("unknown", "", "", None).is_err());
+    }
+
+    #[test]
+    fn create_backend_platform_without_channels() {
+        assert!(create_backend("platform", "", "", None).is_err());
+    }
+
+    #[test]
+    fn create_backend_ollama() {
+        let backend = create_backend("ollama", "http://localhost:11434", "test", None);
+        assert!(backend.is_ok());
+    }
+
+    #[test]
+    fn create_backend_http() {
+        let backend = create_backend("http", "http://localhost:8080/v1", "test", None);
+        assert!(backend.is_ok());
+    }
+
+    // -- simple_id --
+
+    #[test]
+    fn simple_id_unique() {
+        let a = simple_id();
+        let b = simple_id();
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn simple_id_format() {
+        let id = simple_id();
+        assert!(id.contains('-'));
+        // Both parts should be hex
+        let parts: Vec<&str> = id.split('-').collect();
+        assert_eq!(parts.len(), 2);
+        assert!(u64::from_str_radix(parts[0], 16).is_ok());
+        assert!(u64::from_str_radix(parts[1], 16).is_ok());
+    }
 }

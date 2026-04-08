@@ -1,7 +1,6 @@
-///! FFI bindings to libcarrier and CarrierEvent → Turtle serialization.
-
+//! FFI bindings to libcarrier and CarrierEvent → Turtle serialization.
 use anyhow::{bail, Result};
-use std::ffi::{c_char, c_int, c_void, CStr, CString};
+use std::ffi::{c_char, c_int, c_void, CString};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
@@ -270,8 +269,7 @@ pub struct Carrier {
     _opaque: [u8; 0],
 }
 
-type CarrierEventCb =
-    unsafe extern "C" fn(event: *const CarrierEvent, userdata: *mut c_void);
+type CarrierEventCb = unsafe extern "C" fn(event: *const CarrierEvent, userdata: *mut c_void);
 
 // ---------------------------------------------------------------------------
 // FFI declarations
@@ -286,16 +284,8 @@ extern "C" {
     fn carrier_free(c: *mut Carrier);
     fn carrier_iterate(c: *mut Carrier) -> c_int;
     fn carrier_iteration_interval(c: *mut Carrier) -> c_int;
-    fn carrier_set_event_callback(
-        c: *mut Carrier,
-        cb: CarrierEventCb,
-        userdata: *mut c_void,
-    );
-    fn carrier_send_message(
-        c: *mut Carrier,
-        friend_id: u32,
-        text: *const c_char,
-    ) -> c_int;
+    fn carrier_set_event_callback(c: *mut Carrier, cb: CarrierEventCb, userdata: *mut c_void);
+    fn carrier_send_message(c: *mut Carrier, friend_id: u32, text: *const c_char) -> c_int;
     fn carrier_get_id(c: *mut Carrier) -> c_int;
     fn carrier_set_nick(c: *mut Carrier, nick: *const c_char) -> c_int;
     fn carrier_save(c: *mut Carrier) -> c_int;
@@ -356,7 +346,16 @@ fn format_timestamp(ts_ms: i64) -> String {
     let days_in_months: [i64; 12] = [
         31,
         if leap { 29 } else { 28 },
-        31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
     ];
     let mut m = 0usize;
     for (i, &d) in days_in_months.iter().enumerate() {
@@ -389,6 +388,11 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
         format_timestamp(ev.timestamp)
     );
 
+    // SAFETY: ev is a valid reference to a CarrierEvent. Accessing the union
+    // fields is safe because we match on ev.type_ which determines which
+    // variant is active — this mirrors the C API contract where the type tag
+    // indicates which union member is valid. All accessed fields are Copy
+    // types or fixed-size byte arrays.
     let line = unsafe {
         match ev.type_ {
             CarrierEventType::Connected => {
@@ -450,7 +454,9 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                     let stripped = message.trim_end().trim_end_matches('.');
                     format!(
                         "{} ; carrier:requestId {} ; carrier:key \"{}\" .",
-                        stripped, d.request_id, turtle_escape(key)
+                        stripped,
+                        d.request_id,
+                        turtle_escape(key)
                     )
                 } else {
                     format!(
@@ -482,10 +488,7 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
 
                 if is_turtle(name) {
                     let stripped = name.trim_end().trim_end_matches('.');
-                    format!(
-                        "{} ; carrier:friendId {} .",
-                        stripped, d.friend_id
-                    )
+                    format!("{} ; carrier:friendId {} .", stripped, d.friend_id)
                 } else {
                     format!(
                         "[] a carrier:Nick ; carrier:friendId {} ; carrier:nick \"{}\" .",
@@ -507,10 +510,7 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
 
                 if is_turtle(text) {
                     let stripped = text.trim_end().trim_end_matches('.');
-                    format!(
-                        "{} ; carrier:friendId {} .",
-                        stripped, d.friend_id
-                    )
+                    format!("{} ; carrier:friendId {} .", stripped, d.friend_id)
                 } else {
                     format!(
                         "[] a carrier:StatusMessage ; carrier:friendId {} ; carrier:text \"{}\" .",
@@ -656,13 +656,19 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
 // C callback that serializes events and sends them through a channel
 // ---------------------------------------------------------------------------
 
-unsafe extern "C" fn event_callback(
-    event: *const CarrierEvent,
-    userdata: *mut c_void,
-) {
+/// # Safety
+///
+/// Called by libcarrier from the same thread that calls `carrier_iterate`.
+/// `event` must point to a valid `CarrierEvent`. `userdata` must be the
+/// pointer we registered in `ToxCarrier::new` — a `*const Sender<String>`
+/// that remains valid because `ToxCarrier._sender` (a `Box<Sender>`) is
+/// kept alive for the lifetime of the carrier.
+unsafe extern "C" fn event_callback(event: *const CarrierEvent, userdata: *mut c_void) {
     if event.is_null() || userdata.is_null() {
         return;
     }
+    // SAFETY: userdata was set to &*sender_box in ToxCarrier::new and the
+    // Box outlives the carrier (dropped in ToxCarrier::drop after carrier_free).
     let sender = &*(userdata as *const Sender<String>);
     if let Some(turtle) = event_to_turtle(&*event) {
         let _ = sender.send(turtle);
@@ -677,23 +683,23 @@ pub struct ToxCarrier {
     ptr: *mut Carrier,
     // Box the sender so the pointer stays stable for the C callback
     _sender: Box<Sender<String>>,
+    /// Thread that owns iteration — set on first iterate(), asserted thereafter.
+    iterate_thread: std::sync::OnceLock<std::thread::ThreadId>,
 }
 
-// Carrier is single-threaded (caller must iterate from one thread),
-// but we need Send to move it into the main struct.
+// SAFETY: Carrier is single-threaded (caller must iterate from one thread),
+// but we need Send to move it into AntennaContext after construction.
+// The main loop calls iterate() from a single thread, satisfying the
+// single-threaded requirement of libcarrier.
 unsafe impl Send for ToxCarrier {}
 
 impl ToxCarrier {
-    pub fn new(
-        profile: &str,
-        nodes: Option<&str>,
-        sender: Sender<String>,
-    ) -> Result<Self> {
+    pub fn new(profile: &str, nodes: Option<&str>, sender: Sender<String>) -> Result<Self> {
         let profile_c = CString::new(profile)?;
-        let nodes_c = nodes
-            .map(|n| CString::new(n))
-            .transpose()?;
+        let nodes_c = nodes.map(CString::new).transpose()?;
 
+        // SAFETY: CStrings are valid for the duration of carrier_new.
+        // carrier_new returns an opaque pointer or NULL on failure.
         let ptr = unsafe {
             carrier_new(
                 profile_c.as_ptr(),
@@ -706,6 +712,9 @@ impl ToxCarrier {
             bail!("carrier_new returned NULL");
         }
 
+        // SAFETY: We box the sender and pass a raw pointer to the callback.
+        // The Box is stored in `_sender` and outlives `ptr` (carrier_free is
+        // called in Drop before _sender is dropped).
         let sender_box = Box::new(sender);
         let sender_ptr = &*sender_box as *const Sender<String> as *mut c_void;
 
@@ -716,10 +725,20 @@ impl ToxCarrier {
         Ok(Self {
             ptr,
             _sender: sender_box,
+            iterate_thread: std::sync::OnceLock::new(),
         })
     }
 
     pub fn iterate(&self) -> Result<()> {
+        // Ensure single-threaded access: set owner on first call, assert on subsequent.
+        let current = std::thread::current().id();
+        let owner = self.iterate_thread.get_or_init(|| current);
+        debug_assert_eq!(
+            *owner, current,
+            "ToxCarrier::iterate() called from wrong thread"
+        );
+
+        // SAFETY: self.ptr is a valid carrier handle (checked non-null in new()).
         let rc = unsafe { carrier_iterate(self.ptr) };
         if rc < 0 {
             bail!("carrier_iterate returned {}", rc);
@@ -728,12 +747,14 @@ impl ToxCarrier {
     }
 
     pub fn iteration_interval(&self) -> Duration {
+        // SAFETY: self.ptr is valid (see iterate).
         let ms = unsafe { carrier_iteration_interval(self.ptr) };
         Duration::from_millis(ms.max(1) as u64)
     }
 
     pub fn send_message(&self, friend_id: u32, text: &str) -> Result<()> {
         let text_c = CString::new(text)?;
+        // SAFETY: self.ptr is valid; text_c is a valid null-terminated string.
         let rc = unsafe { carrier_send_message(self.ptr, friend_id, text_c.as_ptr()) };
         if rc < 0 {
             bail!("carrier_send_message failed: {}", rc);
@@ -742,6 +763,7 @@ impl ToxCarrier {
     }
 
     pub fn get_id(&self) -> Result<()> {
+        // SAFETY: self.ptr is valid.
         let rc = unsafe { carrier_get_id(self.ptr) };
         if rc < 0 {
             bail!("carrier_get_id failed: {}", rc);
@@ -751,6 +773,7 @@ impl ToxCarrier {
 
     pub fn set_nick(&self, nick: &str) -> Result<()> {
         let nick_c = CString::new(nick)?;
+        // SAFETY: self.ptr is valid; nick_c is a valid null-terminated string.
         let rc = unsafe { carrier_set_nick(self.ptr, nick_c.as_ptr()) };
         if rc < 0 {
             bail!("carrier_set_nick failed: {}", rc);
@@ -759,6 +782,7 @@ impl ToxCarrier {
     }
 
     pub fn save(&self) -> Result<()> {
+        // SAFETY: self.ptr is valid.
         let rc = unsafe { carrier_save(self.ptr) };
         if rc < 0 {
             bail!("carrier_save failed: {}", rc);
@@ -769,6 +793,8 @@ impl ToxCarrier {
 
 impl Drop for ToxCarrier {
     fn drop(&mut self) {
+        // SAFETY: carrier_free is called exactly once. After this, no more
+        // callbacks will fire, so _sender (dropped after this) is safe to free.
         if !self.ptr.is_null() {
             unsafe { carrier_free(self.ptr) };
         }
@@ -785,3 +811,248 @@ pub const TURTLE_PREFIXES: &str = "\
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n\
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n";
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn set_buf(buf: &mut [u8], s: &str) {
+        let bytes = s.as_bytes();
+        buf[..bytes.len()].copy_from_slice(bytes);
+        buf[bytes.len()] = 0;
+    }
+
+    fn make_event(type_: CarrierEventType, data: CarrierEventData) -> CarrierEvent {
+        CarrierEvent {
+            type_,
+            timestamp: 1000,
+            data,
+        }
+    }
+
+    // -- event_to_turtle tests ------------------------------------------------
+
+    #[test]
+    fn event_to_turtle_connected_udp() {
+        let data = CarrierEventData {
+            connected: ConnectedData { transport: 0 },
+        };
+        let ev = make_event(CarrierEventType::Connected, data);
+        let turtle = event_to_turtle(&ev).unwrap();
+        assert!(turtle.contains("a carrier:Connected"));
+        assert!(turtle.contains("carrier:transport \"UDP\""));
+        assert!(turtle.contains("carrier:at \"1970-01-01T00:00:01\""));
+    }
+
+    #[test]
+    fn event_to_turtle_connected_tcp() {
+        let data = CarrierEventData {
+            connected: ConnectedData { transport: 1 },
+        };
+        let ev = make_event(CarrierEventType::Connected, data);
+        let turtle = event_to_turtle(&ev).unwrap();
+        assert!(turtle.contains("carrier:transport \"TCP\""));
+    }
+
+    #[test]
+    fn event_to_turtle_disconnected() {
+        let data = CarrierEventData {
+            connected: ConnectedData { transport: 0 },
+        };
+        let ev = make_event(CarrierEventType::Disconnected, data);
+        let turtle = event_to_turtle(&ev).unwrap();
+        assert!(turtle.contains("a carrier:Disconnected"));
+        assert!(turtle.ends_with('.'));
+    }
+
+    #[test]
+    fn event_to_turtle_self_id() {
+        let mut id_data = SelfIdData {
+            id: [0u8; MAX_ID_LENGTH],
+        };
+        set_buf(&mut id_data.id, "ABC123DEF456");
+        let data = CarrierEventData { self_id: id_data };
+        let ev = make_event(CarrierEventType::SelfId, data);
+        let turtle = event_to_turtle(&ev).unwrap();
+        assert!(turtle.contains("a carrier:SelfId"));
+        assert!(turtle.contains("carrier:id \"ABC123DEF456\""));
+    }
+
+    #[test]
+    fn event_to_turtle_text_message() {
+        let mut msg = TextMessageData {
+            friend_id: 7,
+            name: [0u8; MAX_NAME_LENGTH],
+            text: [0u8; MAX_MESSAGE_LENGTH],
+        };
+        set_buf(&mut msg.name, "Alice");
+        set_buf(&mut msg.text, "Hello world");
+        let data = CarrierEventData { text_message: msg };
+        let ev = make_event(CarrierEventType::TextMessage, data);
+        let turtle = event_to_turtle(&ev).unwrap();
+        assert!(turtle.contains("a carrier:TextMessage"));
+        assert!(turtle.contains("carrier:friendId 7"));
+        assert!(turtle.contains("carrier:name \"Alice\""));
+        assert!(turtle.contains("carrier:text \"Hello world\""));
+    }
+
+    #[test]
+    fn event_to_turtle_text_message_passthrough() {
+        let mut msg = TextMessageData {
+            friend_id: 3,
+            name: [0u8; MAX_NAME_LENGTH],
+            text: [0u8; MAX_MESSAGE_LENGTH],
+        };
+        set_buf(&mut msg.name, "Bob");
+        set_buf(&mut msg.text, "[] a carrier:Custom ; carrier:foo \"bar\" .");
+        let data = CarrierEventData { text_message: msg };
+        let ev = make_event(CarrierEventType::TextMessage, data);
+        let turtle = event_to_turtle(&ev).unwrap();
+        // Passthrough: should NOT contain "a carrier:TextMessage"
+        assert!(!turtle.contains("a carrier:TextMessage"));
+        // Should start with the passthrough turtle
+        assert!(turtle.starts_with("[] a carrier:Custom"));
+        // Should append friendId and name
+        assert!(turtle.contains("carrier:friendId 3"));
+        assert!(turtle.contains("carrier:name \"Bob\""));
+    }
+
+    #[test]
+    fn event_to_turtle_friend_online() {
+        let mut d = FriendOnlineData {
+            friend_id: 42,
+            name: [0u8; MAX_NAME_LENGTH],
+        };
+        set_buf(&mut d.name, "Charlie");
+        let data = CarrierEventData { friend_online: d };
+        let ev = make_event(CarrierEventType::FriendOnline, data);
+        let turtle = event_to_turtle(&ev).unwrap();
+        assert!(turtle.contains("a carrier:FriendOnline"));
+        assert!(turtle.contains("carrier:friendId 42"));
+        assert!(turtle.contains("carrier:name \"Charlie\""));
+    }
+
+    #[test]
+    fn event_to_turtle_friend_offline() {
+        let data = CarrierEventData {
+            friend_offline: FriendOfflineData { friend_id: 99 },
+        };
+        let ev = make_event(CarrierEventType::FriendOffline, data);
+        let turtle = event_to_turtle(&ev).unwrap();
+        assert!(turtle.contains("a carrier:FriendOffline"));
+        assert!(turtle.contains("carrier:friendId 99"));
+    }
+
+    #[test]
+    fn event_to_turtle_error() {
+        let mut d = ErrorData {
+            cmd: [0u8; 64],
+            text: [0u8; MAX_MESSAGE_LENGTH],
+        };
+        set_buf(&mut d.cmd, "send");
+        set_buf(&mut d.text, "timeout");
+        let data = CarrierEventData { error: d };
+        let ev = make_event(CarrierEventType::Error, data);
+        let turtle = event_to_turtle(&ev).unwrap();
+        assert!(turtle.contains("a carrier:Error"));
+        assert!(turtle.contains("carrier:cmd \"send\""));
+        assert!(turtle.contains("carrier:message \"timeout\""));
+    }
+
+    #[test]
+    fn event_to_turtle_system() {
+        let mut d = SystemData {
+            text: [0u8; MAX_MESSAGE_LENGTH],
+        };
+        set_buf(&mut d.text, "bootstrap complete");
+        let data = CarrierEventData { system: d };
+        let ev = make_event(CarrierEventType::System, data);
+        let turtle = event_to_turtle(&ev).unwrap();
+        assert!(turtle.contains("a carrier:System"));
+        assert!(turtle.contains("carrier:message \"bootstrap complete\""));
+    }
+
+    #[test]
+    fn event_to_turtle_binary_returns_none() {
+        // PipeData, AudioFrame, VideoFrame should all return None
+        let data = CarrierEventData {
+            connected: ConnectedData { transport: 0 },
+        };
+        for typ in [
+            CarrierEventType::PipeData,
+            CarrierEventType::AudioFrame,
+            CarrierEventType::VideoFrame,
+        ] {
+            let ev = make_event(typ, data);
+            assert!(
+                event_to_turtle(&ev).is_none(),
+                "{:?} should return None",
+                typ
+            );
+        }
+    }
+
+    // -- format_timestamp tests -----------------------------------------------
+
+    #[test]
+    fn format_timestamp_epoch() {
+        assert_eq!(format_timestamp(0), "1970-01-01T00:00:00");
+    }
+
+    #[test]
+    fn format_timestamp_known_date() {
+        // 86400 seconds = exactly 1 day after epoch
+        assert_eq!(format_timestamp(86_400_000), "1970-01-02T00:00:00");
+        // 90061 seconds = 1 day + 1 hour + 1 minute + 1 second
+        assert_eq!(format_timestamp(90_061_000), "1970-01-02T01:01:01");
+    }
+
+    // -- is_turtle tests ------------------------------------------------------
+
+    #[test]
+    fn is_turtle_true() {
+        assert!(is_turtle("[] a carrier:TextMessage ; carrier:text \"hi\" ."));
+        assert!(is_turtle("  [] a carrier:Foo ."));
+    }
+
+    #[test]
+    fn is_turtle_false() {
+        assert!(!is_turtle("Hello world"));
+        assert!(!is_turtle(""));
+        assert!(!is_turtle("a carrier:Foo ."));
+    }
+
+    // -- cstr_from_buf tests --------------------------------------------------
+
+    #[test]
+    fn cstr_from_buf_basic() {
+        let mut buf = [0u8; 32];
+        set_buf(&mut buf, "hello");
+        assert_eq!(cstr_from_buf(&buf), "hello");
+    }
+
+    #[test]
+    fn cstr_from_buf_no_null() {
+        let buf = [b'A'; 8]; // no null terminator
+        assert_eq!(cstr_from_buf(&buf), "AAAAAAAA");
+    }
+
+    // -- turtle_escape --------------------------------------------------------
+
+    #[test]
+    fn turtle_escape_special_chars() {
+        assert_eq!(turtle_escape(r#"say "hi""#), r#"say \"hi\""#);
+        assert_eq!(turtle_escape("a\\b"), "a\\\\b");
+        assert_eq!(turtle_escape("line\nbreak"), "line\\nbreak");
+        assert_eq!(turtle_escape("cr\rret"), "cr\\rret");
+    }
+
+    #[test]
+    fn turtle_escape_plain() {
+        assert_eq!(turtle_escape("nothing special"), "nothing special");
+    }
+}

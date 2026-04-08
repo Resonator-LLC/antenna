@@ -1,0 +1,41 @@
+# Enrich pipeline — two-stage DAG that enriches messages then logs them.
+#
+# Stage 1 (enricher): Adds a processing timestamp to each message
+# Stage 2 (logger):   Receives enriched data and emits to mainOut
+#
+# Demonstrates multi-node DAGs with user-defined channels.
+#
+# Load with: antenna -p my.tox --pipeline examples/enrich_pipeline.ttl
+#
+@prefix antenna: <http://resonator.network/v2/antenna#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# User-defined channel connecting the two nodes
+<urn:channel:enriched> a antenna:Channel .
+
+# Stage 1: Enricher — receives raw input, emits enriched version
+<urn:src:enricher> a antenna:ScriptSource ;
+    antenna:language "javascript" ;
+    antenna:body """
+        var now = new Date().toISOString();
+        var enriched = input.replace(' .', ' ; antenna:processedAt \"' + now + '\"^^xsd:dateTime .');
+        emit(enriched);
+    """ .
+
+<urn:node:enricher> a antenna:ScriptNode ;
+    antenna:scriptSource <urn:src:enricher> ;
+    antenna:in antenna:beforeInsert ;
+    antenna:out <urn:channel:enriched> .
+
+# Stage 2: Logger — receives enriched data, forwards to output
+<urn:src:logger> a antenna:ScriptSource ;
+    antenna:language "javascript" ;
+    antenna:body """
+        print('[enriched]', input);
+        emit(input);
+    """ .
+
+<urn:node:logger> a antenna:ScriptNode ;
+    antenna:scriptSource <urn:src:logger> ;
+    antenna:in <urn:channel:enriched> ;
+    antenna:out antenna:mainOut .

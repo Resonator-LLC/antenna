@@ -1,0 +1,17 @@
+# Echo pipeline — logs every incoming Turtle to stderr and emits it on mainOut.
+#
+# Load with: antenna -p my.tox --pipeline examples/echo_pipeline.ttl
+#
+@prefix antenna: <http://resonator.network/v2/antenna#> .
+
+<urn:src:echo> a antenna:ScriptSource ;
+    antenna:language "javascript" ;
+    antenna:body """
+        print('[echo]', channel, '->', input);
+        emit(input);
+    """ .
+
+<urn:node:echo> a antenna:ScriptNode ;
+    antenna:scriptSource <urn:src:echo> ;
+    antenna:in antenna:beforeInsert ;
+    antenna:out antenna:mainOut .

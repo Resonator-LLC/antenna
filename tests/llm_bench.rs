@@ -8,7 +8,6 @@
 ///!
 ///! Requires: Ollama running at localhost:11434 with the model pulled.
 ///! Run:  cargo test --release --test llm_bench -- --nocapture --ignored
-
 use std::time::{Duration, Instant};
 
 const OLLAMA_ENDPOINT: &str = "http://localhost:11434";
@@ -74,7 +73,9 @@ fn ollama_generate(system: &str, prompt: &str, max_tokens: u32) -> Result<Ollama
         .send_bytes(body.as_bytes())
         .map_err(|e| format!("HTTP error: {}", e))?;
 
-    let text = resp.into_string().map_err(|e| format!("read error: {}", e))?;
+    let text = resp
+        .into_string()
+        .map_err(|e| format!("read error: {}", e))?;
 
     Ok(OllamaResponse {
         response: extract_json_string(&text, "response").unwrap_or_default(),
@@ -183,7 +184,10 @@ fn llm_bench_latency() {
     let avg_tok = tok_rates.iter().sum::<f64>() / tok_rates.len() as f64;
 
     eprintln!("\n--- Summary ---");
-    eprintln!("  Latency avg/min/max: {}ms / {}ms / {}ms", avg_ms, min_ms, max_ms);
+    eprintln!(
+        "  Latency avg/min/max: {}ms / {}ms / {}ms",
+        avg_ms, min_ms, max_ms
+    );
     eprintln!("  Gen tokens/sec avg:  {:.1}", avg_tok);
 }
 
@@ -215,7 +219,13 @@ fn llm_bench_throughput() {
                 total_chars += r.response.len();
                 total_gen_tokens += r.eval_count;
                 ok += 1;
-                eprintln!("  [{}] {:.0}ms, {} chars, {} tokens", i + 1, t.elapsed().as_millis(), r.response.len(), r.eval_count);
+                eprintln!(
+                    "  [{}] {:.0}ms, {} chars, {} tokens",
+                    i + 1,
+                    t.elapsed().as_millis(),
+                    r.response.len(),
+                    r.eval_count
+                );
             }
             Err(e) => eprintln!("  [{}] FAIL: {}", i + 1, e),
         }
@@ -226,8 +236,18 @@ fn llm_bench_throughput() {
     eprintln!("  Wall time:       {:.1}s", total.as_secs_f64());
     eprintln!("  OK / Total:      {} / {}", ok, n);
     eprintln!("  Requests/sec:    {:.3}", ok as f64 / total.as_secs_f64());
-    eprintln!("  Chars/sec:       {:.0}", total_chars as f64 / total.as_secs_f64());
-    eprintln!("  Avg tokens/req:  {}", if ok > 0 { total_gen_tokens / ok as u64 } else { 0 });
+    eprintln!(
+        "  Chars/sec:       {:.0}",
+        total_chars as f64 / total.as_secs_f64()
+    );
+    eprintln!(
+        "  Avg tokens/req:  {}",
+        if ok > 0 {
+            total_gen_tokens / ok as u64
+        } else {
+            0
+        }
+    );
 }
 
 #[test]
@@ -263,13 +283,21 @@ fn llm_bench_turtle_validity() {
                     Ok(count) => {
                         valid += 1;
                         triple_counts.push(count);
-                        eprintln!("  [{}] VALID - {} triples, {} chars", i + 1, count, r.response.len());
+                        eprintln!(
+                            "  [{}] VALID - {} triples, {} chars",
+                            i + 1,
+                            count,
+                            r.response.len()
+                        );
                         eprintln!("       {}", r.response.lines().next().unwrap_or(""));
                     }
                     Err(e) => {
                         invalid += 1;
                         eprintln!("  [{}] INVALID - {}", i + 1, e);
-                        eprintln!("       {}", r.response.chars().take(200).collect::<String>());
+                        eprintln!(
+                            "       {}",
+                            r.response.chars().take(200).collect::<String>()
+                        );
                     }
                 }
             }

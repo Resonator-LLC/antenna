@@ -1,11 +1,11 @@
-///! WebSocket transport for Antenna.
-///! Accepts multiple sequential clients (one at a time).
-///! Each WS message = one Turtle document, dispatched through the same pipeline.
-
+//! WebSocket transport for Antenna.
+//! Accepts multiple sequential clients (one at a time).
+//! Each WS message = one Turtle document, dispatched through the same pipeline.
 use std::net::TcpListener;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 use tungstenite::{accept, Message};
 
@@ -43,7 +43,7 @@ impl AntennaOut for WsOut {
 pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(WsIn, WsOut)> {
     let addr = format!("0.0.0.0:{}", port);
     let listener = TcpListener::bind(&addr)?;
-    eprintln!("antenna: WebSocket server listening on ws://{}", addr);
+    tracing::info!(addr = %addr, "WebSocket server listening");
 
     // Channels shared across all client connections
     let (in_tx, in_rx) = mpsc::channel::<String>();
@@ -51,15 +51,8 @@ pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(W
 
     // Accept loop runs in a background thread
     thread::spawn(move || {
-        // We need to share out_rx across clients. Since only one client
-        // is active at a time, we use a wrapper.
-        // Actually, mpsc::Receiver can't be shared. Instead, use a separate
-        // channel pair per client, with the out_rx drained by each client thread.
-
-        // Simpler: keep out_rx in this thread, forward to active client.
-        let mut active_ws_tx: Option<mpsc::Sender<String>> = None;
-
-        // Spawn a thread to forward out_rx → active client
+        // Spawn a thread to forward out_rx → active client.
+        // Uses recv_timeout instead of try_recv + sleep(1ms) to avoid busy-polling.
         let (client_tx_sender, client_tx_receiver) = mpsc::channel::<mpsc::Sender<String>>();
 
         thread::spawn(move || {
@@ -69,31 +62,34 @@ pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(W
                 if let Ok(new_tx) = client_tx_receiver.try_recv() {
                     current_client = Some(new_tx);
                 }
-                // Forward outgoing messages to current client
-                if let Ok(msg) = out_rx.try_recv() {
-                    if let Some(ref tx) = current_client {
-                        if tx.send(msg).is_err() {
-                            current_client = None;
+                // Block waiting for outgoing messages (100ms timeout to check for new clients)
+                match out_rx.recv_timeout(Duration::from_millis(100)) {
+                    Ok(msg) => {
+                        if let Some(ref tx) = current_client {
+                            if tx.send(msg).is_err() {
+                                current_client = None;
+                            }
                         }
                     }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
                 }
-                std::thread::sleep(std::time::Duration::from_millis(1));
             }
         });
 
         // Accept clients in a loop
         loop {
-            eprintln!("antenna: waiting for WebSocket client...");
+            tracing::debug!("waiting for WebSocket client");
             match listener.accept() {
                 Ok((stream, peer)) => {
-                    eprintln!("antenna: client connected from {}", peer);
+                    tracing::info!(peer = %peer, "client connected");
                     let in_tx = in_tx.clone();
-                    let ref client_tx_sender = client_tx_sender;
-                    let ref greeting = greeting;
+                    let client_tx_sender = &client_tx_sender;
+                    let greeting = &greeting;
                     let result = catch_unwind(AssertUnwindSafe(|| {
                         match accept(stream) {
                             Ok(mut ws) => {
-                                eprintln!("antenna: WebSocket handshake complete");
+                                tracing::debug!("WebSocket handshake complete");
 
                                 // Send greeting (prefixes) to new client
                                 if let Some(ref g) = greeting {
@@ -104,64 +100,92 @@ pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(W
                                 let (per_client_tx, per_client_rx) = mpsc::channel::<String>();
                                 let _ = client_tx_sender.send(per_client_tx);
 
+                                // Use poll() on the TCP socket fd instead of
+                                // non-blocking + sleep(1ms) busy-loop.
                                 ws.get_mut().set_nonblocking(true).ok();
+
+                                #[cfg(unix)]
+                                let tcp_fd = {
+                                    use std::os::unix::io::AsRawFd;
+                                    ws.get_ref().as_raw_fd()
+                                };
 
                                 // Handle this client until disconnect
                                 'client: loop {
-                                    // Read from WS
-                                    match ws.read() {
-                                        Ok(Message::Text(text)) => {
-                                            for line in text.lines() {
-                                                let line = line.trim();
-                                                if !line.is_empty() {
-                                                    let _ = in_tx.send(line.to_string());
-                                                }
-                                            }
+                                    // Poll the TCP socket for incoming data (100ms timeout)
+                                    #[cfg(unix)]
+                                    {
+                                        let mut pfd = libc::pollfd {
+                                            fd: tcp_fd,
+                                            events: libc::POLLIN,
+                                            revents: 0,
+                                        };
+                                        // SAFETY: pfd is a valid pollfd struct on the stack;
+                                        // tcp_fd is a valid file descriptor owned by the WS.
+                                        unsafe {
+                                            libc::poll(&mut pfd, 1, 100);
                                         }
-                                        Ok(Message::Close(frame)) => {
-                                            eprintln!("antenna: client disconnected");
-                                            let _ = ws.close(frame);
-                                            // Drain until peer acknowledges or connection drops
-                                            loop {
-                                                match ws.read() {
-                                                    Ok(Message::Close(_)) | Err(_) => break,
-                                                    _ => {}
-                                                }
-                                            }
-                                            break 'client;
-                                        }
-                                        Err(tungstenite::Error::Io(ref e))
-                                            if e.kind() == std::io::ErrorKind::WouldBlock => {}
-                                        Err(_) => {
-                                            eprintln!("antenna: client connection lost");
-                                            break 'client;
-                                        }
-                                        _ => {}
                                     }
 
-                                    // Write to WS
+                                    #[cfg(not(unix))]
+                                    std::thread::sleep(Duration::from_millis(100));
+
+                                    // Read from WS
+                                    loop {
+                                        match ws.read() {
+                                            Ok(Message::Text(text)) => {
+                                                for line in text.lines() {
+                                                    let line = line.trim();
+                                                    if !line.is_empty() {
+                                                        let _ = in_tx.send(line.to_string());
+                                                    }
+                                                }
+                                            }
+                                            Ok(Message::Close(frame)) => {
+                                                tracing::info!("client disconnected");
+                                                let _ = ws.close(frame);
+                                                loop {
+                                                    match ws.read() {
+                                                        Ok(Message::Close(_)) | Err(_) => break,
+                                                        _ => {}
+                                                    }
+                                                }
+                                                break 'client;
+                                            }
+                                            Err(tungstenite::Error::Io(ref e))
+                                                if e.kind() == std::io::ErrorKind::WouldBlock =>
+                                            {
+                                                break; // No more data available right now
+                                            }
+                                            Err(_) => {
+                                                tracing::warn!("client connection lost");
+                                                break 'client;
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+
+                                    // Write to WS — drain all pending outgoing messages
                                     while let Ok(msg) = per_client_rx.try_recv() {
                                         if ws.send(Message::Text(msg)).is_err() {
-                                            eprintln!("antenna: write error, dropping client");
+                                            tracing::warn!("write error, dropping client");
                                             break 'client;
                                         }
                                     }
-
-                                    std::thread::sleep(std::time::Duration::from_millis(1));
                                 }
                             }
                             Err(e) => {
-                                eprintln!("antenna: WebSocket handshake failed: {}", e);
+                                tracing::warn!(%e, "WebSocket handshake failed");
                             }
                         }
                     }));
                     if let Err(panic) = result {
-                        eprintln!("antenna: client handler panicked: {:?}", panic);
+                        tracing::error!(?panic, "client handler panicked");
                     }
                 }
                 Err(e) => {
-                    eprintln!("antenna: accept error: {}", e);
-                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    tracing::error!(%e, "accept error");
+                    std::thread::sleep(Duration::from_secs(1));
                 }
             }
         }

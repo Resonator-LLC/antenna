@@ -1,8 +1,7 @@
-///! Channel-based script DAG. Loads ScriptNode/Channel graph from Oxigraph,
-///! spawns a thread per node, routes data through internal channels.
-
+//! Channel-based script DAG. Loads ScriptNode/Channel graph from Oxigraph,
+//! spawns a thread per node, routes data through internal channels.
 use anyhow::Result;
-use oxigraph::model::{Literal, Term};
+use oxigraph::model::Term;
 use oxigraph::sparql::QueryResults;
 use std::collections::HashMap;
 use std::sync::mpsc;
@@ -96,6 +95,8 @@ pub struct Dag {
     emit_routes: Vec<EmitRoute>,
     /// Running node threads (kept alive)
     _threads: Vec<thread::JoinHandle<()>>,
+    /// Track which dead nodes have been reported (avoid repeated logs)
+    reported_dead: std::collections::HashSet<String>,
     /// Receiver for store query requests from script threads
     query_rx: mpsc::Receiver<QueryRequest>,
 }
@@ -115,6 +116,7 @@ impl Dag {
                 emit_routes: Vec::new(),
                 _threads: Vec::new(),
                 query_rx,
+                reported_dead: std::collections::HashSet::new(),
             });
         }
 
@@ -179,7 +181,7 @@ impl Dag {
                     let vm = match ScriptVm::new(emit_tx, node_query_tx, DEFAULT_JS_MEMORY_LIMIT) {
                         Ok(vm) => vm,
                         Err(e) => {
-                            eprintln!("antenna: failed to create VM for {}: {}", node_uri, e);
+                            tracing::error!(node = %node_uri, %e, "failed to create VM");
                             return;
                         }
                     };
@@ -198,10 +200,11 @@ impl Dag {
                             break;
                         }
 
-                        // Block until data arrives on any IN channel
-                        let n = unsafe {
-                            libc::poll(pollfds.as_mut_ptr(), pollfds.len() as _, 500)
-                        };
+                        // SAFETY: pollfds is a valid Vec of pollfd structs with
+                        // fds from inbox_readers (owned by this thread). poll()
+                        // blocks until data arrives or 500ms timeout.
+                        let n =
+                            unsafe { libc::poll(pollfds.as_mut_ptr(), pollfds.len() as _, 500) };
                         if n <= 0 {
                             continue;
                         }
@@ -213,15 +216,26 @@ impl Dag {
                                     if turtle.is_empty() {
                                         continue;
                                     }
-                                    if let Err(e) = vm.exec(
-                                        &node_body,
-                                        &turtle,
-                                        &inbox_channel_uris[i],
+                                    match std::panic::catch_unwind(
+                                        std::panic::AssertUnwindSafe(|| {
+                                            vm.exec(
+                                                &node_body,
+                                                &turtle,
+                                                &inbox_channel_uris[i],
+                                            )
+                                        }),
                                     ) {
-                                        eprintln!(
-                                            "antenna: script error in {}: {}",
-                                            node_uri, e
-                                        );
+                                        Ok(Err(e)) => {
+                                            tracing::error!(
+                                                node = %node_uri, %e, "script error"
+                                            );
+                                        }
+                                        Err(panic) => {
+                                            tracing::error!(
+                                                node = %node_uri, ?panic, "script panicked"
+                                            );
+                                        }
+                                        _ => {}
                                     }
                                 }
                             }
@@ -311,6 +325,8 @@ impl Dag {
                             },
                         ];
 
+                        // SAFETY: pollfds is a valid stack array; fds are from
+                        // reader_a/reader_b owned by this thread.
                         let n = unsafe { libc::poll(pollfds.as_mut_ptr(), 2, 500) };
                         if n < 0 {
                             continue;
@@ -381,20 +397,14 @@ impl Dag {
                                                     }
                                                 },
                                                 Err(e) => {
-                                                    eprintln!(
-                                                        "antenna: LLM retry error in {}: {}",
-                                                        node_uri, e
-                                                    );
+                                                    tracing::warn!(node = %node_uri, %e, "LLM retry error");
                                                 }
                                             }
                                         }
                                     }
                                 }
                                 Err(e) => {
-                                    eprintln!(
-                                        "antenna: LLM error in {}: {}",
-                                        node_uri, e
-                                    );
+                                    tracing::error!(node = %node_uri, %e, "LLM error");
                                 }
                             }
 
@@ -412,10 +422,10 @@ impl Dag {
             });
         }
 
-        eprintln!(
-            "antenna: DAG loaded -- {} node threads, {} emit routes",
-            threads.len(),
-            emit_routes.len()
+        tracing::info!(
+            threads = threads.len(),
+            emit_routes = emit_routes.len(),
+            "DAG loaded"
         );
 
         Ok(Self {
@@ -423,7 +433,27 @@ impl Dag {
             emit_routes,
             _threads: threads,
             query_rx,
+            reported_dead: std::collections::HashSet::new(),
         })
+    }
+
+    /// Check for crashed/exited node threads. Returns names of newly dead nodes
+    /// (each node is reported only once).
+    pub fn health_check(&mut self) -> Vec<String> {
+        let mut newly_dead = Vec::new();
+        for handle in &self._threads {
+            if handle.is_finished() {
+                let name = handle
+                    .thread()
+                    .name()
+                    .unwrap_or("unnamed")
+                    .to_string();
+                if self.reported_dead.insert(name.clone()) {
+                    newly_dead.push(name);
+                }
+            }
+        }
+        newly_dead
     }
 
     /// Drain all emit channels, route to OUT channels, and return all emitted turtles.
@@ -468,7 +498,7 @@ impl Dag {
                     }
                 }
                 Err(e) => {
-                    eprintln!("antenna: script store.query error: {}", e);
+                    tracing::warn!(%e, "script store.query error");
                     vec![]
                 }
             };
@@ -480,7 +510,7 @@ impl Dag {
     pub fn broadcast(&self, channel_uri: &str, turtle: &str) {
         if let Some(writers) = self.channel_writers.get(channel_uri) {
             for writer in writers {
-                writer.send(turtle);
+                let _ = writer.send(turtle);
             }
         }
     }
@@ -522,20 +552,22 @@ fn query_script_nodes(store: &RdfStore) -> Result<Vec<ScriptNodeDef>> {
             let solution = solution?;
             let uri = term_to_string(solution.get("node"));
             let body = term_to_string(solution.get("body"));
-            let language = optional_term(solution.get("language"))
-                .unwrap_or_else(|| "javascript".to_string());
+            let language =
+                optional_term(solution.get("language")).unwrap_or_else(|| "javascript".to_string());
             let in_ch = optional_term(solution.get("in"));
             let out_ch = optional_term(solution.get("out"));
             let where_clause = optional_term(solution.get("where"));
 
-            let node = node_map.entry(uri.clone()).or_insert_with(|| ScriptNodeDef {
-                uri,
-                body,
-                language,
-                ins: Vec::new(),
-                outs: Vec::new(),
-                where_clause,
-            });
+            let node = node_map
+                .entry(uri.clone())
+                .or_insert_with(|| ScriptNodeDef {
+                    uri,
+                    body,
+                    language,
+                    ins: Vec::new(),
+                    outs: Vec::new(),
+                    where_clause,
+                });
 
             if let Some(ch) = in_ch {
                 if !node.ins.contains(&ch) {
@@ -603,30 +635,27 @@ fn query_semantic_routers(store: &RdfStore) -> Result<Vec<SemanticRouterDef>> {
             let in_b = term_to_string(solution.get("inB"));
             let out_ch = optional_term(solution.get("out"));
             let backend_type = term_to_string(solution.get("backendType"));
-            let endpoint =
-                optional_term(solution.get("endpoint")).unwrap_or_default();
+            let endpoint = optional_term(solution.get("endpoint")).unwrap_or_default();
             let model =
                 optional_term(solution.get("model")).unwrap_or_else(|| "default".to_string());
-            let system_prompt =
-                optional_term(solution.get("systemPrompt")).unwrap_or_default();
+            let system_prompt = optional_term(solution.get("systemPrompt")).unwrap_or_default();
             let max_tokens = optional_term(solution.get("maxTokens"))
                 .and_then(|s| s.parse::<u32>().ok())
                 .unwrap_or(512);
 
-            let router =
-                router_map
-                    .entry(uri.clone())
-                    .or_insert_with(|| SemanticRouterDef {
-                        uri,
-                        in_a,
-                        in_b,
-                        outs: Vec::new(),
-                        backend_type,
-                        endpoint,
-                        model,
-                        system_prompt,
-                        max_tokens,
-                    });
+            let router = router_map
+                .entry(uri.clone())
+                .or_insert_with(|| SemanticRouterDef {
+                    uri,
+                    in_a,
+                    in_b,
+                    outs: Vec::new(),
+                    backend_type,
+                    endpoint,
+                    model,
+                    system_prompt,
+                    max_tokens,
+                });
 
             if let Some(ch) = out_ch {
                 if !router.outs.contains(&ch) {

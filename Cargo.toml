@@ -2,6 +2,10 @@
 name = "antenna"
 version = "0.2.0"
 edition = "2021"
+license = "MIT"
+description = "RDF stream processor with P2P networking, QuickJS scripting, and SPARQL store"
+keywords = ["rdf", "turtle", "sparql", "p2p", "streaming"]
+categories = ["network-programming", "database"]
 
 [lib]
 name = "antenna"
@@ -18,9 +22,27 @@ anyhow = "1"
 libc = "0.2"
 tungstenite = "0.24"
 ureq = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [build-dependencies]
 cc = "1"
+pkg-config = "0.3"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "dispatch_bench"
+harness = false
+
+[[bench]]
+name = "channel_bench"
+harness = false
+
+[[bench]]
+name = "store_bench"
+harness = false
 
 [profile.release]
 lto = true

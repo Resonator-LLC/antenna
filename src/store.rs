@@ -1,8 +1,7 @@
-///! Thin wrapper around embedded Oxigraph store.
-
+//! Thin wrapper around embedded Oxigraph store.
 use anyhow::Result;
 use oxigraph::io::{RdfFormat, RdfParser};
-use oxigraph::model::{GraphNameRef, NamedNodeRef};
+use oxigraph::model::NamedNodeRef;
 use oxigraph::sparql::QueryResults;
 use oxigraph::store::Store;
 
@@ -26,8 +25,7 @@ impl RdfStore {
     pub fn insert_turtle(&self, turtle: &str) -> Result<()> {
         let doc = format!("{}{}\n", TURTLE_PREFIXES, turtle);
         let parser = RdfParser::from_format(RdfFormat::Turtle);
-        self.store
-            .load_from_reader(parser, doc.as_bytes())?;
+        self.store.load_from_reader(parser, doc.as_bytes())?;
         Ok(())
     }
 
@@ -70,5 +68,103 @@ impl RdfStore {
     /// Access the underlying store (for advanced operations).
     pub fn inner(&self) -> &Store {
         &self.store
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mem_store() -> RdfStore {
+        RdfStore::open(None).unwrap()
+    }
+
+    #[test]
+    fn insert_and_ask() {
+        let store = mem_store();
+        store.insert_turtle("<urn:s> a <urn:Type> .").unwrap();
+        assert!(store.ask("ASK { <urn:s> a <urn:Type> }").unwrap());
+    }
+
+    #[test]
+    fn insert_and_select() {
+        let store = mem_store();
+        store
+            .insert_turtle("<urn:a> <urn:name> \"Alice\" .")
+            .unwrap();
+        let results = store
+            .query("SELECT ?name WHERE { <urn:a> <urn:name> ?name }")
+            .unwrap();
+        if let QueryResults::Solutions(solutions) = results {
+            let rows: Vec<_> = solutions.filter_map(|s| s.ok()).collect();
+            assert_eq!(rows.len(), 1);
+        } else {
+            panic!("expected Solutions");
+        }
+    }
+
+    #[test]
+    fn named_graph_isolation() {
+        let store = mem_store();
+        store
+            .insert_turtle_to_graph("<urn:x> a <urn:Foo> .", "urn:graph:test")
+            .unwrap();
+
+        // Not in default graph
+        assert!(!store.ask("ASK { <urn:x> a <urn:Foo> }").unwrap());
+
+        // In named graph
+        assert!(store
+            .ask("ASK { GRAPH <urn:graph:test> { <urn:x> a <urn:Foo> } }")
+            .unwrap());
+    }
+
+    #[test]
+    fn clear_graph() {
+        let store = mem_store();
+        store
+            .insert_turtle_to_graph("<urn:y> a <urn:Bar> .", "urn:graph:tmp")
+            .unwrap();
+        assert!(store
+            .ask("ASK { GRAPH <urn:graph:tmp> { <urn:y> a <urn:Bar> } }")
+            .unwrap());
+
+        store.clear_graph("urn:graph:tmp").unwrap();
+        assert!(!store
+            .ask("ASK { GRAPH <urn:graph:tmp> { <urn:y> a <urn:Bar> } }")
+            .unwrap());
+    }
+
+    #[test]
+    fn update_insert_data() {
+        let store = mem_store();
+        store.update("INSERT DATA { <urn:z> a <urn:Baz> }").unwrap();
+        assert!(store.ask("ASK { <urn:z> a <urn:Baz> }").unwrap());
+    }
+
+    #[test]
+    fn update_delete_data() {
+        let store = mem_store();
+        store.insert_turtle("<urn:d> a <urn:Del> .").unwrap();
+        store.update("DELETE DATA { <urn:d> a <urn:Del> }").unwrap();
+        assert!(!store.ask("ASK { <urn:d> a <urn:Del> }").unwrap());
+    }
+
+    #[test]
+    fn ask_returns_false_for_empty() {
+        let store = mem_store();
+        assert!(!store.ask("ASK { <urn:nothing> a <urn:Nothing> }").unwrap());
+    }
+
+    #[test]
+    fn insert_turtle_with_prefixes() {
+        let store = mem_store();
+        // carrier: prefix is auto-prepended
+        store
+            .insert_turtle("[] a carrier:Connected ; carrier:transport \"UDP\" .")
+            .unwrap();
+        assert!(store
+            .ask("PREFIX carrier: <http://resonator.network/v2/carrier#> ASK { ?s a carrier:Connected }")
+            .unwrap());
     }
 }

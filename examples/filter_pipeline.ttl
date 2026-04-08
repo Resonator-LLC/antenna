@@ -1,0 +1,20 @@
+# Filter pipeline — only passes TextMessage events through to output.
+#
+# Demonstrates conditional emit based on input content.
+#
+# Load with: antenna -p my.tox --pipeline examples/filter_pipeline.ttl
+#
+@prefix antenna: <http://resonator.network/v2/antenna#> .
+
+<urn:src:filter> a antenna:ScriptSource ;
+    antenna:language "javascript" ;
+    antenna:body """
+        if (input.indexOf('TextMessage') !== -1) {
+            emit(input);
+        }
+    """ .
+
+<urn:node:filter> a antenna:ScriptNode ;
+    antenna:scriptSource <urn:src:filter> ;
+    antenna:in antenna:beforeInsert ;
+    antenna:out antenna:mainOut .

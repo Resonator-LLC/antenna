@@ -22,7 +22,6 @@
 ///!   5. Thread-per-node (all 4 run on separate threads)
 ///!   6. Clock signals (each node blocks on poll until data arrives)
 ///!   7. emit() routing through the broadcast map
-
 use antenna::channel::{ChannelWriter, InternalChannel};
 use antenna::dag::Dag;
 use antenna::store::RdfStore;
@@ -346,7 +345,8 @@ fn test_complicated_dag() {
 fn test_script_vm_emit() {
     // Test that QuickJS emit() works correctly
     let (tx, rx) = mpsc::channel();
-    let vm = antenna::script_vm::ScriptVm::new(tx, 0).unwrap();
+    let (query_tx, _query_rx) = mpsc::channel();
+    let vm = antenna::script_vm::ScriptVm::new(tx, query_tx, 0).unwrap();
 
     // Simplest possible eval — no emit, just arithmetic
     vm.exec("1 + 1;", "", "").unwrap();
@@ -355,7 +355,8 @@ fn test_script_vm_emit() {
     vm.exec("print('test print works');", "x", "").unwrap();
 
     // Test typeof emit
-    vm.exec("print('emit type: ' + typeof emit);", "x", "").unwrap();
+    vm.exec("print('emit type: ' + typeof emit);", "x", "")
+        .unwrap();
 
     // Simple emit
     vm.exec("emit('hello world');", "test input", "urn:ch:test")
@@ -497,7 +498,9 @@ fn test_store_spin_dispatch() {
 
     // SELECT query
     let results = store
-        .query("SELECT ?text WHERE { <urn:msg:1> <http://resonator.network/v2/carrier#text> ?text }")
+        .query(
+            "SELECT ?text WHERE { <urn:msg:1> <http://resonator.network/v2/carrier#text> ?text }",
+        )
         .unwrap();
     if let oxigraph::sparql::QueryResults::Solutions(solutions) = results {
         let mut found = false;
@@ -591,4 +594,32 @@ fn test_cross_thread_channel_delivery() {
     assert_eq!(collected[2], "msg3");
 
     reader_handle.join().unwrap();
+}
+
+#[test]
+fn test_vm_drop_no_leak() {
+    // Verify that creating and dropping many VMs doesn't crash
+    // (previously JS_FreeRuntime was skipped, leaking ~100KB per VM)
+    for _ in 0..100 {
+        let (tx, _rx) = mpsc::channel();
+        let (qtx, _qrx) = mpsc::channel();
+        let vm = antenna::script_vm::ScriptVm::new(tx, qtx, 0).unwrap();
+        vm.exec("emit('hello');", "test", "urn:ch").unwrap();
+        drop(vm);
+    }
+}
+
+#[test]
+fn test_channel_full_graceful() {
+    // Create a tiny ring buffer (64 bytes) and fill it
+    let ch = antenna::channel::InternalChannel::new(64).unwrap();
+    let writer = ch.writer();
+
+    // Fill the buffer — a 50-byte message should fill the 64-byte ring
+    let big_msg = "x".repeat(50);
+    assert!(writer.send(&big_msg), "first message should succeed");
+
+    // Second message should fail gracefully (buffer full) without hanging
+    let result = writer.send(&big_msg);
+    assert!(!result, "second message should be dropped (buffer full)");
 }

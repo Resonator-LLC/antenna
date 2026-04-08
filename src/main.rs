@@ -7,7 +7,10 @@ use antenna::ws;
 use antenna::AntennaContext;
 
 #[derive(Parser)]
-#[command(name = "antenna", about = "RDF stream processor with Tox P2P and QuickJS scripting")]
+#[command(
+    name = "antenna",
+    about = "RDF stream processor with Tox P2P and QuickJS scripting"
+)]
 struct Args {
     /// Carrier .tox profile path
     #[arg(long, short)]
@@ -35,6 +38,14 @@ struct Args {
 }
 
 fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive("antenna=info".parse().unwrap()),
+        )
+        .with_target(false)
+        .init();
+
     let args = Args::parse();
 
     let mut ctx = AntennaContext::new(
@@ -47,10 +58,8 @@ fn main() -> Result<()> {
 
     if let Some(port) = args.ws {
         // WebSocket mode — greeting sent to each new client
-        let (mut ws_in, mut ws_out) = ws::start_ws_server(
-            port,
-            Some(TURTLE_PREFIXES.trim().to_string()),
-        )?;
+        let (mut ws_in, mut ws_out) =
+            ws::start_ws_server(port, Some(TURTLE_PREFIXES.trim().to_string()))?;
 
         // Run event loop with WS transport
         ctx.run(&mut ws_in, &mut ws_out)?;
