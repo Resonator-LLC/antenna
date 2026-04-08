@@ -1,4 +1,4 @@
-// Copyright (c) 2025-2026 Resonator LLC. Licensed under MIT.
+// Copyright (c) 2026-2027 Resonator LLC. Licensed under MIT.
 
 use anyhow::Result;
 use clap::Parser;

@@ -1,4 +1,4 @@
-// Copyright (c) 2025-2026 Resonator LLC. Licensed under MIT.
+// Copyright (c) 2026-2027 Resonator LLC. Licensed under MIT.
 
 //! FFI bindings to libcarrier and CarrierEvent → Turtle serialization.
 use anyhow::{bail, Result};

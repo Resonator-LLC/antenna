@@ -1,4 +1,4 @@
-// Copyright (c) 2025-2026 Resonator LLC. Licensed under MIT.
+// Copyright (c) 2026-2027 Resonator LLC. Licensed under MIT.
 
 //! WebSocket transport for Antenna.
 //! Accepts multiple sequential clients (one at a time).
