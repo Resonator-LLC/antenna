@@ -1,3 +1,5 @@
+// Copyright (c) 2025-2026 Resonator LLC. Licensed under MIT.
+
 //! FFI bindings to libcarrier and CarrierEvent → Turtle serialization.
 use anyhow::{bail, Result};
 use std::ffi::{c_char, c_int, c_void, CString};

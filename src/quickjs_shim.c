@@ -1,3 +1,5 @@
+/* Copyright (c) 2025-2026 Resonator LLC. Licensed under MIT. */
+
 /*
  * quickjs_shim.c — Export static inline QuickJS functions as real symbols
  * for Rust FFI. Required because these functions are inline in quickjs.h.

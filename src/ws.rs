@@ -1,3 +1,5 @@
+// Copyright (c) 2025-2026 Resonator LLC. Licensed under MIT.
+
 //! WebSocket transport for Antenna.
 //! Accepts multiple sequential clients (one at a time).
 //! Each WS message = one Turtle document, dispatched through the same pipeline.

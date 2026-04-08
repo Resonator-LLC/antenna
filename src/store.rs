@@ -1,3 +1,5 @@
+// Copyright (c) 2025-2026 Resonator LLC. Licensed under MIT.
+
 //! Thin wrapper around embedded Oxigraph store.
 use anyhow::Result;
 use oxigraph::io::{RdfFormat, RdfParser};

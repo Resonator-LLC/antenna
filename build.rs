@@ -1,3 +1,5 @@
+// Copyright (c) 2025-2026 Resonator LLC. Licensed under MIT.
+
 use std::path::{Path, PathBuf};
 
 /// Locate QuickJS install directory.

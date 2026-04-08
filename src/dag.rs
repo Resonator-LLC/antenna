@@ -1,3 +1,5 @@
+// Copyright (c) 2025-2026 Resonator LLC. Licensed under MIT.
+
 //! Channel-based script DAG. Loads ScriptNode/Channel graph from Oxigraph,
 //! spawns a thread per node, routes data through internal channels.
 use anyhow::Result;

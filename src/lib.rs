@@ -1,3 +1,5 @@
+// Copyright (c) 2025-2026 Resonator LLC. Licensed under MIT.
+
 //! Antenna — RDF stream processor with P2P networking, scripting, and SPARQL store.
 //!
 //! Antenna receives RDF Turtle on its input, dispatches by `rdf:type` (SPIN queries,

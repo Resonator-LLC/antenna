@@ -1,3 +1,5 @@
+// Copyright (c) 2025-2026 Resonator LLC. Licensed under MIT.
+
 //! LLM backend abstraction for SemanticRouter.
 //!
 //! Trait + implementations:

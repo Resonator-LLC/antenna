@@ -1,3 +1,5 @@
+// Copyright (c) 2025-2026 Resonator LLC. Licensed under MIT.
+
 //! QuickJS VM via C FFI. Each ScriptNode gets its own JSRuntime + JSContext.
 use anyhow::{anyhow, bail, Result};
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
