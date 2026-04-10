@@ -1,1804 +1,1804 @@
-@prefix station: <http://station.local/> .
+@prefix antenna: <http://resonator.network/v2/antenna#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 
-<urn:obj:alpha-0> a station:Object ;
-    station:x "30.0"^^xsd:double ;
-    station:y "0.0"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Alpha,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Alpha,fontSize=16,color=#FFFFFF},Text{value=Contact #0,fontSize=11,color=#4A6FA5}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Alpha,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #0,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:alpha-0,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:beta-1> a station:Object ;
-    station:x "-24.3"^^xsd:double ;
-    station:y "-22.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Beta,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Beta,fontSize=16,color=#FFFFFF},Text{value=Bookmark #1,fontSize=11,color=#FF6644}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Beta,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #1,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:beta-1,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:gamma-2> a station:Object ;
-    station:x "3.2"^^xsd:double ;
-    station:y "35.9"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Gamma,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Gamma,fontSize=16,color=#FFFFFF},Text{value=Script #2,fontSize=11,color=#7EE787}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Gamma,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #2,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:gamma-2,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:delta-3> a station:Object ;
-    station:x "23.7"^^xsd:double ;
-    station:y "-31.0"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Delta,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Delta,fontSize=16,color=#FFFFFF},Text{value=Message #3,fontSize=11,color=#9966CC}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Delta,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #3,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:delta-3,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:epsilon-4> a station:Object ;
-    station:x "-41.4"^^xsd:double ;
-    station:y "7.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Epsilon,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Epsilon,fontSize=16,color=#FFFFFF},Text{value=Place #4,fontSize=11,color=#4488FF}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Epsilon,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #4,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:epsilon-4,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:zeta-5> a station:Object ;
-    station:x "38.0"^^xsd:double ;
-    station:y "24.1"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Zeta,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Zeta,fontSize=16,color=#FFFFFF},Text{value=Search #5,fontSize=11,color=#AAAA44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Zeta,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #5,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:zeta-5,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:eta-6> a station:Object ;
-    station:x "-12.5"^^xsd:double ;
-    station:y "-46.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Eta,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Eta,fontSize=16,color=#FFFFFF},Text{value=Config #6,fontSize=11,color=#44FF44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Eta,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #6,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:eta-6,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:theta-7> a station:Object ;
-    station:x "-23.4"^^xsd:double ;
-    station:y "45.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Theta,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Theta,fontSize=16,color=#FFFFFF},Text{value=Node #7,fontSize=11,color=#6688AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Theta,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #7,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:theta-7,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:iota-8> a station:Object ;
-    station:x "50.7"^^xsd:double ;
-    station:y "-18.6"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Iota,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Iota,fontSize=16,color=#FFFFFF},Text{value=Object #8,fontSize=11,color=#CC44AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Iota,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #8,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:iota-8,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:kappa-9> a station:Object ;
-    station:x "-52.7"^^xsd:double ;
-    station:y "-21.6"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Kappa,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Kappa,fontSize=16,color=#FFFFFF},Text{value=Group #9,fontSize=11,color=#44AA66}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Kappa,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #9,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:kappa-9,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:lambda-10> a station:Object ;
-    station:x "25.5"^^xsd:double ;
-    station:y "54.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Lambda,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Lambda,fontSize=16,color=#FFFFFF},Text{value=Contact #10,fontSize=11,color=#4A6FA5}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Lambda,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #10,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:lambda-10,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:mu-11> a station:Object ;
-    station:x "18.7"^^xsd:double ;
-    station:y "-60.2"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Mu,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Mu,fontSize=16,color=#FFFFFF},Text{value=Bookmark #11,fontSize=11,color=#FF6644}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Mu,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #11,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:mu-11,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:nu-12> a station:Object ;
-    station:x "-57.0"^^xsd:double ;
-    station:y "33.2"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Nu,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Nu,fontSize=16,color=#FFFFFF},Text{value=Script #12,fontSize=11,color=#7EE787}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Nu,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #12,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:nu-12,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:xi-13> a station:Object ;
-    station:x "67.4"^^xsd:double ;
-    station:y "14.6"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Xi,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Xi,fontSize=16,color=#FFFFFF},Text{value=Message #13,fontSize=11,color=#9966CC}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Xi,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #13,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:xi-13,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:omicron-14> a station:Object ;
-    station:x "-41.6"^^xsd:double ;
-    station:y "-58.8"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Omicron,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Omicron,fontSize=16,color=#FFFFFF},Text{value=Place #14,fontSize=11,color=#4488FF}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Omicron,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #14,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:omicron-14,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:pi-15> a station:Object ;
-    station:x "-9.4"^^xsd:double ;
-    station:y "74.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Pi,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Pi,fontSize=16,color=#FFFFFF},Text{value=Search #15,fontSize=11,color=#AAAA44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Pi,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #15,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:pi-15,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:rho-16> a station:Object ;
-    station:x "59.5"^^xsd:double ;
-    station:y "-50.5"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Rho,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Rho,fontSize=16,color=#FFFFFF},Text{value=Config #16,fontSize=11,color=#44FF44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Rho,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #16,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:rho-16,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:sigma-17> a station:Object ;
-    station:x "-80.9"^^xsd:double ;
-    station:y "-3.1"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Sigma,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Sigma,fontSize=16,color=#FFFFFF},Text{value=Node #17,fontSize=11,color=#6688AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Sigma,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #17,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:sigma-17,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:tau-18> a station:Object ;
-    station:x "59.8"^^xsd:double ;
-    station:y "59.0"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Tau,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Tau,fontSize=16,color=#FFFFFF},Text{value=Object #18,fontSize=11,color=#CC44AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Tau,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #18,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:tau-18,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:upsilon-19> a station:Object ;
-    station:x "-4.4"^^xsd:double ;
-    station:y "-86.9"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Upsilon,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Upsilon,fontSize=16,color=#FFFFFF},Text{value=Group #19,fontSize=11,color=#44AA66}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Upsilon,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #19,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:upsilon-19,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:phi-20> a station:Object ;
-    station:x "-57.4"^^xsd:double ;
-    station:y "69.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Phi,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Phi,fontSize=16,color=#FFFFFF},Text{value=Contact #20,fontSize=11,color=#4A6FA5}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Phi,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #20,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:phi-20,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:chi-21> a station:Object ;
-    station:x "92.1"^^xsd:double ;
-    station:y "-12.8"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Chi,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Chi,fontSize=16,color=#FFFFFF},Text{value=Bookmark #21,fontSize=11,color=#FF6644}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Chi,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #21,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:chi-21,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:psi-22> a station:Object ;
-    station:x "-79.1"^^xsd:double ;
-    station:y "-54.5"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Psi,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Psi,fontSize=16,color=#FFFFFF},Text{value=Script #22,fontSize=11,color=#7EE787}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Psi,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #22,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:psi-22,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:omega-23> a station:Object ;
-    station:x "22.2"^^xsd:double ;
-    station:y "96.5"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Omega,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Omega,fontSize=16,color=#FFFFFF},Text{value=Message #23,fontSize=11,color=#9966CC}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Omega,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #23,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:omega-23,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:aria-24> a station:Object ;
-    station:x "50.3"^^xsd:double ;
-    station:y "-88.8"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Aria,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Aria,fontSize=16,color=#FFFFFF},Text{value=Place #24,fontSize=11,color=#4488FF}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Aria,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #24,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:aria-24,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:bolt-25> a station:Object ;
-    station:x "-99.9"^^xsd:double ;
-    station:y "32.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Bolt,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Bolt,fontSize=16,color=#FFFFFF},Text{value=Search #25,fontSize=11,color=#AAAA44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Bolt,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #25,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:bolt-25,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:cove-26> a station:Object ;
-    station:x "98.3"^^xsd:double ;
-    station:y "44.8"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Cove,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Cove,fontSize=16,color=#FFFFFF},Text{value=Config #26,fontSize=11,color=#44FF44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Cove,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #26,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:cove-26,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:dawn-27> a station:Object ;
-    station:x "-43.4"^^xsd:double ;
-    station:y "-102.1"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Dawn,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Dawn,fontSize=16,color=#FFFFFF},Text{value=Node #27,fontSize=11,color=#6688AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Dawn,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #27,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:dawn-27,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:echo-28> a station:Object ;
-    station:x "-37.9"^^xsd:double ;
-    station:y "107.5"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Echo,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Echo,fontSize=16,color=#FFFFFF},Text{value=Object #28,fontSize=11,color=#CC44AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Echo,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #28,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:echo-28,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:flux-29> a station:Object ;
-    station:x "103.2"^^xsd:double ;
-    station:y "-55.1"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Flux,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Flux,fontSize=16,color=#FFFFFF},Text{value=Group #29,fontSize=11,color=#44AA66}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Flux,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #29,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:flux-29,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:glow-30> a station:Object ;
-    station:x "-116.2"^^xsd:double ;
-    station:y "-29.8"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Glow,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Glow,fontSize=16,color=#FFFFFF},Text{value=Contact #30,fontSize=11,color=#4A6FA5}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Glow,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #30,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:glow-30,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:haze-31> a station:Object ;
-    station:x "67.2"^^xsd:double ;
-    station:y "103.0"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Haze,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Haze,fontSize=16,color=#FFFFFF},Text{value=Bookmark #31,fontSize=11,color=#FF6644}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Haze,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #31,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:haze-31,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:iris-32> a station:Object ;
-    station:x "20.5"^^xsd:double ;
-    station:y "-124.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Iris,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Iris,fontSize=16,color=#FFFFFF},Text{value=Script #32,fontSize=11,color=#7EE787}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Iris,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #32,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:iris-32,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:jazz-33> a station:Object ;
-    station:x "-101.4"^^xsd:double ;
-    station:y "79.7"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Jazz,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Jazz,fontSize=16,color=#FFFFFF},Text{value=Message #33,fontSize=11,color=#9966CC}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Jazz,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #33,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:jazz-33,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:knot-34> a station:Object ;
-    station:x "131.6"^^xsd:double ;
-    station:y "9.9"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Knot,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Knot,fontSize=16,color=#FFFFFF},Text{value=Place #34,fontSize=11,color=#4488FF}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Knot,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #34,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:knot-34,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:luna-35> a station:Object ;
-    station:x "-92.4"^^xsd:double ;
-    station:y "-98.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Luna,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Luna,fontSize=16,color=#FFFFFF},Text{value=Search #35,fontSize=11,color=#AAAA44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Luna,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #35,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:luna-35,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:mist-36> a station:Object ;
-    station:x "1.7"^^xsd:double ;
-    station:y "138.0"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Mist,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Mist,fontSize=16,color=#FFFFFF},Text{value=Config #36,fontSize=11,color=#44FF44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Mist,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #36,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:mist-36,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:neon-37> a station:Object ;
-    station:x "93.9"^^xsd:double ;
-    station:y "-105.2"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Neon,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Neon,fontSize=16,color=#FFFFFF},Text{value=Node #37,fontSize=11,color=#6688AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Neon,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #37,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:neon-37,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:onyx-38> a station:Object ;
-    station:x "-143.3"^^xsd:double ;
-    station:y "14.5"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Onyx,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Onyx,fontSize=16,color=#FFFFFF},Text{value=Object #38,fontSize=11,color=#CC44AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Onyx,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #38,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:onyx-38,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:pulse-39> a station:Object ;
-    station:x "117.8"^^xsd:double ;
-    station:y "87.9"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Pulse,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Pulse,fontSize=16,color=#FFFFFF},Text{value=Group #39,fontSize=11,color=#44AA66}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Pulse,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #39,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:pulse-39,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:quark-40> a station:Object ;
-    station:x "-28.1"^^xsd:double ;
-    station:y "-147.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Quark,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Quark,fontSize=16,color=#FFFFFF},Text{value=Contact #40,fontSize=11,color=#4A6FA5}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Quark,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #40,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:quark-40,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:rain-41> a station:Object ;
-    station:x "-80.4"^^xsd:double ;
-    station:y "130.2"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Rain,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Rain,fontSize=16,color=#FFFFFF},Text{value=Bookmark #41,fontSize=11,color=#FF6644}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Rain,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #41,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:rain-41,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:sage-42> a station:Object ;
-    station:x "150.1"^^xsd:double ;
-    station:y "-42.6"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Sage,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Sage,fontSize=16,color=#FFFFFF},Text{value=Script #42,fontSize=11,color=#7EE787}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Sage,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #42,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:sage-42,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:tint-43> a station:Object ;
-    station:x "-142.1"^^xsd:double ;
-    station:y "-71.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Tint,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Tint,fontSize=16,color=#FFFFFF},Text{value=Message #43,fontSize=11,color=#9966CC}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Tint,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #43,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:tint-43,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:umbra-44> a station:Object ;
-    station:x "57.7"^^xsd:double ;
-    station:y "151.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Umbra,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Umbra,fontSize=16,color=#FFFFFF},Text{value=Place #44,fontSize=11,color=#4488FF}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Umbra,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #44,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:umbra-44,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:veil-45> a station:Object ;
-    station:x "60.7"^^xsd:double ;
-    station:y "-153.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Veil,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Veil,fontSize=16,color=#FFFFFF},Text{value=Search #45,fontSize=11,color=#AAAA44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Veil,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #45,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:veil-45,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:wave-46> a station:Object ;
-    station:x "-151.1"^^xsd:double ;
-    station:y "73.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Wave,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Wave,fontSize=16,color=#FFFFFF},Text{value=Config #46,fontSize=11,color=#44FF44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Wave,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #46,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:wave-46,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:xenon-47> a station:Object ;
-    station:x "163.9"^^xsd:double ;
-    station:y "48.7"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Xenon,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Xenon,fontSize=16,color=#FFFFFF},Text{value=Node #47,fontSize=11,color=#6688AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Xenon,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #47,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:xenon-47,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:yarn-48> a station:Object ;
-    station:x "-89.5"^^xsd:double ;
-    station:y "-149.2"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Yarn,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Yarn,fontSize=16,color=#FFFFFF},Text{value=Object #48,fontSize=11,color=#CC44AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Yarn,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #48,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:yarn-48,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:zinc-49> a station:Object ;
-    station:x "-35.3"^^xsd:double ;
-    station:y "173.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Zinc,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Zinc,fontSize=16,color=#FFFFFF},Text{value=Group #49,fontSize=11,color=#44AA66}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Zinc,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #49,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:zinc-49,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:atom-50> a station:Object ;
-    station:x "145.6"^^xsd:double ;
-    station:y "-105.8"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Atom,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Atom,fontSize=16,color=#FFFFFF},Text{value=Contact #50,fontSize=11,color=#4A6FA5}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Atom,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #50,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:atom-50,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:blip-51> a station:Object ;
-    station:x "-181.8"^^xsd:double ;
-    station:y "-20.7"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Blip,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Blip,fontSize=16,color=#FFFFFF},Text{value=Bookmark #51,fontSize=11,color=#FF6644}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Blip,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #51,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:blip-51,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:core-52> a station:Object ;
-    station:x "122.1"^^xsd:double ;
-    station:y "140.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Core,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Core,fontSize=16,color=#FFFFFF},Text{value=Script #52,fontSize=11,color=#7EE787}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Core,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #52,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:core-52,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:dart-53> a station:Object ;
-    station:x "4.7"^^xsd:double ;
-    station:y "-188.9"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Dart,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Dart,fontSize=16,color=#FFFFFF},Text{value=Message #53,fontSize=11,color=#9966CC}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Dart,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #53,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:dart-53,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:edge-54> a station:Object ;
-    station:x "-133.2"^^xsd:double ;
-    station:y "138.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Edge,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Edge,fontSize=16,color=#FFFFFF},Text{value=Place #54,fontSize=11,color=#4488FF}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Edge,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #54,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:edge-54,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:fern-55> a station:Object ;
-    station:x "194.6"^^xsd:double ;
-    station:y "-12.2"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Fern,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Fern,fontSize=16,color=#FFFFFF},Text{value=Search #55,fontSize=11,color=#AAAA44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Fern,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #55,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:fern-55,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:grid-56> a station:Object ;
-    station:x "-154.1"^^xsd:double ;
-    station:y "-124.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Grid,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Grid,fontSize=16,color=#FFFFFF},Text{value=Config #56,fontSize=11,color=#44FF44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Grid,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #56,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:grid-56,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:helm-57> a station:Object ;
-    station:x "30.2"^^xsd:double ;
-    station:y "198.7"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Helm,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Helm,fontSize=16,color=#FFFFFF},Text{value=Node #57,fontSize=11,color=#6688AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Helm,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #57,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:helm-57,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:isle-58> a station:Object ;
-    station:x "113.6"^^xsd:double ;
-    station:y "-169.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Isle,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Isle,fontSize=16,color=#FFFFFF},Text{value=Object #58,fontSize=11,color=#CC44AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Isle,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #58,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:isle-58,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:jade-59> a station:Object ;
-    station:x "-201.1"^^xsd:double ;
-    station:y "49.0"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Jade,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Jade,fontSize=16,color=#FFFFFF},Text{value=Group #59,fontSize=11,color=#44AA66}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Jade,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #59,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:jade-59,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:kelp-60> a station:Object ;
-    station:x "184.0"^^xsd:double ;
-    station:y "101.2"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Kelp,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Kelp,fontSize=16,color=#FFFFFF},Text{value=Contact #60,fontSize=11,color=#4A6FA5}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Kelp,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #60,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:kelp-60,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:lens-61> a station:Object ;
-    station:x "-68.4"^^xsd:double ;
-    station:y "-201.7"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Lens,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Lens,fontSize=16,color=#FFFFFF},Text{value=Bookmark #61,fontSize=11,color=#FF6644}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Lens,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #61,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:lens-61,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:maze-62> a station:Object ;
-    station:x "-87.0"^^xsd:double ;
-    station:y "197.7"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Maze,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Maze,fontSize=16,color=#FFFFFF},Text{value=Script #62,fontSize=11,color=#7EE787}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Maze,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #62,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:maze-62,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:nest-63> a station:Object ;
-    station:x "200.4"^^xsd:double ;
-    station:y "-88.2"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Nest,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Nest,fontSize=16,color=#FFFFFF},Text{value=Message #63,fontSize=11,color=#9966CC}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Nest,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #63,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:nest-63,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:opal-64> a station:Object ;
-    station:x "-210.3"^^xsd:double ;
-    station:y "-71.2"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Opal,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Opal,fontSize=16,color=#FFFFFF},Text{value=Place #64,fontSize=11,color=#4488FF}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Opal,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #64,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:opal-64,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:pine-65> a station:Object ;
-    station:x "108.4"^^xsd:double ;
-    station:y "197.2"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Pine,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Pine,fontSize=16,color=#FFFFFF},Text{value=Search #65,fontSize=11,color=#AAAA44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Pine,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #65,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:pine-65,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:quad-66> a station:Object ;
-    station:x "53.9"^^xsd:double ;
-    station:y "-221.5"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Quad,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Quad,fontSize=16,color=#FFFFFF},Text{value=Config #66,fontSize=11,color=#44FF44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Quad,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #66,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:quad-66,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:reef-67> a station:Object ;
-    station:x "-191.9"^^xsd:double ;
-    station:y "128.6"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Reef,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Reef,fontSize=16,color=#FFFFFF},Text{value=Node #67,fontSize=11,color=#6688AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Reef,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #67,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:reef-67,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:silk-68> a station:Object ;
-    station:x "231.3"^^xsd:double ;
-    station:y "35.2"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Silk,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Silk,fontSize=16,color=#FFFFFF},Text{value=Object #68,fontSize=11,color=#CC44AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Silk,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #68,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:silk-68,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:tier-69> a station:Object ;
-    station:x "-148.8"^^xsd:double ;
-    station:y "-184.5"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Tier,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Tier,fontSize=16,color=#FFFFFF},Text{value=Group #69,fontSize=11,color=#44AA66}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Tier,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #69,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:tier-69,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:unit-70> a station:Object ;
-    station:x "-15.1"^^xsd:double ;
-    station:y "239.5"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Unit,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Unit,fontSize=16,color=#FFFFFF},Text{value=Contact #70,fontSize=11,color=#4A6FA5}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Unit,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #70,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:unit-70,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:vine-71> a station:Object ;
-    station:x "175.0"^^xsd:double ;
-    station:y "-168.6"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Vine,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Vine,fontSize=16,color=#FFFFFF},Text{value=Bookmark #71,fontSize=11,color=#FF6644}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Vine,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #71,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:vine-71,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:warp-72> a station:Object ;
-    station:x "-245.9"^^xsd:double ;
-    station:y "6.2"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Warp,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Warp,fontSize=16,color=#FFFFFF},Text{value=Script #72,fontSize=11,color=#7EE787}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Warp,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #72,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:warp-72,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:apex-73> a station:Object ;
-    station:x "187.8"^^xsd:double ;
-    station:y "163.5"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Apex,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Apex,fontSize=16,color=#FFFFFF},Text{value=Message #73,fontSize=11,color=#9966CC}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Apex,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #73,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:apex-73,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:byte-74> a station:Object ;
-    station:x "-28.4"^^xsd:double ;
-    station:y "-250.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Byte,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Byte,fontSize=16,color=#FFFFFF},Text{value=Place #74,fontSize=11,color=#4488FF}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Byte,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #74,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:byte-74,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:coil-75> a station:Object ;
-    station:x "-149.9"^^xsd:double ;
-    station:y "206.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Coil,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Coil,fontSize=16,color=#FFFFFF},Text{value=Search #75,fontSize=11,color=#AAAA44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Coil,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #75,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:coil-75,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:dune-76> a station:Object ;
-    station:x "252.8"^^xsd:double ;
-    station:y "-51.5"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Dune,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Dune,fontSize=16,color=#FFFFFF},Text{value=Config #76,fontSize=11,color=#44FF44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Dune,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #76,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:dune-76,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:emit-77> a station:Object ;
-    station:x "-223.8"^^xsd:double ;
-    station:y "-134.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Emit,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Emit,fontSize=16,color=#FFFFFF},Text{value=Node #77,fontSize=11,color=#6688AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Emit,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #77,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:emit-77,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:fork-78> a station:Object ;
-    station:x "75.2"^^xsd:double ;
-    station:y "253.0"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Fork,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Fork,fontSize=16,color=#FFFFFF},Text{value=Object #78,fontSize=11,color=#CC44AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Fork,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #78,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:fork-78,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:gate-79> a station:Object ;
-    station:x "116.7"^^xsd:double ;
-    station:y "-240.1"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Gate,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Gate,fontSize=16,color=#FFFFFF},Text{value=Group #79,fontSize=11,color=#44AA66}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Gate,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #79,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:gate-79,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:hive-80> a station:Object ;
-    station:x "-251.0"^^xsd:double ;
-    station:y "99.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Hive,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Hive,fontSize=16,color=#FFFFFF},Text{value=Contact #80,fontSize=11,color=#4A6FA5}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Hive,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #80,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:hive-80,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:inch-81> a station:Object ;
-    station:x "255.1"^^xsd:double ;
-    station:y "97.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Inch,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Inch,fontSize=16,color=#FFFFFF},Text{value=Bookmark #81,fontSize=11,color=#FF6644}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Inch,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #81,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:inch-81,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:jolt-82> a station:Object ;
-    station:x "-123.8"^^xsd:double ;
-    station:y "-246.7"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Jolt,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Jolt,fontSize=16,color=#FFFFFF},Text{value=Script #82,fontSize=11,color=#7EE787}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Jolt,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #82,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:jolt-82,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:kite-83> a station:Object ;
-    station:x "-76.2"^^xsd:double ;
-    station:y "268.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Kite,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Kite,fontSize=16,color=#FFFFFF},Text{value=Message #83,fontSize=11,color=#9966CC}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Kite,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #83,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:kite-83,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:loom-84> a station:Object ;
-    station:x "240.0"^^xsd:double ;
-    station:y "-148.1"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Loom,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Loom,fontSize=16,color=#FFFFFF},Text{value=Place #84,fontSize=11,color=#4488FF}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Loom,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #84,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:loom-84,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:mesh-85> a station:Object ;
-    station:x "-280.0"^^xsd:double ;
-    station:y "-53.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Mesh,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Mesh,fontSize=16,color=#FFFFFF},Text{value=Search #85,fontSize=11,color=#AAAA44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Mesh,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #85,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:mesh-85,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:node-86> a station:Object ;
-    station:x "172.2"^^xsd:double ;
-    station:y "230.9"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Node,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Node,fontSize=16,color=#FFFFFF},Text{value=Config #86,fontSize=11,color=#44FF44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Node,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #86,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:node-86,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:orca-87> a station:Object ;
-    station:x "29.2"^^xsd:double ;
-    station:y "-289.5"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Orca,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Orca,fontSize=16,color=#FFFFFF},Text{value=Node #87,fontSize=11,color=#6688AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Orca,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #87,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:orca-87,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:peak-88> a station:Object ;
-    station:x "-219.3"^^xsd:double ;
-    station:y "195.8"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Peak,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Peak,fontSize=16,color=#FFFFFF},Text{value=Object #88,fontSize=11,color=#CC44AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Peak,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #88,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:peak-88,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:quay-89> a station:Object ;
-    station:x "297.0"^^xsd:double ;
-    station:y "3.7"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Quay,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Quay,fontSize=16,color=#FFFFFF},Text{value=Group #89,fontSize=11,color=#44AA66}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Quay,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #89,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:quay-89,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:rust-90> a station:Object ;
-    station:x "-218.7"^^xsd:double ;
-    station:y "-205.4"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Rust,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Rust,fontSize=16,color=#FFFFFF},Text{value=Contact #90,fontSize=11,color=#4A6FA5}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Rust,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #90,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:rust-90,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:spar-91> a station:Object ;
-    station:x "22.8"^^xsd:double ;
-    station:y "302.1"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Spar,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Spar,fontSize=16,color=#FFFFFF},Text{value=Bookmark #91,fontSize=11,color=#FF6644}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Spar,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #91,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:spar-91,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:tusk-92> a station:Object ;
-    station:x "189.1"^^xsd:double ;
-    station:y "-240.6"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Tusk,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Tusk,fontSize=16,color=#FFFFFF},Text{value=Script #92,fontSize=11,color=#7EE787}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Tusk,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #92,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:tusk-92,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:urge-93> a station:Object ;
-    station:x "-304.9"^^xsd:double ;
-    station:y "50.3"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Urge,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Urge,fontSize=16,color=#FFFFFF},Text{value=Message #93,fontSize=11,color=#9966CC}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Urge,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #93,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:urge-93,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:volt-94> a station:Object ;
-    station:x "261.3"^^xsd:double ;
-    station:y "170.5"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Volt,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Volt,fontSize=16,color=#FFFFFF},Text{value=Place #94,fontSize=11,color=#4488FF}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Volt,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #94,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:volt-94,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:wisp-95> a station:Object ;
-    station:x "-78.3"^^xsd:double ;
-    station:y "-305.1"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Wisp,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Wisp,fontSize=16,color=#FFFFFF},Text{value=Search #95,fontSize=11,color=#AAAA44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Wisp,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #95,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:wisp-95,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:yoke-96> a station:Object ;
-    station:x "-149.7"^^xsd:double ;
-    station:y "280.6"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Yoke,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Yoke,fontSize=16,color=#FFFFFF},Text{value=Config #96,fontSize=11,color=#44FF44}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Yoke,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #96,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:yoke-96,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:zone-97> a station:Object ;
-    station:x "302.7"^^xsd:double ;
-    station:y "-106.8"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Zone,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Zone,fontSize=16,color=#FFFFFF},Text{value=Node #97,fontSize=11,color=#6688AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Zone,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #97,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:zone-97,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:obj98-98> a station:Object ;
-    station:x "-298.2"^^xsd:double ;
-    station:y "-126.8"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Obj98,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Obj98,fontSize=16,color=#FFFFFF},Text{value=Object #98,fontSize=11,color=#CC44AA}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Obj98,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #98,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:obj98-98,fontSize=10,color=#556677}]]"
-    ] .
-
-<urn:obj:obj99-99> a station:Object ;
-    station:x "135.5"^^xsd:double ;
-    station:y "297.6"^^xsd:double ;
-    station:worldWidth "30.0"^^xsd:double ;
-    station:worldHeight "30.0"^^xsd:double ;
-    station:lod [
-        station:below "60.0"^^xsd:double ;
-        station:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Obj99,fontSize=8,color=#667788}]"
-    ] ;
-    station:lod [
-        station:below "200.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Obj99,fontSize=16,color=#FFFFFF},Text{value=Group #99,fontSize=11,color=#44AA66}]]"
-    ] ;
-    station:lod [
-        station:below "99999.0"^^xsd:double ;
-        station:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Obj99,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #99,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:obj99-99,fontSize=10,color=#556677}]]"
+<urn:obj:alpha-0> a antenna:Object ;
+    antenna:x "30.0"^^xsd:double ;
+    antenna:y "0.0"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Alpha,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Alpha,fontSize=16,color=#FFFFFF},Text{value=Contact #0,fontSize=11,color=#4A6FA5}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Alpha,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #0,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:alpha-0,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:beta-1> a antenna:Object ;
+    antenna:x "-24.3"^^xsd:double ;
+    antenna:y "-22.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Beta,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Beta,fontSize=16,color=#FFFFFF},Text{value=Bookmark #1,fontSize=11,color=#FF6644}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Beta,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #1,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:beta-1,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:gamma-2> a antenna:Object ;
+    antenna:x "3.2"^^xsd:double ;
+    antenna:y "35.9"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Gamma,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Gamma,fontSize=16,color=#FFFFFF},Text{value=Script #2,fontSize=11,color=#7EE787}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Gamma,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #2,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:gamma-2,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:delta-3> a antenna:Object ;
+    antenna:x "23.7"^^xsd:double ;
+    antenna:y "-31.0"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Delta,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Delta,fontSize=16,color=#FFFFFF},Text{value=Message #3,fontSize=11,color=#9966CC}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Delta,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #3,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:delta-3,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:epsilon-4> a antenna:Object ;
+    antenna:x "-41.4"^^xsd:double ;
+    antenna:y "7.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Epsilon,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Epsilon,fontSize=16,color=#FFFFFF},Text{value=Place #4,fontSize=11,color=#4488FF}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Epsilon,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #4,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:epsilon-4,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:zeta-5> a antenna:Object ;
+    antenna:x "38.0"^^xsd:double ;
+    antenna:y "24.1"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Zeta,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Zeta,fontSize=16,color=#FFFFFF},Text{value=Search #5,fontSize=11,color=#AAAA44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Zeta,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #5,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:zeta-5,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:eta-6> a antenna:Object ;
+    antenna:x "-12.5"^^xsd:double ;
+    antenna:y "-46.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Eta,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Eta,fontSize=16,color=#FFFFFF},Text{value=Config #6,fontSize=11,color=#44FF44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Eta,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #6,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:eta-6,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:theta-7> a antenna:Object ;
+    antenna:x "-23.4"^^xsd:double ;
+    antenna:y "45.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Theta,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Theta,fontSize=16,color=#FFFFFF},Text{value=Node #7,fontSize=11,color=#6688AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Theta,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #7,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:theta-7,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:iota-8> a antenna:Object ;
+    antenna:x "50.7"^^xsd:double ;
+    antenna:y "-18.6"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Iota,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Iota,fontSize=16,color=#FFFFFF},Text{value=Object #8,fontSize=11,color=#CC44AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Iota,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #8,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:iota-8,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:kappa-9> a antenna:Object ;
+    antenna:x "-52.7"^^xsd:double ;
+    antenna:y "-21.6"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Kappa,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Kappa,fontSize=16,color=#FFFFFF},Text{value=Group #9,fontSize=11,color=#44AA66}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Kappa,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #9,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:kappa-9,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:lambda-10> a antenna:Object ;
+    antenna:x "25.5"^^xsd:double ;
+    antenna:y "54.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Lambda,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Lambda,fontSize=16,color=#FFFFFF},Text{value=Contact #10,fontSize=11,color=#4A6FA5}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Lambda,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #10,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:lambda-10,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:mu-11> a antenna:Object ;
+    antenna:x "18.7"^^xsd:double ;
+    antenna:y "-60.2"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Mu,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Mu,fontSize=16,color=#FFFFFF},Text{value=Bookmark #11,fontSize=11,color=#FF6644}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Mu,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #11,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:mu-11,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:nu-12> a antenna:Object ;
+    antenna:x "-57.0"^^xsd:double ;
+    antenna:y "33.2"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Nu,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Nu,fontSize=16,color=#FFFFFF},Text{value=Script #12,fontSize=11,color=#7EE787}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Nu,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #12,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:nu-12,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:xi-13> a antenna:Object ;
+    antenna:x "67.4"^^xsd:double ;
+    antenna:y "14.6"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Xi,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Xi,fontSize=16,color=#FFFFFF},Text{value=Message #13,fontSize=11,color=#9966CC}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Xi,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #13,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:xi-13,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:omicron-14> a antenna:Object ;
+    antenna:x "-41.6"^^xsd:double ;
+    antenna:y "-58.8"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Omicron,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Omicron,fontSize=16,color=#FFFFFF},Text{value=Place #14,fontSize=11,color=#4488FF}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Omicron,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #14,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:omicron-14,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:pi-15> a antenna:Object ;
+    antenna:x "-9.4"^^xsd:double ;
+    antenna:y "74.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Pi,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Pi,fontSize=16,color=#FFFFFF},Text{value=Search #15,fontSize=11,color=#AAAA44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Pi,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #15,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:pi-15,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:rho-16> a antenna:Object ;
+    antenna:x "59.5"^^xsd:double ;
+    antenna:y "-50.5"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Rho,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Rho,fontSize=16,color=#FFFFFF},Text{value=Config #16,fontSize=11,color=#44FF44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Rho,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #16,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:rho-16,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:sigma-17> a antenna:Object ;
+    antenna:x "-80.9"^^xsd:double ;
+    antenna:y "-3.1"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Sigma,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Sigma,fontSize=16,color=#FFFFFF},Text{value=Node #17,fontSize=11,color=#6688AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Sigma,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #17,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:sigma-17,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:tau-18> a antenna:Object ;
+    antenna:x "59.8"^^xsd:double ;
+    antenna:y "59.0"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Tau,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Tau,fontSize=16,color=#FFFFFF},Text{value=Object #18,fontSize=11,color=#CC44AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Tau,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #18,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:tau-18,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:upsilon-19> a antenna:Object ;
+    antenna:x "-4.4"^^xsd:double ;
+    antenna:y "-86.9"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Upsilon,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Upsilon,fontSize=16,color=#FFFFFF},Text{value=Group #19,fontSize=11,color=#44AA66}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Upsilon,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #19,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:upsilon-19,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:phi-20> a antenna:Object ;
+    antenna:x "-57.4"^^xsd:double ;
+    antenna:y "69.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Phi,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Phi,fontSize=16,color=#FFFFFF},Text{value=Contact #20,fontSize=11,color=#4A6FA5}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Phi,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #20,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:phi-20,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:chi-21> a antenna:Object ;
+    antenna:x "92.1"^^xsd:double ;
+    antenna:y "-12.8"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Chi,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Chi,fontSize=16,color=#FFFFFF},Text{value=Bookmark #21,fontSize=11,color=#FF6644}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Chi,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #21,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:chi-21,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:psi-22> a antenna:Object ;
+    antenna:x "-79.1"^^xsd:double ;
+    antenna:y "-54.5"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Psi,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Psi,fontSize=16,color=#FFFFFF},Text{value=Script #22,fontSize=11,color=#7EE787}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Psi,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #22,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:psi-22,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:omega-23> a antenna:Object ;
+    antenna:x "22.2"^^xsd:double ;
+    antenna:y "96.5"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Omega,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Omega,fontSize=16,color=#FFFFFF},Text{value=Message #23,fontSize=11,color=#9966CC}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Omega,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #23,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:omega-23,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:aria-24> a antenna:Object ;
+    antenna:x "50.3"^^xsd:double ;
+    antenna:y "-88.8"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Aria,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Aria,fontSize=16,color=#FFFFFF},Text{value=Place #24,fontSize=11,color=#4488FF}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Aria,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #24,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:aria-24,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:bolt-25> a antenna:Object ;
+    antenna:x "-99.9"^^xsd:double ;
+    antenna:y "32.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Bolt,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Bolt,fontSize=16,color=#FFFFFF},Text{value=Search #25,fontSize=11,color=#AAAA44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Bolt,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #25,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:bolt-25,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:cove-26> a antenna:Object ;
+    antenna:x "98.3"^^xsd:double ;
+    antenna:y "44.8"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Cove,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Cove,fontSize=16,color=#FFFFFF},Text{value=Config #26,fontSize=11,color=#44FF44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Cove,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #26,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:cove-26,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:dawn-27> a antenna:Object ;
+    antenna:x "-43.4"^^xsd:double ;
+    antenna:y "-102.1"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Dawn,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Dawn,fontSize=16,color=#FFFFFF},Text{value=Node #27,fontSize=11,color=#6688AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Dawn,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #27,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:dawn-27,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:echo-28> a antenna:Object ;
+    antenna:x "-37.9"^^xsd:double ;
+    antenna:y "107.5"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Echo,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Echo,fontSize=16,color=#FFFFFF},Text{value=Object #28,fontSize=11,color=#CC44AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Echo,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #28,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:echo-28,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:flux-29> a antenna:Object ;
+    antenna:x "103.2"^^xsd:double ;
+    antenna:y "-55.1"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Flux,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Flux,fontSize=16,color=#FFFFFF},Text{value=Group #29,fontSize=11,color=#44AA66}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Flux,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #29,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:flux-29,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:glow-30> a antenna:Object ;
+    antenna:x "-116.2"^^xsd:double ;
+    antenna:y "-29.8"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Glow,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Glow,fontSize=16,color=#FFFFFF},Text{value=Contact #30,fontSize=11,color=#4A6FA5}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Glow,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #30,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:glow-30,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:haze-31> a antenna:Object ;
+    antenna:x "67.2"^^xsd:double ;
+    antenna:y "103.0"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Haze,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Haze,fontSize=16,color=#FFFFFF},Text{value=Bookmark #31,fontSize=11,color=#FF6644}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Haze,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #31,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:haze-31,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:iris-32> a antenna:Object ;
+    antenna:x "20.5"^^xsd:double ;
+    antenna:y "-124.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Iris,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Iris,fontSize=16,color=#FFFFFF},Text{value=Script #32,fontSize=11,color=#7EE787}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Iris,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #32,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:iris-32,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:jazz-33> a antenna:Object ;
+    antenna:x "-101.4"^^xsd:double ;
+    antenna:y "79.7"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Jazz,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Jazz,fontSize=16,color=#FFFFFF},Text{value=Message #33,fontSize=11,color=#9966CC}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Jazz,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #33,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:jazz-33,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:knot-34> a antenna:Object ;
+    antenna:x "131.6"^^xsd:double ;
+    antenna:y "9.9"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Knot,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Knot,fontSize=16,color=#FFFFFF},Text{value=Place #34,fontSize=11,color=#4488FF}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Knot,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #34,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:knot-34,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:luna-35> a antenna:Object ;
+    antenna:x "-92.4"^^xsd:double ;
+    antenna:y "-98.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Luna,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Luna,fontSize=16,color=#FFFFFF},Text{value=Search #35,fontSize=11,color=#AAAA44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Luna,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #35,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:luna-35,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:mist-36> a antenna:Object ;
+    antenna:x "1.7"^^xsd:double ;
+    antenna:y "138.0"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Mist,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Mist,fontSize=16,color=#FFFFFF},Text{value=Config #36,fontSize=11,color=#44FF44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Mist,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #36,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:mist-36,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:neon-37> a antenna:Object ;
+    antenna:x "93.9"^^xsd:double ;
+    antenna:y "-105.2"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Neon,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Neon,fontSize=16,color=#FFFFFF},Text{value=Node #37,fontSize=11,color=#6688AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Neon,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #37,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:neon-37,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:onyx-38> a antenna:Object ;
+    antenna:x "-143.3"^^xsd:double ;
+    antenna:y "14.5"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Onyx,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Onyx,fontSize=16,color=#FFFFFF},Text{value=Object #38,fontSize=11,color=#CC44AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Onyx,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #38,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:onyx-38,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:pulse-39> a antenna:Object ;
+    antenna:x "117.8"^^xsd:double ;
+    antenna:y "87.9"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Pulse,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Pulse,fontSize=16,color=#FFFFFF},Text{value=Group #39,fontSize=11,color=#44AA66}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Pulse,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #39,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:pulse-39,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:quark-40> a antenna:Object ;
+    antenna:x "-28.1"^^xsd:double ;
+    antenna:y "-147.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Quark,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Quark,fontSize=16,color=#FFFFFF},Text{value=Contact #40,fontSize=11,color=#4A6FA5}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Quark,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #40,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:quark-40,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:rain-41> a antenna:Object ;
+    antenna:x "-80.4"^^xsd:double ;
+    antenna:y "130.2"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Rain,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Rain,fontSize=16,color=#FFFFFF},Text{value=Bookmark #41,fontSize=11,color=#FF6644}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Rain,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #41,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:rain-41,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:sage-42> a antenna:Object ;
+    antenna:x "150.1"^^xsd:double ;
+    antenna:y "-42.6"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Sage,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Sage,fontSize=16,color=#FFFFFF},Text{value=Script #42,fontSize=11,color=#7EE787}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Sage,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #42,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:sage-42,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:tint-43> a antenna:Object ;
+    antenna:x "-142.1"^^xsd:double ;
+    antenna:y "-71.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Tint,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Tint,fontSize=16,color=#FFFFFF},Text{value=Message #43,fontSize=11,color=#9966CC}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Tint,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #43,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:tint-43,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:umbra-44> a antenna:Object ;
+    antenna:x "57.7"^^xsd:double ;
+    antenna:y "151.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Umbra,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Umbra,fontSize=16,color=#FFFFFF},Text{value=Place #44,fontSize=11,color=#4488FF}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Umbra,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #44,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:umbra-44,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:veil-45> a antenna:Object ;
+    antenna:x "60.7"^^xsd:double ;
+    antenna:y "-153.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Veil,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Veil,fontSize=16,color=#FFFFFF},Text{value=Search #45,fontSize=11,color=#AAAA44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Veil,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #45,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:veil-45,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:wave-46> a antenna:Object ;
+    antenna:x "-151.1"^^xsd:double ;
+    antenna:y "73.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Wave,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Wave,fontSize=16,color=#FFFFFF},Text{value=Config #46,fontSize=11,color=#44FF44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Wave,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #46,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:wave-46,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:xenon-47> a antenna:Object ;
+    antenna:x "163.9"^^xsd:double ;
+    antenna:y "48.7"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Xenon,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Xenon,fontSize=16,color=#FFFFFF},Text{value=Node #47,fontSize=11,color=#6688AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Xenon,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #47,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:xenon-47,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:yarn-48> a antenna:Object ;
+    antenna:x "-89.5"^^xsd:double ;
+    antenna:y "-149.2"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Yarn,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Yarn,fontSize=16,color=#FFFFFF},Text{value=Object #48,fontSize=11,color=#CC44AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Yarn,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #48,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:yarn-48,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:zinc-49> a antenna:Object ;
+    antenna:x "-35.3"^^xsd:double ;
+    antenna:y "173.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Zinc,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Zinc,fontSize=16,color=#FFFFFF},Text{value=Group #49,fontSize=11,color=#44AA66}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Zinc,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #49,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:zinc-49,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:atom-50> a antenna:Object ;
+    antenna:x "145.6"^^xsd:double ;
+    antenna:y "-105.8"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Atom,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Atom,fontSize=16,color=#FFFFFF},Text{value=Contact #50,fontSize=11,color=#4A6FA5}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Atom,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #50,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:atom-50,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:blip-51> a antenna:Object ;
+    antenna:x "-181.8"^^xsd:double ;
+    antenna:y "-20.7"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Blip,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Blip,fontSize=16,color=#FFFFFF},Text{value=Bookmark #51,fontSize=11,color=#FF6644}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Blip,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #51,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:blip-51,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:core-52> a antenna:Object ;
+    antenna:x "122.1"^^xsd:double ;
+    antenna:y "140.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Core,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Core,fontSize=16,color=#FFFFFF},Text{value=Script #52,fontSize=11,color=#7EE787}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Core,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #52,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:core-52,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:dart-53> a antenna:Object ;
+    antenna:x "4.7"^^xsd:double ;
+    antenna:y "-188.9"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Dart,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Dart,fontSize=16,color=#FFFFFF},Text{value=Message #53,fontSize=11,color=#9966CC}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Dart,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #53,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:dart-53,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:edge-54> a antenna:Object ;
+    antenna:x "-133.2"^^xsd:double ;
+    antenna:y "138.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Edge,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Edge,fontSize=16,color=#FFFFFF},Text{value=Place #54,fontSize=11,color=#4488FF}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Edge,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #54,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:edge-54,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:fern-55> a antenna:Object ;
+    antenna:x "194.6"^^xsd:double ;
+    antenna:y "-12.2"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Fern,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Fern,fontSize=16,color=#FFFFFF},Text{value=Search #55,fontSize=11,color=#AAAA44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Fern,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #55,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:fern-55,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:grid-56> a antenna:Object ;
+    antenna:x "-154.1"^^xsd:double ;
+    antenna:y "-124.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Grid,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Grid,fontSize=16,color=#FFFFFF},Text{value=Config #56,fontSize=11,color=#44FF44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Grid,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #56,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:grid-56,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:helm-57> a antenna:Object ;
+    antenna:x "30.2"^^xsd:double ;
+    antenna:y "198.7"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Helm,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Helm,fontSize=16,color=#FFFFFF},Text{value=Node #57,fontSize=11,color=#6688AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Helm,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #57,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:helm-57,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:isle-58> a antenna:Object ;
+    antenna:x "113.6"^^xsd:double ;
+    antenna:y "-169.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Isle,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Isle,fontSize=16,color=#FFFFFF},Text{value=Object #58,fontSize=11,color=#CC44AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Isle,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #58,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:isle-58,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:jade-59> a antenna:Object ;
+    antenna:x "-201.1"^^xsd:double ;
+    antenna:y "49.0"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Jade,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Jade,fontSize=16,color=#FFFFFF},Text{value=Group #59,fontSize=11,color=#44AA66}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Jade,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #59,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:jade-59,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:kelp-60> a antenna:Object ;
+    antenna:x "184.0"^^xsd:double ;
+    antenna:y "101.2"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Kelp,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Kelp,fontSize=16,color=#FFFFFF},Text{value=Contact #60,fontSize=11,color=#4A6FA5}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Kelp,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #60,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:kelp-60,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:lens-61> a antenna:Object ;
+    antenna:x "-68.4"^^xsd:double ;
+    antenna:y "-201.7"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Lens,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Lens,fontSize=16,color=#FFFFFF},Text{value=Bookmark #61,fontSize=11,color=#FF6644}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Lens,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #61,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:lens-61,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:maze-62> a antenna:Object ;
+    antenna:x "-87.0"^^xsd:double ;
+    antenna:y "197.7"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Maze,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Maze,fontSize=16,color=#FFFFFF},Text{value=Script #62,fontSize=11,color=#7EE787}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Maze,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #62,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:maze-62,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:nest-63> a antenna:Object ;
+    antenna:x "200.4"^^xsd:double ;
+    antenna:y "-88.2"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Nest,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Nest,fontSize=16,color=#FFFFFF},Text{value=Message #63,fontSize=11,color=#9966CC}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Nest,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #63,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:nest-63,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:opal-64> a antenna:Object ;
+    antenna:x "-210.3"^^xsd:double ;
+    antenna:y "-71.2"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Opal,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Opal,fontSize=16,color=#FFFFFF},Text{value=Place #64,fontSize=11,color=#4488FF}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Opal,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #64,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:opal-64,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:pine-65> a antenna:Object ;
+    antenna:x "108.4"^^xsd:double ;
+    antenna:y "197.2"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Pine,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Pine,fontSize=16,color=#FFFFFF},Text{value=Search #65,fontSize=11,color=#AAAA44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Pine,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #65,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:pine-65,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:quad-66> a antenna:Object ;
+    antenna:x "53.9"^^xsd:double ;
+    antenna:y "-221.5"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Quad,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Quad,fontSize=16,color=#FFFFFF},Text{value=Config #66,fontSize=11,color=#44FF44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Quad,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #66,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:quad-66,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:reef-67> a antenna:Object ;
+    antenna:x "-191.9"^^xsd:double ;
+    antenna:y "128.6"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Reef,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Reef,fontSize=16,color=#FFFFFF},Text{value=Node #67,fontSize=11,color=#6688AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Reef,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #67,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:reef-67,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:silk-68> a antenna:Object ;
+    antenna:x "231.3"^^xsd:double ;
+    antenna:y "35.2"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Silk,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Silk,fontSize=16,color=#FFFFFF},Text{value=Object #68,fontSize=11,color=#CC44AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Silk,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #68,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:silk-68,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:tier-69> a antenna:Object ;
+    antenna:x "-148.8"^^xsd:double ;
+    antenna:y "-184.5"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Tier,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Tier,fontSize=16,color=#FFFFFF},Text{value=Group #69,fontSize=11,color=#44AA66}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Tier,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #69,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:tier-69,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:unit-70> a antenna:Object ;
+    antenna:x "-15.1"^^xsd:double ;
+    antenna:y "239.5"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Unit,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Unit,fontSize=16,color=#FFFFFF},Text{value=Contact #70,fontSize=11,color=#4A6FA5}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Unit,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #70,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:unit-70,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:vine-71> a antenna:Object ;
+    antenna:x "175.0"^^xsd:double ;
+    antenna:y "-168.6"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Vine,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Vine,fontSize=16,color=#FFFFFF},Text{value=Bookmark #71,fontSize=11,color=#FF6644}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Vine,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #71,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:vine-71,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:warp-72> a antenna:Object ;
+    antenna:x "-245.9"^^xsd:double ;
+    antenna:y "6.2"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Warp,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Warp,fontSize=16,color=#FFFFFF},Text{value=Script #72,fontSize=11,color=#7EE787}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Warp,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #72,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:warp-72,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:apex-73> a antenna:Object ;
+    antenna:x "187.8"^^xsd:double ;
+    antenna:y "163.5"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Apex,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Apex,fontSize=16,color=#FFFFFF},Text{value=Message #73,fontSize=11,color=#9966CC}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Apex,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #73,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:apex-73,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:byte-74> a antenna:Object ;
+    antenna:x "-28.4"^^xsd:double ;
+    antenna:y "-250.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Byte,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Byte,fontSize=16,color=#FFFFFF},Text{value=Place #74,fontSize=11,color=#4488FF}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Byte,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #74,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:byte-74,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:coil-75> a antenna:Object ;
+    antenna:x "-149.9"^^xsd:double ;
+    antenna:y "206.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Coil,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Coil,fontSize=16,color=#FFFFFF},Text{value=Search #75,fontSize=11,color=#AAAA44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Coil,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #75,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:coil-75,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:dune-76> a antenna:Object ;
+    antenna:x "252.8"^^xsd:double ;
+    antenna:y "-51.5"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Dune,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Dune,fontSize=16,color=#FFFFFF},Text{value=Config #76,fontSize=11,color=#44FF44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Dune,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #76,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:dune-76,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:emit-77> a antenna:Object ;
+    antenna:x "-223.8"^^xsd:double ;
+    antenna:y "-134.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Emit,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Emit,fontSize=16,color=#FFFFFF},Text{value=Node #77,fontSize=11,color=#6688AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Emit,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #77,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:emit-77,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:fork-78> a antenna:Object ;
+    antenna:x "75.2"^^xsd:double ;
+    antenna:y "253.0"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Fork,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Fork,fontSize=16,color=#FFFFFF},Text{value=Object #78,fontSize=11,color=#CC44AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Fork,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #78,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:fork-78,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:gate-79> a antenna:Object ;
+    antenna:x "116.7"^^xsd:double ;
+    antenna:y "-240.1"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Gate,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Gate,fontSize=16,color=#FFFFFF},Text{value=Group #79,fontSize=11,color=#44AA66}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Gate,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #79,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:gate-79,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:hive-80> a antenna:Object ;
+    antenna:x "-251.0"^^xsd:double ;
+    antenna:y "99.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Hive,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Hive,fontSize=16,color=#FFFFFF},Text{value=Contact #80,fontSize=11,color=#4A6FA5}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Hive,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #80,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:hive-80,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:inch-81> a antenna:Object ;
+    antenna:x "255.1"^^xsd:double ;
+    antenna:y "97.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Inch,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Inch,fontSize=16,color=#FFFFFF},Text{value=Bookmark #81,fontSize=11,color=#FF6644}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Inch,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #81,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:inch-81,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:jolt-82> a antenna:Object ;
+    antenna:x "-123.8"^^xsd:double ;
+    antenna:y "-246.7"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Jolt,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Jolt,fontSize=16,color=#FFFFFF},Text{value=Script #82,fontSize=11,color=#7EE787}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Jolt,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #82,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:jolt-82,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:kite-83> a antenna:Object ;
+    antenna:x "-76.2"^^xsd:double ;
+    antenna:y "268.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Kite,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Kite,fontSize=16,color=#FFFFFF},Text{value=Message #83,fontSize=11,color=#9966CC}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Kite,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #83,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:kite-83,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:loom-84> a antenna:Object ;
+    antenna:x "240.0"^^xsd:double ;
+    antenna:y "-148.1"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Loom,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Loom,fontSize=16,color=#FFFFFF},Text{value=Place #84,fontSize=11,color=#4488FF}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Loom,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #84,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:loom-84,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:mesh-85> a antenna:Object ;
+    antenna:x "-280.0"^^xsd:double ;
+    antenna:y "-53.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Mesh,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Mesh,fontSize=16,color=#FFFFFF},Text{value=Search #85,fontSize=11,color=#AAAA44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Mesh,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #85,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:mesh-85,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:node-86> a antenna:Object ;
+    antenna:x "172.2"^^xsd:double ;
+    antenna:y "230.9"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Node,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Node,fontSize=16,color=#FFFFFF},Text{value=Config #86,fontSize=11,color=#44FF44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Node,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #86,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:node-86,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:orca-87> a antenna:Object ;
+    antenna:x "29.2"^^xsd:double ;
+    antenna:y "-289.5"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Orca,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Orca,fontSize=16,color=#FFFFFF},Text{value=Node #87,fontSize=11,color=#6688AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Orca,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #87,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:orca-87,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:peak-88> a antenna:Object ;
+    antenna:x "-219.3"^^xsd:double ;
+    antenna:y "195.8"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Peak,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Peak,fontSize=16,color=#FFFFFF},Text{value=Object #88,fontSize=11,color=#CC44AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Peak,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #88,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:peak-88,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:quay-89> a antenna:Object ;
+    antenna:x "297.0"^^xsd:double ;
+    antenna:y "3.7"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Quay,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Quay,fontSize=16,color=#FFFFFF},Text{value=Group #89,fontSize=11,color=#44AA66}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Quay,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #89,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:quay-89,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:rust-90> a antenna:Object ;
+    antenna:x "-218.7"^^xsd:double ;
+    antenna:y "-205.4"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=person,size=24,color=#4A6FA5},Text{value=Rust,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=12,padding=12}[Column[Text{value=Rust,fontSize=16,color=#FFFFFF},Text{value=Contact #90,fontSize=11,color=#4A6FA5}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AF18,borderRadius=16,padding=20}[Column[Text{value=Rust,fontSize=24,color=#FFFFFF,style=bold},Text{value=Contact #90,fontSize=14,color=#4A6FA5},Text{value=URI: urn:obj:rust-90,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:spar-91> a antenna:Object ;
+    antenna:x "22.8"^^xsd:double ;
+    antenna:y "302.1"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=star,size=24,color=#FF6644},Text{value=Spar,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=12,padding=12}[Column[Text{value=Spar,fontSize=16,color=#FFFFFF},Text{value=Bookmark #91,fontSize=11,color=#FF6644}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AF0A618,borderRadius=16,padding=20}[Column[Text{value=Spar,fontSize=24,color=#FFFFFF,style=bold},Text{value=Bookmark #91,fontSize=14,color=#FF6644},Text{value=URI: urn:obj:spar-91,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:tusk-92> a antenna:Object ;
+    antenna:x "189.1"^^xsd:double ;
+    antenna:y "-240.6"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=code,size=24,color=#7EE787},Text{value=Tusk,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=12,padding=12}[Column[Text{value=Tusk,fontSize=16,color=#FFFFFF},Text{value=Script #92,fontSize=11,color=#7EE787}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AE0A718,borderRadius=16,padding=20}[Column[Text{value=Tusk,fontSize=24,color=#FFFFFF,style=bold},Text{value=Script #92,fontSize=14,color=#7EE787},Text{value=URI: urn:obj:tusk-92,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:urge-93> a antenna:Object ;
+    antenna:x "-304.9"^^xsd:double ;
+    antenna:y "50.3"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=send,size=24,color=#9966CC},Text{value=Urge,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=12,padding=12}[Column[Text{value=Urge,fontSize=16,color=#FFFFFF},Text{value=Message #93,fontSize=11,color=#9966CC}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A90A618,borderRadius=16,padding=20}[Column[Text{value=Urge,fontSize=24,color=#FFFFFF,style=bold},Text{value=Message #93,fontSize=14,color=#9966CC},Text{value=URI: urn:obj:urge-93,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:volt-94> a antenna:Object ;
+    antenna:x "261.3"^^xsd:double ;
+    antenna:y "170.5"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=home,size=24,color=#4488FF},Text{value=Volt,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=12,padding=12}[Column[Text{value=Volt,fontSize=16,color=#FFFFFF},Text{value=Place #94,fontSize=11,color=#4488FF}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40A818,borderRadius=16,padding=20}[Column[Text{value=Volt,fontSize=24,color=#FFFFFF,style=bold},Text{value=Place #94,fontSize=14,color=#4488FF},Text{value=URI: urn:obj:volt-94,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:wisp-95> a antenna:Object ;
+    antenna:x "-78.3"^^xsd:double ;
+    antenna:y "-305.1"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=search,size=24,color=#AAAA44},Text{value=Wisp,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=12,padding=12}[Column[Text{value=Wisp,fontSize=16,color=#FFFFFF},Text{value=Search #95,fontSize=11,color=#AAAA44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AA0AA18,borderRadius=16,padding=20}[Column[Text{value=Wisp,fontSize=24,color=#FFFFFF,style=bold},Text{value=Search #95,fontSize=14,color=#AAAA44},Text{value=URI: urn:obj:wisp-95,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:yoke-96> a antenna:Object ;
+    antenna:x "-149.7"^^xsd:double ;
+    antenna:y "280.6"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=settings,size=24,color=#44FF44},Text{value=Yoke,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=12,padding=12}[Column[Text{value=Yoke,fontSize=16,color=#FFFFFF},Text{value=Config #96,fontSize=11,color=#44FF44}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AF18,borderRadius=16,padding=20}[Column[Text{value=Yoke,fontSize=24,color=#FFFFFF,style=bold},Text{value=Config #96,fontSize=14,color=#44FF44},Text{value=URI: urn:obj:yoke-96,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:zone-97> a antenna:Object ;
+    antenna:x "302.7"^^xsd:double ;
+    antenna:y "-106.8"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=cable,size=24,color=#6688AA},Text{value=Zone,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=12,padding=12}[Column[Text{value=Zone,fontSize=16,color=#FFFFFF},Text{value=Node #97,fontSize=11,color=#6688AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A60A818,borderRadius=16,padding=20}[Column[Text{value=Zone,fontSize=24,color=#FFFFFF,style=bold},Text{value=Node #97,fontSize=14,color=#6688AA},Text{value=URI: urn:obj:zone-97,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:obj98-98> a antenna:Object ;
+    antenna:x "-298.2"^^xsd:double ;
+    antenna:y "-126.8"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=circle,size=24,color=#CC44AA},Text{value=Obj98,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=12,padding=12}[Column[Text{value=Obj98,fontSize=16,color=#FFFFFF},Text{value=Object #98,fontSize=11,color=#CC44AA}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0AC0A418,borderRadius=16,padding=20}[Column[Text{value=Obj98,fontSize=24,color=#FFFFFF,style=bold},Text{value=Object #98,fontSize=14,color=#CC44AA},Text{value=URI: urn:obj:obj98-98,fontSize=10,color=#556677}]]"
+    ] .
+
+<urn:obj:obj99-99> a antenna:Object ;
+    antenna:x "135.5"^^xsd:double ;
+    antenna:y "297.6"^^xsd:double ;
+    antenna:worldWidth "30.0"^^xsd:double ;
+    antenna:worldHeight "30.0"^^xsd:double ;
+    antenna:lod [
+        antenna:below "60.0"^^xsd:double ;
+        antenna:widget "Column[Icon{name=people,size=24,color=#44AA66},Text{value=Obj99,fontSize=8,color=#667788}]"
+    ] ;
+    antenna:lod [
+        antenna:below "200.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=12,padding=12}[Column[Text{value=Obj99,fontSize=16,color=#FFFFFF},Text{value=Group #99,fontSize=11,color=#44AA66}]]"
+    ] ;
+    antenna:lod [
+        antenna:below "99999.0"^^xsd:double ;
+        antenna:widget "Container{color=#0A40AA18,borderRadius=16,padding=20}[Column[Text{value=Obj99,fontSize=24,color=#FFFFFF,style=bold},Text{value=Group #99,fontSize=14,color=#44AA66},Text{value=URI: urn:obj:obj99-99,fontSize=10,color=#556677}]]"
     ] .
 
