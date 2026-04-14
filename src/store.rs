@@ -16,7 +16,12 @@ pub struct RdfStore {
 impl RdfStore {
     pub fn open(path: Option<&str>) -> Result<Self> {
         let store = match path {
-            Some(p) => Store::open(p)?,
+            Some(p) => {
+                // Workaround for oxigraph 0.4.11 TryFromIntError panic on macOS
+                // when RLIMIT_NOFILE is "unlimited"/huge. See antenna::fd_limit.
+                crate::fd_limit::clamp_for_rocksdb();
+                Store::open(p)?
+            }
             None => Store::new()?,
         };
         Ok(Self { store })

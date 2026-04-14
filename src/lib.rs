@@ -13,6 +13,7 @@ pub mod carrier_tox;
 pub mod channel;
 pub mod dag;
 pub mod dispatch;
+pub mod fd_limit;
 pub mod llm;
 pub mod script_vm;
 pub mod store;
