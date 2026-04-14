@@ -4,7 +4,7 @@
 use anyhow::Result;
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::NamedNodeRef;
-use oxigraph::sparql::QueryResults;
+use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 
 use crate::carrier_tox::TURTLE_PREFIXES;
@@ -16,12 +16,7 @@ pub struct RdfStore {
 impl RdfStore {
     pub fn open(path: Option<&str>) -> Result<Self> {
         let store = match path {
-            Some(p) => {
-                // Workaround for oxigraph 0.4.11 TryFromIntError panic on macOS
-                // when RLIMIT_NOFILE is "unlimited"/huge. See antenna::fd_limit.
-                crate::fd_limit::clamp_for_rocksdb();
-                Store::open(p)?
-            }
+            Some(p) => Store::open(p)?,
             None => Store::new()?,
         };
         Ok(Self { store })
@@ -54,13 +49,16 @@ impl RdfStore {
     }
 
     /// Run a SPARQL query. Returns the raw QueryResults for the caller to iterate.
-    pub fn query(&self, sparql: &str) -> Result<QueryResults> {
-        Ok(self.store.query(sparql)?)
+    pub fn query(&self, sparql: &str) -> Result<QueryResults<'static>> {
+        Ok(SparqlEvaluator::new()
+            .parse_query(sparql)?
+            .on_store(&self.store)
+            .execute()?)
     }
 
     /// Run a SPARQL ASK query. Returns true/false.
     pub fn ask(&self, sparql: &str) -> Result<bool> {
-        match self.store.query(sparql)? {
+        match self.query(sparql)? {
             QueryResults::Boolean(b) => Ok(b),
             _ => Ok(false),
         }
@@ -68,7 +66,10 @@ impl RdfStore {
 
     /// Run a SPARQL UPDATE (INSERT DATA, DELETE DATA, DELETE/INSERT WHERE).
     pub fn update(&self, sparql: &str) -> Result<()> {
-        self.store.update(sparql)?;
+        SparqlEvaluator::new()
+            .parse_update(sparql)?
+            .on_store(&self.store)
+            .execute()?;
         Ok(())
     }
 

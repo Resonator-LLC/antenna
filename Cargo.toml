@@ -16,7 +16,7 @@ name = "antenna"
 path = "src/main.rs"
 
 [dependencies]
-oxigraph = "0.4"
+oxigraph = "0.5"
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 libc = "0.2"
