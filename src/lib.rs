@@ -105,19 +105,21 @@ impl AntennaContext {
             if line.is_empty() {
                 continue;
             }
-            dispatch::dispatch(&line, &self.store, &self.dag, &self.tox, output);
+            dispatch::dispatch(&line, &self.store, &self.dag, Some(&self.tox), output);
         }
 
         // 4. Process store queries from script threads
         self.dag.pump_queries(&self.store);
 
-        // 5. Pump script emit outputs — insert into store and send to WS clients
+        // 5. Pump script emit outputs — re-dispatch through the router so
+        //    sp: types execute as SPARQL updates/queries, carrier: types fire
+        //    Tox commands, and raw RDF is stored + broadcast to hooks.
+        //    Honours the contract in control/CLAUDE.md §Architecture Overview.
+        //    Emits produced by dispatched raw-RDF hooks land in the emit
+        //    channel and are drained on the next tick (no intra-tick loop).
         let emits = self.dag.pump_emits();
         for turtle in &emits {
-            if let Err(e) = self.store.insert_turtle(turtle) {
-                tracing::warn!(%e, "script emit insert error");
-            }
-            output.send(turtle);
+            dispatch::dispatch(turtle, &self.store, &self.dag, Some(&self.tox), output);
         }
 
         // 6. Check for dead node threads

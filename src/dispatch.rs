@@ -12,11 +12,16 @@ const ANTENNA_NS: &str = "http://resonator.network/v2/antenna#";
 const TOX_NS: &str = "http://resonator.network/v2/carrier#";
 
 /// Dispatch a single Turtle line based on its rdf:type.
+///
+/// `tox` is optional so the same router works from contexts that do not
+/// own a carrier handle (integration tests, tools). If a `carrier:` type
+/// arrives with `tox = None`, the dispatch is skipped with a warning —
+/// the turtle is neither stored nor echoed.
 pub fn dispatch(
     line: &str,
     store: &RdfStore,
     dag: &Dag,
-    tox: &ToxCarrier,
+    tox: Option<&ToxCarrier>,
     out: &mut dyn AntennaOut,
 ) {
     if line.is_empty() || line.starts_with('#') || line.starts_with('@') {
@@ -37,7 +42,10 @@ pub fn dispatch(
     if rdf_type.starts_with(SP_NS) {
         handle_spin(line, &rdf_type, store, out);
     } else if rdf_type.starts_with(TOX_NS) {
-        handle_tox(line, &rdf_type, tox, out);
+        match tox {
+            Some(t) => handle_tox(line, &rdf_type, t, out),
+            None => tracing::warn!(%rdf_type, "carrier: dispatch skipped (no tox handle)"),
+        }
     } else {
         // Unknown type — insert as raw RDF through the DAG
         insert_with_dag(line, store, dag, out);
@@ -551,6 +559,31 @@ mod tests {
         );
         assert!(out.messages().is_empty(), "no error expected");
         assert!(store.ask("ASK { <urn:y> a <urn:Bar> }").unwrap());
+    }
+
+    #[test]
+    fn handle_spin_modify_runs_delete_and_insert() {
+        // ISSUE-078 regression: a DELETE WHERE + INSERT DATA via sp:Modify
+        // must actually mutate the store when it arrives through dispatch
+        // (previously the emit path inserted the Modify turtle as data).
+        let store = RdfStore::open(None).unwrap();
+        store
+            .insert_turtle("<urn:counter:panel> <urn:counter:count> \"0\" .")
+            .unwrap();
+        let mut out = TestOut::new();
+        handle_spin(
+            r#"[] a sp:Modify ; sp:text "DELETE WHERE { <urn:counter:panel> <urn:counter:count> ?c }" ."#,
+            &format!("{}Modify", SP_NS),
+            &store,
+            &mut out,
+        );
+        assert!(out.messages().is_empty(), "no error expected");
+        assert!(
+            !store
+                .ask("ASK { <urn:counter:panel> <urn:counter:count> ?c }")
+                .unwrap(),
+            "DELETE WHERE must have removed the triple"
+        );
     }
 
     #[test]
