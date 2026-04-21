@@ -218,6 +218,13 @@ impl Dag {
                                     if turtle.is_empty() {
                                         continue;
                                     }
+                                    tracing::debug!(
+                                        target: "SCRIPT",
+                                        node = %node_uri,
+                                        channel = %inbox_channel_uris[i],
+                                        bytes = turtle.len(),
+                                        "inbox recv",
+                                    );
                                     match std::panic::catch_unwind(
                                         std::panic::AssertUnwindSafe(|| {
                                             vm.exec(
@@ -473,13 +480,21 @@ impl Dag {
                 collected.push(turtle);
             }
         }
+        if !collected.is_empty() {
+            tracing::debug!(
+                target: "SCRIPT",
+                event = "pump_flushed",
+                count = collected.len(),
+            );
+        }
         collected
     }
 
     /// Process store query requests from script threads.
     pub fn pump_queries(&self, store: &RdfStore) {
         while let Ok((sparql, resp_tx)) = self.query_rx.try_recv() {
-            let result = match store.query(&sparql) {
+            let start = std::time::Instant::now();
+            let result: Vec<Vec<(String, String)>> = match store.query(&sparql) {
                 Ok(results) => {
                     if let QueryResults::Solutions(solutions) = results {
                         solutions
@@ -507,6 +522,12 @@ impl Dag {
                     vec![]
                 }
             };
+            tracing::debug!(
+                target: "SPARQL",
+                op = "select",
+                rows = result.len() as u64,
+                ms = start.elapsed().as_millis() as u64,
+            );
             let _ = resp_tx.send(result);
         }
     }
@@ -514,6 +535,13 @@ impl Dag {
     /// Broadcast a Turtle string to all subscribers of a named channel.
     pub fn broadcast(&self, channel_uri: &str, turtle: &str) {
         if let Some(writers) = self.channel_writers.get(channel_uri) {
+            tracing::debug!(
+                target: "CHANNEL",
+                channel = %channel_uri,
+                subscribers = writers.len(),
+                bytes = turtle.len(),
+                "broadcast",
+            );
             for writer in writers {
                 let _ = writer.send(turtle);
             }
@@ -549,6 +577,7 @@ fn query_script_nodes(store: &RdfStore) -> Result<Vec<ScriptNodeDef>> {
         }
     "#;
 
+    let start = std::time::Instant::now();
     let results = store.query(sparql)?;
     let mut node_map: HashMap<String, ScriptNodeDef> = HashMap::new();
 
@@ -587,7 +616,14 @@ fn query_script_nodes(store: &RdfStore) -> Result<Vec<ScriptNodeDef>> {
         }
     }
 
-    Ok(node_map.into_values().collect())
+    let nodes: Vec<ScriptNodeDef> = node_map.into_values().collect();
+    tracing::debug!(
+        target: "SPARQL",
+        op = "startup_nodes",
+        count = nodes.len() as u64,
+        ms = start.elapsed().as_millis() as u64,
+    );
+    Ok(nodes)
 }
 
 fn term_to_string(term: Option<&Term>) -> String {

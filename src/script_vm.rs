@@ -149,7 +149,14 @@ unsafe extern "C" fn js_emit(
 
     let opaque = JS_GetContextOpaque(ctx) as *const VmOpaque;
     if !opaque.is_null() {
-        let _ = (*opaque).emit_sender.send(s);
+        let bytes = s.len();
+        if (*opaque).emit_sender.send(s).is_ok() {
+            tracing::debug!(
+                target: "SCRIPT",
+                event = "emit",
+                bytes,
+            );
+        }
     }
 
     js_undefined()

@@ -29,7 +29,14 @@ pub fn dispatch(
     }
 
     // Try to extract the rdf:type from the Turtle statement
-    let rdf_type = match extract_type(line) {
+    let rdf_type_opt = extract_type(line);
+    tracing::debug!(
+        target: "DISPATCH",
+        rdf_type = rdf_type_opt.as_deref().unwrap_or("<none>"),
+        bytes = line.len(),
+        "route",
+    );
+    let rdf_type = match rdf_type_opt {
         Some(t) => t,
         None => {
             // No recognizable type — treat as raw RDF, insert into store
@@ -73,69 +80,110 @@ fn handle_spin(line: &str, rdf_type: &str, store: &RdfStore, out: &mut dyn Anten
     };
 
     match local {
-        "Select" => match store.query(&sparql) {
-            Ok(results) => {
-                // Serialize results as Turtle on OUT
-                // For now, emit a simple result indicator
-                use oxigraph::sparql::QueryResults;
-                if let QueryResults::Solutions(solutions) = results {
-                    for sol in solutions.flatten() {
-                        // Emit each binding as a simple triple
-                        let mut parts = Vec::new();
-                        for (var, term) in sol.iter() {
-                            parts.push(format!(
-                                "antenna:var_{} \"{}\"",
-                                var.as_str(),
-                                turtle_escape(&term.to_string())
-                            ));
-                        }
-                        if !parts.is_empty() {
-                            out.send(&format!("[] a antenna:Result ; {} .", parts.join(" ; ")));
+        "Select" => {
+            let start = std::time::Instant::now();
+            match store.query(&sparql) {
+                Ok(results) => {
+                    // Serialize results as Turtle on OUT
+                    // For now, emit a simple result indicator
+                    use oxigraph::sparql::QueryResults;
+                    let mut rows = 0u64;
+                    if let QueryResults::Solutions(solutions) = results {
+                        for sol in solutions.flatten() {
+                            rows += 1;
+                            // Emit each binding as a simple triple
+                            let mut parts = Vec::new();
+                            for (var, term) in sol.iter() {
+                                parts.push(format!(
+                                    "antenna:var_{} \"{}\"",
+                                    var.as_str(),
+                                    turtle_escape(&term.to_string())
+                                ));
+                            }
+                            if !parts.is_empty() {
+                                out.send(&format!(
+                                    "[] a antenna:Result ; {} .",
+                                    parts.join(" ; ")
+                                ));
+                            }
                         }
                     }
+                    tracing::debug!(
+                        target: "SPARQL",
+                        op = "select",
+                        rows,
+                        ms = start.elapsed().as_millis() as u64,
+                    );
+                }
+                Err(e) => {
+                    out.send(&format!(
+                        "[] a antenna:Error ; antenna:message \"{}\" .",
+                        turtle_escape(&e.to_string())
+                    ));
                 }
             }
-            Err(e) => {
-                out.send(&format!(
-                    "[] a antenna:Error ; antenna:message \"{}\" .",
-                    turtle_escape(&e.to_string())
-                ));
+        }
+        "Ask" => {
+            let start = std::time::Instant::now();
+            match store.ask(&sparql) {
+                Ok(b) => {
+                    tracing::debug!(
+                        target: "SPARQL",
+                        op = "ask",
+                        ok = b,
+                        ms = start.elapsed().as_millis() as u64,
+                    );
+                    out.send(&format!("[] a sp:AskResult ; sp:boolean {} .", b));
+                }
+                Err(e) => {
+                    out.send(&format!(
+                        "[] a antenna:Error ; antenna:message \"{}\" .",
+                        turtle_escape(&e.to_string())
+                    ));
+                }
             }
-        },
-        "Ask" => match store.ask(&sparql) {
-            Ok(b) => {
-                out.send(&format!("[] a sp:AskResult ; sp:boolean {} .", b));
-            }
-            Err(e) => {
-                out.send(&format!(
-                    "[] a antenna:Error ; antenna:message \"{}\" .",
-                    turtle_escape(&e.to_string())
-                ));
-            }
-        },
-        "Construct" => match store.query(&sparql) {
-            Ok(results) => {
-                use oxigraph::sparql::QueryResults;
-                if let QueryResults::Graph(triples) = results {
-                    for t in triples.flatten() {
-                        let turtle = format!("{} {} {} .", t.subject, t.predicate, t.object);
-                        out.send(&turtle);
-                        // Also insert constructed triples
-                        let _ = store.insert_turtle(&turtle);
+        }
+        "Construct" => {
+            let start = std::time::Instant::now();
+            match store.query(&sparql) {
+                Ok(results) => {
+                    use oxigraph::sparql::QueryResults;
+                    let mut rows = 0u64;
+                    if let QueryResults::Graph(triples) = results {
+                        for t in triples.flatten() {
+                            rows += 1;
+                            let turtle = format!("{} {} {} .", t.subject, t.predicate, t.object);
+                            out.send(&turtle);
+                            // Also insert constructed triples
+                            let _ = store.insert_turtle(&turtle);
+                        }
                     }
+                    tracing::debug!(
+                        target: "SPARQL",
+                        op = "construct",
+                        rows,
+                        ms = start.elapsed().as_millis() as u64,
+                    );
+                }
+                Err(e) => {
+                    out.send(&format!(
+                        "[] a antenna:Error ; antenna:message \"{}\" .",
+                        turtle_escape(&e.to_string())
+                    ));
                 }
             }
-            Err(e) => {
-                out.send(&format!(
-                    "[] a antenna:Error ; antenna:message \"{}\" .",
-                    turtle_escape(&e.to_string())
-                ));
-            }
-        },
+        }
         "InsertData" | "DeleteData" | "Modify" => {
             // These are SPARQL Update operations
+            let start = std::time::Instant::now();
             match store.update(&sparql) {
-                Ok(()) => {}
+                Ok(()) => {
+                    tracing::debug!(
+                        target: "SPARQL",
+                        op = "update",
+                        ms = start.elapsed().as_millis() as u64,
+                    );
+                }
                 Err(e) => {
                     out.send(&format!(
                         "[] a antenna:Error ; antenna:message \"{}\" .",
