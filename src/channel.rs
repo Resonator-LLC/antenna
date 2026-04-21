@@ -246,7 +246,7 @@ impl ChannelWriter {
             // Exponential backoff: 1µs, 2µs, 4µs, ... capped at 1024µs (~1ms)
             std::thread::sleep(std::time::Duration::from_micros(1 << attempt.min(10)));
         }
-        tracing::warn!(bytes = data.len(), "channel full, message dropped");
+        tracing::warn!(target: "CHANNEL", bytes = data.len(), "channel full, message dropped");
         false
     }
 }

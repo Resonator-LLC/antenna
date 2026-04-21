@@ -45,7 +45,7 @@ impl AntennaOut for WsOut {
 pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(WsIn, WsOut)> {
     let addr = format!("0.0.0.0:{}", port);
     let listener = TcpListener::bind(&addr)?;
-    tracing::info!(addr = %addr, "WebSocket server listening");
+    tracing::info!(target: "WS", addr = %addr, "WebSocket server listening");
 
     // Channels shared across all client connections
     let (in_tx, in_rx) = mpsc::channel::<String>();
@@ -81,17 +81,17 @@ pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(W
 
         // Accept clients in a loop
         loop {
-            tracing::debug!("waiting for WebSocket client");
+            tracing::debug!(target: "WS", "waiting for WebSocket client");
             match listener.accept() {
                 Ok((stream, peer)) => {
-                    tracing::info!(peer = %peer, "client connected");
+                    tracing::info!(target: "WS", peer = %peer, "client connected");
                     let in_tx = in_tx.clone();
                     let client_tx_sender = &client_tx_sender;
                     let greeting = &greeting;
                     let result = catch_unwind(AssertUnwindSafe(|| {
                         match accept(stream) {
                             Ok(mut ws) => {
-                                tracing::debug!("WebSocket handshake complete");
+                                tracing::debug!(target: "WS", "WebSocket handshake complete");
 
                                 // Send greeting (prefixes) to new client
                                 if let Some(ref g) = greeting {
@@ -144,7 +144,7 @@ pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(W
                                                 }
                                             }
                                             Ok(Message::Close(frame)) => {
-                                                tracing::info!("client disconnected");
+                                                tracing::info!(target: "WS", "client disconnected");
                                                 let _ = ws.close(frame);
                                                 loop {
                                                     match ws.read() {
@@ -160,7 +160,7 @@ pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(W
                                                 break; // No more data available right now
                                             }
                                             Err(_) => {
-                                                tracing::warn!("client connection lost");
+                                                tracing::warn!(target: "WS", "client connection lost");
                                                 break 'client;
                                             }
                                             _ => {}
@@ -170,23 +170,23 @@ pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(W
                                     // Write to WS — drain all pending outgoing messages
                                     while let Ok(msg) = per_client_rx.try_recv() {
                                         if ws.send(Message::Text(msg)).is_err() {
-                                            tracing::warn!("write error, dropping client");
+                                            tracing::warn!(target: "WS", "write error, dropping client");
                                             break 'client;
                                         }
                                     }
                                 }
                             }
                             Err(e) => {
-                                tracing::warn!(%e, "WebSocket handshake failed");
+                                tracing::warn!(target: "WS", %e, "WebSocket handshake failed");
                             }
                         }
                     }));
                     if let Err(panic) = result {
-                        tracing::error!(?panic, "client handler panicked");
+                        tracing::error!(target: "WS", ?panic, "client handler panicked");
                     }
                 }
                 Err(e) => {
-                    tracing::error!(%e, "accept error");
+                    tracing::error!(target: "WS", %e, "accept error");
                     std::thread::sleep(Duration::from_secs(1));
                 }
             }

@@ -87,6 +87,7 @@ fn main() {
         .files(&[
             carrier_src.join("carrier.c"),
             carrier_src.join("carrier_events.c"),
+            carrier_src.join("carrier_log.c"),
         ])
         .include(&carrier_inc)
         .include(&carrier_src)

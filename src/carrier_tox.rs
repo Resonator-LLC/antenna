@@ -274,6 +274,33 @@ pub struct Carrier {
 type CarrierEventCb = unsafe extern "C" fn(event: *const CarrierEvent, userdata: *mut c_void);
 
 // ---------------------------------------------------------------------------
+// Log bridge — mirrors carrier_log.h
+// ---------------------------------------------------------------------------
+
+// CarrierLogLevel matches carrier.h: ERROR=0, WARN=1, INFO=2, DEBUG=3.
+#[allow(dead_code)]
+const CARRIER_LOG_ERROR: c_int = 0;
+#[allow(dead_code)]
+const CARRIER_LOG_WARN: c_int = 1;
+#[allow(dead_code)]
+const CARRIER_LOG_INFO: c_int = 2;
+#[allow(dead_code)]
+const CARRIER_LOG_DEBUG: c_int = 3;
+
+const CARRIER_LOG_TAG_LEN: usize = 16;
+const CARRIER_LOG_MESSAGE_LEN: usize = 512;
+
+#[repr(C)]
+pub struct CarrierLogRecord {
+    pub level: c_int,
+    pub timestamp_ms: i64,
+    pub tag: [u8; CARRIER_LOG_TAG_LEN],
+    pub message: [u8; CARRIER_LOG_MESSAGE_LEN],
+}
+
+type CarrierLogCb = unsafe extern "C" fn(record: *const CarrierLogRecord, userdata: *mut c_void);
+
+// ---------------------------------------------------------------------------
 // FFI declarations
 // ---------------------------------------------------------------------------
 
@@ -282,15 +309,102 @@ extern "C" {
         profile_path: *const c_char,
         config_path: *const c_char,
         nodes_path: *const c_char,
+        log_cb: Option<CarrierLogCb>,
+        log_userdata: *mut c_void,
     ) -> *mut Carrier;
     fn carrier_free(c: *mut Carrier);
     fn carrier_iterate(c: *mut Carrier) -> c_int;
     fn carrier_iteration_interval(c: *mut Carrier) -> c_int;
     fn carrier_set_event_callback(c: *mut Carrier, cb: CarrierEventCb, userdata: *mut c_void);
+    fn carrier_set_log_level(c: *mut Carrier, level: c_int);
     fn carrier_send_message(c: *mut Carrier, friend_id: u32, text: *const c_char) -> c_int;
     fn carrier_get_id(c: *mut Carrier) -> c_int;
     fn carrier_set_nick(c: *mut Carrier, nick: *const c_char) -> c_int;
     fn carrier_save(c: *mut Carrier) -> c_int;
+}
+
+// ---------------------------------------------------------------------------
+// Carrier → tracing bridge
+//
+// carrier_new takes a log callback; we pass one that routes every record
+// into tracing with the carrier-side tag as the event target, so the 15-tag
+// taxonomy (TOX/DHT/FRIEND/GROUP/FILE/AV/PIPE/...) flows through into
+// antenna's formatter and `grep '\[TOX\]'` works uniformly.
+//
+// Carrier applies its own level gate before calling the callback (we set
+// CARRIER_LOG_DEBUG so everything flows; tracing's EnvFilter does the
+// final filtering on the Rust side).
+// ---------------------------------------------------------------------------
+
+// tracing's `target:` argument must be a string literal at the call site
+// (it becomes part of a static `Callsite` registration). Carrier's tag is
+// only known at runtime, so we explode to one literal-target branch per
+// known tag. Unknown tags fall through to "CARRIER".
+//
+// The exploded match keeps per-callsite filtering effective: RUST_LOG=TOX=debug
+// works because each `[TAG]` emission has its own callsite.
+macro_rules! carrier_emit_at_level {
+    ($level:expr, $target:literal, $msg:expr) => {
+        match $level {
+            CARRIER_LOG_ERROR => tracing::error!(target: $target, "{}", $msg),
+            CARRIER_LOG_WARN => tracing::warn!(target: $target, "{}", $msg),
+            CARRIER_LOG_INFO => tracing::info!(target: $target, "{}", $msg),
+            CARRIER_LOG_DEBUG => tracing::debug!(target: $target, "{}", $msg),
+            _ => tracing::info!(target: $target, "{}", $msg),
+        }
+    };
+}
+
+/// # Safety
+///
+/// Called by libcarrier from the same thread that drives `carrier_iterate`.
+/// `record` must point to a valid `CarrierLogRecord` for the duration of
+/// the call. `userdata` is unused (we pass null in `ToxCarrier::new`) —
+/// the bridge has no per-instance state, so tracing's globally-configured
+/// dispatcher is the only sink.
+unsafe extern "C" fn log_callback(record: *const CarrierLogRecord, _userdata: *mut c_void) {
+    if record.is_null() {
+        return;
+    }
+    // SAFETY: caller guarantees the record pointer is valid for the call.
+    // Fields are Copy / fixed-size byte arrays; we only read them.
+    let rec = &*record;
+
+    let tag_end = rec
+        .tag
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(rec.tag.len());
+    let tag = std::str::from_utf8(&rec.tag[..tag_end]).unwrap_or("CARRIER");
+
+    let msg_end = rec
+        .message
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(rec.message.len());
+    let message = String::from_utf8_lossy(&rec.message[..msg_end]);
+
+    // Dispatch to one of the 15 known taxonomy tags (static targets).
+    // Unknown tags fall back to a generic "CARRIER" target so nothing is
+    // silently dropped.
+    match tag {
+        "TOX" => carrier_emit_at_level!(rec.level, "TOX", message),
+        "DHT" => carrier_emit_at_level!(rec.level, "DHT", message),
+        "FRIEND" => carrier_emit_at_level!(rec.level, "FRIEND", message),
+        "GROUP" => carrier_emit_at_level!(rec.level, "GROUP", message),
+        "FILE" => carrier_emit_at_level!(rec.level, "FILE", message),
+        "AV" => carrier_emit_at_level!(rec.level, "AV", message),
+        "PIPE" => carrier_emit_at_level!(rec.level, "PIPE", message),
+        "DISPATCH" => carrier_emit_at_level!(rec.level, "DISPATCH", message),
+        "SPARQL" => carrier_emit_at_level!(rec.level, "SPARQL", message),
+        "PIPELINE" => carrier_emit_at_level!(rec.level, "PIPELINE", message),
+        "SCRIPT" => carrier_emit_at_level!(rec.level, "SCRIPT", message),
+        "CHANNEL" => carrier_emit_at_level!(rec.level, "CHANNEL", message),
+        "LLM" => carrier_emit_at_level!(rec.level, "LLM", message),
+        "WS" => carrier_emit_at_level!(rec.level, "WS", message),
+        "STATION" => carrier_emit_at_level!(rec.level, "STATION", message),
+        _ => carrier_emit_at_level!(rec.level, "CARRIER", message),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -701,18 +815,32 @@ impl ToxCarrier {
         let nodes_c = nodes.map(CString::new).transpose()?;
 
         // SAFETY: CStrings are valid for the duration of carrier_new.
+        // The log_callback is a plain 'extern "C"' function with 'static
+        // lifetime — it reads only from the record pointer supplied by
+        // carrier and calls into tracing (which has its own Send + Sync
+        // dispatcher). We pass null for log_userdata: the bridge is
+        // stateless and routes everything through tracing's global sink.
         // carrier_new returns an opaque pointer or NULL on failure.
         let ptr = unsafe {
             carrier_new(
                 profile_c.as_ptr(),
                 std::ptr::null(),
                 nodes_c.as_ref().map_or(std::ptr::null(), |n| n.as_ptr()),
+                Some(log_callback),
+                std::ptr::null_mut(),
             )
         };
 
         if ptr.is_null() {
             bail!("carrier_new returned NULL");
         }
+
+        // Keep carrier's internal level at DEBUG so every record reaches
+        // the callback; tracing's EnvFilter on the Rust side does the
+        // real filtering. (Default after carrier_new is already DEBUG,
+        // but set explicitly for clarity.)
+        // SAFETY: ptr is a valid carrier handle (checked non-null above).
+        unsafe { carrier_set_log_level(ptr, CARRIER_LOG_DEBUG) };
 
         // SAFETY: We box the sender and pass a raw pointer to the callback.
         // The Box is stored in `_sender` and outlives `ptr` (carrier_free is

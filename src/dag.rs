@@ -183,7 +183,7 @@ impl Dag {
                     let vm = match ScriptVm::new(emit_tx, node_query_tx, DEFAULT_JS_MEMORY_LIMIT) {
                         Ok(vm) => vm,
                         Err(e) => {
-                            tracing::error!(node = %node_uri, %e, "failed to create VM");
+                            tracing::error!(target: "SCRIPT", node = %node_uri, %e, "failed to create VM");
                             return;
                         }
                     };
@@ -229,11 +229,13 @@ impl Dag {
                                     ) {
                                         Ok(Err(e)) => {
                                             tracing::error!(
+                                                target: "SCRIPT",
                                                 node = %node_uri, %e, "script error"
                                             );
                                         }
                                         Err(panic) => {
                                             tracing::error!(
+                                                target: "SCRIPT",
                                                 node = %node_uri, ?panic, "script panicked"
                                             );
                                         }
@@ -399,14 +401,14 @@ impl Dag {
                                                     }
                                                 },
                                                 Err(e) => {
-                                                    tracing::warn!(node = %node_uri, %e, "LLM retry error");
+                                                    tracing::warn!(target: "LLM", node = %node_uri, %e, "LLM retry error");
                                                 }
                                             }
                                         }
                                     }
                                 }
                                 Err(e) => {
-                                    tracing::error!(node = %node_uri, %e, "LLM error");
+                                    tracing::error!(target: "LLM", node = %node_uri, %e, "LLM error");
                                 }
                             }
 
@@ -425,6 +427,7 @@ impl Dag {
         }
 
         tracing::info!(
+            target: "PIPELINE",
             threads = threads.len(),
             emit_routes = emit_routes.len(),
             "DAG loaded"
@@ -500,7 +503,7 @@ impl Dag {
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(%e, "script store.query error");
+                    tracing::warn!(target: "SCRIPT", %e, "script store.query error");
                     vec![]
                 }
             };

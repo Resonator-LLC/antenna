@@ -156,8 +156,40 @@ unsafe extern "C" fn js_emit(
 }
 
 // ---------------------------------------------------------------------------
-// C callback: print(...)
+// C callbacks: print(...) and console.{log,warn,error}(...)
+//
+// All JS output is routed through `tracing` with `target: "SCRIPT"` so it
+// lands in antenna's canonical log stream (`grep '\[SCRIPT\]'`). No raw
+// stderr writes — the library never emits stdout/stderr directly.
+//
+// Level mapping:
+//   print(...)          → tracing::info!(target: "SCRIPT")
+//   console.log(...)    → tracing::info!(target: "SCRIPT")
+//   console.warn(...)   → tracing::warn!(target: "SCRIPT")
+//   console.error(...)  → tracing::error!(target: "SCRIPT")
 // ---------------------------------------------------------------------------
+
+/// Join all JS arguments with spaces (matching `console.log` / `print` semantics).
+///
+/// # Safety
+///
+/// Each `argv[i]` must be a valid JSValue. `ctx` must be a valid JSContext.
+unsafe fn join_js_args(ctx: *mut JSContext, argc: c_int, argv: *mut JSValue) -> String {
+    let mut out = String::new();
+    for i in 0..argc {
+        let val = *argv.add(i as usize);
+        let cstr = JS_ToCString(ctx, val);
+        if !cstr.is_null() {
+            let s = CStr::from_ptr(cstr).to_string_lossy();
+            if i > 0 {
+                out.push(' ');
+            }
+            out.push_str(&s);
+            JS_FreeCString(ctx, cstr);
+        }
+    }
+    out
+}
 
 /// # Safety
 ///
@@ -168,19 +200,50 @@ unsafe extern "C" fn js_print(
     argc: c_int,
     argv: *mut JSValue,
 ) -> JSValue {
-    for i in 0..argc {
-        let val = *argv.add(i as usize);
-        let cstr = JS_ToCString(ctx, val);
-        if !cstr.is_null() {
-            let s = CStr::from_ptr(cstr).to_string_lossy();
-            if i > 0 {
-                eprint!(" ");
-            }
-            eprint!("{}", s);
-            JS_FreeCString(ctx, cstr);
-        }
-    }
-    eprintln!();
+    let msg = join_js_args(ctx, argc, argv);
+    tracing::info!(target: "SCRIPT", "{}", msg);
+    js_undefined()
+}
+
+/// # Safety
+///
+/// Called by QuickJS when JS code invokes `console.log()`. Same invariants as `js_emit`.
+unsafe extern "C" fn js_console_log(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    argc: c_int,
+    argv: *mut JSValue,
+) -> JSValue {
+    let msg = join_js_args(ctx, argc, argv);
+    tracing::info!(target: "SCRIPT", "{}", msg);
+    js_undefined()
+}
+
+/// # Safety
+///
+/// Called by QuickJS when JS code invokes `console.warn()`. Same invariants as `js_emit`.
+unsafe extern "C" fn js_console_warn(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    argc: c_int,
+    argv: *mut JSValue,
+) -> JSValue {
+    let msg = join_js_args(ctx, argc, argv);
+    tracing::warn!(target: "SCRIPT", "{}", msg);
+    js_undefined()
+}
+
+/// # Safety
+///
+/// Called by QuickJS when JS code invokes `console.error()`. Same invariants as `js_emit`.
+unsafe extern "C" fn js_console_error(
+    ctx: *mut JSContext,
+    _this: JSValue,
+    argc: c_int,
+    argv: *mut JSValue,
+) -> JSValue {
+    let msg = join_js_args(ctx, argc, argv);
+    tracing::error!(target: "SCRIPT", "{}", msg);
     js_undefined()
 }
 
@@ -300,7 +363,8 @@ impl ScriptVm {
         // SAFETY: All CString::new("...").unwrap() calls are safe because the
         // string literals contain no interior null bytes. JS_NewCFunction2 and
         // JS_SetPropertyStr are standard QuickJS API; the function pointers
-        // (js_emit, js_print, js_store_query) match the expected signature.
+        // (js_emit, js_print, js_console_*, js_store_query) match the expected
+        // signature.
         unsafe {
             let name = CString::new("emit").unwrap();
             let func = JS_NewCFunction2(ctx, js_emit, name.as_ptr(), 1, 0, 0);
@@ -309,6 +373,26 @@ impl ScriptVm {
             let name = CString::new("print").unwrap();
             let func = JS_NewCFunction2(ctx, js_print, name.as_ptr(), 1, 0, 0);
             JS_SetPropertyStr(ctx, global, name.as_ptr(), func);
+
+            // Register console.{log,warn,error} — standard JS console object
+            // routed through tracing with target: "SCRIPT".
+            let console_obj = JS_NewObject(ctx);
+
+            let log_name = CString::new("log").unwrap();
+            let log_func = JS_NewCFunction2(ctx, js_console_log, log_name.as_ptr(), 1, 0, 0);
+            JS_SetPropertyStr(ctx, console_obj, log_name.as_ptr(), log_func);
+
+            let warn_name = CString::new("warn").unwrap();
+            let warn_func = JS_NewCFunction2(ctx, js_console_warn, warn_name.as_ptr(), 1, 0, 0);
+            JS_SetPropertyStr(ctx, console_obj, warn_name.as_ptr(), warn_func);
+
+            let error_name = CString::new("error").unwrap();
+            let error_func =
+                JS_NewCFunction2(ctx, js_console_error, error_name.as_ptr(), 1, 0, 0);
+            JS_SetPropertyStr(ctx, console_obj, error_name.as_ptr(), error_func);
+
+            let cname = CString::new("console").unwrap();
+            JS_SetPropertyStr(ctx, global, cname.as_ptr(), console_obj);
 
             // Register store.query() — a JS object with a "query" method
             let store_obj = JS_NewObject(ctx);

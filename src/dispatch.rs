@@ -44,7 +44,7 @@ pub fn dispatch(
     } else if rdf_type.starts_with(TOX_NS) {
         match tox {
             Some(t) => handle_tox(line, &rdf_type, t, out),
-            None => tracing::warn!(%rdf_type, "carrier: dispatch skipped (no tox handle)"),
+            None => tracing::warn!(target: "DISPATCH", %rdf_type, "carrier: dispatch skipped (no tox handle)"),
         }
     } else {
         // Unknown type — insert as raw RDF through the DAG
@@ -220,7 +220,7 @@ fn insert_with_dag(line: &str, store: &RdfStore, dag: &Dag, out: &mut dyn Antenn
 
     // Insert into store
     if let Err(e) = store.insert_turtle(line) {
-        tracing::warn!(%e, "insert error");
+        tracing::warn!(target: "SPARQL", %e, "insert error");
         return;
     }
 

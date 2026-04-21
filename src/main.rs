@@ -5,6 +5,7 @@ use clap::Parser;
 
 use antenna::carrier_tox::TURTLE_PREFIXES;
 use antenna::channel::{AntennaOut, PipeIn, PipeOut};
+use antenna::logging;
 use antenna::ws;
 use antenna::AntennaContext;
 
@@ -37,18 +38,42 @@ struct Args {
     /// Start WebSocket server on this port (default: use stdin/stdout pipes)
     #[arg(long)]
     ws: Option<u16>,
+
+    /// Shorthand for --log debug (bumps everything antenna-owned to DEBUG).
+    /// Dev-session default. RUST_LOG always wins if set.
+    #[arg(long, default_value_t = false)]
+    debug: bool,
+
+    /// Log level for antenna (error/warn/info/debug/trace). Default: warn.
+    /// Overridden by RUST_LOG if that env var is set.
+    #[arg(long, value_name = "LEVEL")]
+    log: Option<String>,
+
+    /// Restrict log output to a comma-separated list of tags, e.g.
+    /// --log-tags TOX,DHT,WS. Unknown tags are silently ignored.
+    /// Tag matching is performed by the formatter — records with other
+    /// tags are dropped before printing. Empty string = no restriction.
+    #[arg(long, value_name = "TAGS", default_value = "")]
+    log_tags: String,
 }
 
 fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("antenna=info".parse().unwrap()),
-        )
-        .with_target(false)
-        .init();
-
     let args = Args::parse();
+
+    // Resolve the antenna-side default level. Precedence:
+    //   1. RUST_LOG env var (always wins if present)
+    //   2. --log LEVEL
+    //   3. --debug shorthand
+    //   4. Fallback: warn
+    let level = if let Some(l) = args.log.as_deref() {
+        l.to_string()
+    } else if args.debug {
+        "debug".to_string()
+    } else {
+        "warn".to_string()
+    };
+
+    logging::init(&level, &args.log_tags)?;
 
     let mut ctx = AntennaContext::new(
         &args.profile,

@@ -14,6 +14,7 @@ pub mod channel;
 pub mod dag;
 pub mod dispatch;
 pub mod llm;
+pub mod logging;
 pub mod script_vm;
 pub mod store;
 pub mod ws;
@@ -43,20 +44,20 @@ impl AntennaContext {
         seed_path: Option<&str>,
     ) -> Result<Self> {
         let store = RdfStore::open(store_path)?;
-        tracing::info!("store opened");
+        tracing::info!(target: "PIPELINE", "store opened");
 
         // Load pipeline/DAG definition if provided
         if let Some(path) = pipeline_path {
             let ttl = std::fs::read_to_string(path)?;
             store.insert_turtle(&ttl)?;
-            tracing::info!(path, "loaded pipeline");
+            tracing::info!(target: "PIPELINE", path, "loaded pipeline");
         }
 
         // Load seed data before building DAG so ScriptNode definitions are visible
         if let Some(path) = seed_path {
             let ttl = std::fs::read_to_string(path)?;
             store.insert_turtle(&ttl)?;
-            tracing::info!(path, "loaded seed data");
+            tracing::info!(target: "PIPELINE", path, "loaded seed data");
         }
 
         // Build the script DAG from the store
@@ -67,7 +68,7 @@ impl AntennaContext {
 
         // Create carrier (Tox)
         let tox = ToxCarrier::new(profile, nodes_path, event_tx)?;
-        tracing::info!("tox carrier started");
+        tracing::info!(target: "TOX", "tox carrier started");
 
         Ok(Self {
             store,
@@ -95,7 +96,7 @@ impl AntennaContext {
             self.dag.before_insert(&turtle);
             // Insert into store
             if let Err(e) = self.store.insert_turtle(&turtle) {
-                tracing::warn!(%e, "insert error");
+                tracing::warn!(target: "SPARQL", %e, "insert error");
             }
             self.dag.after_insert(&turtle);
         }
@@ -125,7 +126,7 @@ impl AntennaContext {
         // 6. Check for dead node threads
         let dead = self.dag.health_check();
         if !dead.is_empty() {
-            tracing::error!(nodes = ?dead, "DAG nodes have crashed");
+            tracing::error!(target: "SCRIPT", nodes = ?dead, "DAG nodes have crashed");
         }
 
         Ok(())
