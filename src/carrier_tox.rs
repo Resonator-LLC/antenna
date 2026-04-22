@@ -42,6 +42,7 @@ pub enum CarrierEventType {
     ConferenceMessage,
     ConferenceInvite,
     FileTransfer,
+    FileSendStarted,
     FileProgress,
     FileComplete,
     Call,
@@ -178,10 +179,21 @@ pub struct FileTransferData {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
+pub struct FileSendStartedData {
+    pub friend_id: u32,
+    pub file_id: u32,
+    pub file_size: u64,
+    pub filename: [u8; MAX_NAME_LENGTH],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
 pub struct FileProgressData {
     pub friend_id: u32,
     pub file_id: u32,
     pub progress: f64,
+    pub bytes_transferred: u64,
+    pub outbound: bool,
 }
 
 #[repr(C)]
@@ -189,6 +201,8 @@ pub struct FileProgressData {
 pub struct FileCompleteData {
     pub friend_id: u32,
     pub file_id: u32,
+    pub outbound: bool,
+    pub cancelled: bool,
 }
 
 #[repr(C)]
@@ -245,6 +259,7 @@ pub union CarrierEventData {
     pub group_invite: GroupInviteData,
     pub group_self_join: GroupSelfJoinData,
     pub file_transfer: FileTransferData,
+    pub file_send_started: FileSendStartedData,
     pub file_progress: FileProgressData,
     pub file_complete: FileCompleteData,
     pub call: CallData,
@@ -321,6 +336,14 @@ extern "C" {
     fn carrier_get_id(c: *mut Carrier) -> c_int;
     fn carrier_set_nick(c: *mut Carrier, nick: *const c_char) -> c_int;
     fn carrier_save(c: *mut Carrier) -> c_int;
+    fn carrier_send_file(c: *mut Carrier, friend_id: u32, path: *const c_char) -> c_int;
+    fn carrier_accept_file(
+        c: *mut Carrier,
+        friend_id: u32,
+        file_id: u32,
+        save_path: *const c_char,
+    ) -> c_int;
+    fn carrier_cancel_file(c: *mut Carrier, friend_id: u32, file_id: u32) -> c_int;
 }
 
 // ---------------------------------------------------------------------------
@@ -699,18 +722,28 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                     d.friend_id, d.file_id, d.file_size, turtle_escape(filename)
                 )
             }
+            CarrierEventType::FileSendStarted => {
+                let d = &ev.data.file_send_started;
+                let filename = cstr_from_buf(&d.filename);
+                format!(
+                    "[] a carrier:SendFileStarted ; carrier:friendId {} ; carrier:fileId {} ; carrier:size {} ; carrier:filename \"{}\" .",
+                    d.friend_id, d.file_id, d.file_size, turtle_escape(filename)
+                )
+            }
             CarrierEventType::FileProgress => {
                 let d = &ev.data.file_progress;
+                let direction = if d.outbound { "out" } else { "in" };
                 format!(
-                    "[] a carrier:FileProgress ; carrier:friendId {} ; carrier:fileId {} ; carrier:progress {:.4} .",
-                    d.friend_id, d.file_id, d.progress
+                    "[] a carrier:FileProgress ; carrier:friendId {} ; carrier:fileId {} ; carrier:progress {:.4} ; carrier:bytesTransferred {} ; carrier:direction \"{}\" .",
+                    d.friend_id, d.file_id, d.progress, d.bytes_transferred, direction
                 )
             }
             CarrierEventType::FileComplete => {
                 let d = &ev.data.file_complete;
+                let direction = if d.outbound { "out" } else { "in" };
                 format!(
-                    "[] a carrier:FileComplete ; carrier:friendId {} ; carrier:fileId {} .",
-                    d.friend_id, d.file_id
+                    "[] a carrier:FileComplete ; carrier:friendId {} ; carrier:fileId {} ; carrier:direction \"{}\" ; carrier:cancelled {} .",
+                    d.friend_id, d.file_id, direction, d.cancelled
                 )
             }
             CarrierEventType::Call => {
@@ -916,6 +949,36 @@ impl ToxCarrier {
         let rc = unsafe { carrier_save(self.ptr) };
         if rc < 0 {
             bail!("carrier_save failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn send_file(&self, friend_id: u32, path: &str) -> Result<()> {
+        let path_c = CString::new(path)?;
+        // SAFETY: self.ptr is valid; path_c is a valid null-terminated string.
+        let rc = unsafe { carrier_send_file(self.ptr, friend_id, path_c.as_ptr()) };
+        if rc < 0 {
+            bail!("carrier_send_file failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn accept_file(&self, friend_id: u32, file_id: u32, save_path: &str) -> Result<()> {
+        let path_c = CString::new(save_path)?;
+        // SAFETY: self.ptr is valid; path_c is a valid null-terminated string.
+        let rc =
+            unsafe { carrier_accept_file(self.ptr, friend_id, file_id, path_c.as_ptr()) };
+        if rc < 0 {
+            bail!("carrier_accept_file failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn cancel_file(&self, friend_id: u32, file_id: u32) -> Result<()> {
+        // SAFETY: self.ptr is valid.
+        let rc = unsafe { carrier_cancel_file(self.ptr, friend_id, file_id) };
+        if rc < 0 {
+            bail!("carrier_cancel_file failed: {}", rc);
         }
         Ok(())
     }

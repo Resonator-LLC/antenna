@@ -252,6 +252,61 @@ fn handle_tox(line: &str, rdf_type: &str, tox: &ToxCarrier, out: &mut dyn Antenn
                 ));
             }
         }
+        "SendFile" => {
+            let friend_id = extract_property(line, "tox:friendId")
+                .or_else(|| extract_property(line, "carrier:friendId"))
+                .and_then(|s| s.parse::<u32>().ok());
+            let path = extract_property(line, "tox:path")
+                .or_else(|| extract_property(line, "carrier:path"));
+
+            if let (Some(fid), Some(path)) = (friend_id, path) {
+                if let Err(e) = tox.send_file(fid, &path) {
+                    out.send(&format!(
+                        "[] a antenna:Error ; antenna:message \"{}\" .",
+                        turtle_escape(&e.to_string())
+                    ));
+                }
+            } else {
+                out.send(
+                    "[] a antenna:Error ; antenna:message \"SendFile missing friendId or path\" .",
+                );
+            }
+        }
+        "AcceptFile" => {
+            let friend_id = extract_property(line, "carrier:friendId")
+                .and_then(|s| s.parse::<u32>().ok());
+            let file_id = extract_property(line, "carrier:fileId")
+                .and_then(|s| s.parse::<u32>().ok());
+            let path = extract_property(line, "carrier:path");
+
+            if let (Some(fid), Some(file_id), Some(path)) = (friend_id, file_id, path) {
+                if let Err(e) = tox.accept_file(fid, file_id, &path) {
+                    out.send(&format!(
+                        "[] a antenna:Error ; antenna:message \"{}\" .",
+                        turtle_escape(&e.to_string())
+                    ));
+                }
+            } else {
+                out.send(
+                    "[] a antenna:Error ; antenna:message \"AcceptFile missing friendId, fileId, or path\" .",
+                );
+            }
+        }
+        "CancelFile" => {
+            let friend_id = extract_property(line, "carrier:friendId")
+                .and_then(|s| s.parse::<u32>().ok());
+            let file_id = extract_property(line, "carrier:fileId")
+                .and_then(|s| s.parse::<u32>().ok());
+
+            if let (Some(fid), Some(file_id)) = (friend_id, file_id) {
+                if let Err(e) = tox.cancel_file(fid, file_id) {
+                    out.send(&format!(
+                        "[] a antenna:Error ; antenna:message \"{}\" .",
+                        turtle_escape(&e.to_string())
+                    ));
+                }
+            }
+        }
         _ => {
             // Unknown tox command — just insert as data
         }
