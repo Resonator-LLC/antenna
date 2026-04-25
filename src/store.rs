@@ -7,7 +7,7 @@ use oxigraph::model::NamedNodeRef;
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 
-use crate::carrier_tox::TURTLE_PREFIXES;
+use crate::carrier::TURTLE_PREFIXES;
 
 pub struct RdfStore {
     store: Store,

@@ -3,13 +3,14 @@
 //! Antenna — RDF stream processor with P2P networking, scripting, and SPARQL store.
 //!
 //! Antenna receives RDF Turtle on its input, dispatches by `rdf:type` (SPIN queries,
-//! Tox commands, or raw data), routes data through a scriptable DAG, stores everything
-//! in an embedded Oxigraph store, and emits results as Turtle on its output.
+//! Carrier commands, or raw data), routes data through a scriptable DAG, stores
+//! everything in an embedded Oxigraph store, and emits results as Turtle on its
+//! output.
 //!
-//! Transports are trait-based (`AntennaIn`/`AntennaOut`): stdin/stdout pipes, WebSocket,
-//! or lock-free ring buffer channels for FFI embedding.
+//! Transports are trait-based (`AntennaIn`/`AntennaOut`): stdin/stdout pipes,
+//! WebSocket, or lock-free ring buffer channels for FFI embedding.
 
-pub mod carrier_tox;
+pub mod carrier;
 pub mod channel;
 pub mod dag;
 pub mod dispatch;
@@ -23,7 +24,7 @@ use anyhow::Result;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use crate::carrier_tox::ToxCarrier;
+use crate::carrier::CarrierClient;
 use crate::channel::{AntennaIn, AntennaOut};
 use crate::dag::Dag;
 use crate::store::RdfStore;
@@ -31,99 +32,113 @@ use crate::store::RdfStore;
 pub struct AntennaContext {
     pub store: RdfStore,
     pub dag: Dag,
-    pub tox: ToxCarrier,
-    tox_event_rx: mpsc::Receiver<String>,
+    pub carrier: CarrierClient,
+    /// Account loaded or created at startup. Empty until bootstrap completes.
+    pub account_id: String,
+    carrier_event_rx: mpsc::Receiver<String>,
 }
 
 impl AntennaContext {
     pub fn new(
-        profile: &str,
+        data_dir: &str,
+        account_id: Option<&str>,
         store_path: Option<&str>,
         pipeline_path: Option<&str>,
-        nodes_path: Option<&str>,
         seed_path: Option<&str>,
     ) -> Result<Self> {
         let store = RdfStore::open(store_path)?;
         tracing::info!(target: "PIPELINE", "store opened");
 
-        // Load pipeline/DAG definition if provided
         if let Some(path) = pipeline_path {
             let ttl = std::fs::read_to_string(path)?;
             store.insert_turtle(&ttl)?;
             tracing::info!(target: "PIPELINE", path, "loaded pipeline");
         }
 
-        // Load seed data before building DAG so ScriptNode definitions are visible
         if let Some(path) = seed_path {
             let ttl = std::fs::read_to_string(path)?;
             store.insert_turtle(&ttl)?;
             tracing::info!(target: "PIPELINE", path, "loaded seed data");
         }
 
-        // Build the script DAG from the store
         let dag = Dag::load(&store)?;
 
-        // Channel for carrier events (Turtle strings from C callback)
         let (event_tx, event_rx) = mpsc::channel::<String>();
 
-        // Create carrier (Tox)
-        let tox = ToxCarrier::new(profile, nodes_path, event_tx)?;
-        tracing::info!(target: "TOX", "tox carrier started");
+        let carrier = CarrierClient::new(data_dir, event_tx)?;
+        tracing::info!(target: "JAMI", data_dir, "carrier started");
+
+        // Bootstrap an account: load if specified, create otherwise. The
+        // resulting account_id is what subsequent commands address.
+        let account = match account_id {
+            Some(id) => {
+                carrier.load_account(id)?;
+                tracing::info!(target: "JAMI", account = id, "loading account");
+                id.to_string()
+            }
+            None => {
+                let new_id = carrier.create_account(None)?;
+                tracing::info!(target: "JAMI", account = %new_id, "created account");
+                eprintln!("antenna: created account {new_id}");
+                new_id
+            }
+        };
 
         Ok(Self {
             store,
             dag,
-            tox,
-            tox_event_rx: event_rx,
+            carrier,
+            account_id: account,
+            carrier_event_rx: event_rx,
         })
     }
 
     /// One tick: iterate carrier, drain events to OUT, drain IN and dispatch.
     pub fn tick(&mut self, input: &mut dyn AntennaIn, output: &mut dyn AntennaOut) -> Result<()> {
-        // 0. Clock tick — wake clock-driven scripts
         self.dag.broadcast(
             "http://resonator.network/v2/antenna#clock",
             "[] a <http://resonator.network/v2/antenna#ClockTick> .",
         );
 
-        // 1. Poll carrier for Tox events
-        self.tox.iterate()?;
+        self.carrier.iterate()?;
 
-        // 2. Drain carrier events → OUT
-        while let Ok(turtle) = self.tox_event_rx.try_recv() {
+        while let Ok(turtle) = self.carrier_event_rx.try_recv() {
             output.send(&turtle);
-            // Also route through DAG channels (carrier events go to beforeInsert)
             self.dag.before_insert(&turtle);
-            // Insert into store
             if let Err(e) = self.store.insert_turtle(&turtle) {
                 tracing::warn!(target: "SPARQL", %e, "insert error");
             }
             self.dag.after_insert(&turtle);
         }
 
-        // 3. Drain IN → dispatch
         while let Some(line) = input.recv() {
             if line.is_empty() {
                 continue;
             }
-            dispatch::dispatch(&line, &self.store, &self.dag, Some(&self.tox), output);
+            dispatch::dispatch(
+                &line,
+                &self.store,
+                &self.dag,
+                Some(&self.carrier),
+                &self.account_id,
+                output,
+            );
         }
 
-        // 4. Process store queries from script threads
         self.dag.pump_queries(&self.store);
 
-        // 5. Pump script emit outputs — re-dispatch through the router so
-        //    sp: types execute as SPARQL updates/queries, carrier: types fire
-        //    Tox commands, and raw RDF is stored + broadcast to hooks.
-        //    Honours the contract in control/CLAUDE.md §Architecture Overview.
-        //    Emits produced by dispatched raw-RDF hooks land in the emit
-        //    channel and are drained on the next tick (no intra-tick loop).
         let emits = self.dag.pump_emits();
         for turtle in &emits {
-            dispatch::dispatch(turtle, &self.store, &self.dag, Some(&self.tox), output);
+            dispatch::dispatch(
+                turtle,
+                &self.store,
+                &self.dag,
+                Some(&self.carrier),
+                &self.account_id,
+                output,
+            );
         }
 
-        // 6. Check for dead node threads
         let dead = self.dag.health_check();
         if !dead.is_empty() {
             tracing::error!(target: "SCRIPT", nodes = ?dead, "DAG nodes have crashed");
@@ -132,11 +147,9 @@ impl AntennaContext {
         Ok(())
     }
 
-    /// Run the event loop. Blocks until shutdown.
-    /// Uses poll() on the IN clock fd with carrier interval as timeout.
     pub fn run(&mut self, input: &mut dyn AntennaIn, output: &mut dyn AntennaOut) -> Result<()> {
         loop {
-            let timeout_ms = self.tox.iteration_interval().as_millis() as i32;
+            let timeout_ms = self.carrier.iteration_interval().as_millis() as i32;
 
             if let Some(clock_fd) = input.clock_fd() {
                 let mut pfd = libc::pollfd {
@@ -145,8 +158,7 @@ impl AntennaContext {
                     revents: 0,
                 };
                 // SAFETY: pfd is a valid stack-allocated pollfd; clock_fd is a
-                // valid fd owned by the input transport. poll() blocks until
-                // data arrives or timeout_ms elapses.
+                // valid fd owned by the input transport.
                 unsafe {
                     libc::poll(&mut pfd, 1, timeout_ms);
                 }
@@ -158,30 +170,33 @@ impl AntennaContext {
         }
     }
 
-    /// Carrier iteration interval hint.
     pub fn interval(&self) -> Duration {
-        self.tox.iteration_interval()
+        self.carrier.iteration_interval()
     }
 }
 
-/// Builder for `AntennaContext`.
 pub struct AntennaBuilder {
-    profile: String,
+    data_dir: String,
+    account_id: Option<String>,
     store_path: Option<String>,
     pipeline_path: Option<String>,
-    nodes_path: Option<String>,
     seed_path: Option<String>,
 }
 
 impl AntennaBuilder {
-    pub fn new(profile: &str) -> Self {
+    pub fn new(data_dir: &str) -> Self {
         Self {
-            profile: profile.to_string(),
+            data_dir: data_dir.to_string(),
+            account_id: None,
             store_path: None,
             pipeline_path: None,
-            nodes_path: None,
             seed_path: None,
         }
+    }
+
+    pub fn account(mut self, id: &str) -> Self {
+        self.account_id = Some(id.to_string());
+        self
     }
 
     pub fn store_path(mut self, path: &str) -> Self {
@@ -194,11 +209,6 @@ impl AntennaBuilder {
         self
     }
 
-    pub fn nodes(mut self, path: &str) -> Self {
-        self.nodes_path = Some(path.to_string());
-        self
-    }
-
     pub fn seed(mut self, path: &str) -> Self {
         self.seed_path = Some(path.to_string());
         self
@@ -206,10 +216,10 @@ impl AntennaBuilder {
 
     pub fn build(self) -> Result<AntennaContext> {
         AntennaContext::new(
-            &self.profile,
+            &self.data_dir,
+            self.account_id.as_deref(),
             self.store_path.as_deref(),
             self.pipeline_path.as_deref(),
-            self.nodes_path.as_deref(),
             self.seed_path.as_deref(),
         )
     }
@@ -221,27 +231,24 @@ mod tests {
 
     #[test]
     fn builder_chains_all_options() {
-        // Verify the builder compiles and chains without panic.
-        // We can't call build() without a valid Tox profile, but we can
-        // verify the fluent API works.
-        let builder = AntennaBuilder::new("/tmp/test.tox")
+        let builder = AntennaBuilder::new("/tmp/jami-data")
+            .account("abc123")
             .store_path("/tmp/store")
             .pipeline("pipeline.ttl")
-            .nodes("nodes.json")
             .seed("seed.ttl");
-        assert_eq!(builder.profile, "/tmp/test.tox");
+        assert_eq!(builder.data_dir, "/tmp/jami-data");
+        assert_eq!(builder.account_id.as_deref(), Some("abc123"));
         assert_eq!(builder.store_path.as_deref(), Some("/tmp/store"));
         assert_eq!(builder.pipeline_path.as_deref(), Some("pipeline.ttl"));
-        assert_eq!(builder.nodes_path.as_deref(), Some("nodes.json"));
         assert_eq!(builder.seed_path.as_deref(), Some("seed.ttl"));
     }
 
     #[test]
     fn builder_defaults_are_none() {
-        let builder = AntennaBuilder::new("profile.tox");
+        let builder = AntennaBuilder::new("/tmp/jami-data");
+        assert!(builder.account_id.is_none());
         assert!(builder.store_path.is_none());
         assert!(builder.pipeline_path.is_none());
-        assert!(builder.nodes_path.is_none());
         assert!(builder.seed_path.is_none());
     }
 }

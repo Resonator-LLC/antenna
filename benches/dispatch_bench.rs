@@ -6,7 +6,7 @@ fn bench_extract_type(c: &mut Criterion) {
     let lines = [
         "[] a carrier:TextMessage ; carrier:text \"hello\" .",
         "[] a sp:Select ; sp:text \"SELECT * WHERE { ?s ?p ?o }\" .",
-        "[] a carrier:Connected ; carrier:transport \"UDP\" .",
+        "[] a carrier:Connected ; carrier:account \"abc\" .",
         "<urn:x> a <http://resonator.network/v2/antenna#Bookmark> ; rdfs:label \"test\" .",
         "# this is a comment",
         "@prefix foo: <http://example.org/> .",
@@ -24,8 +24,8 @@ fn bench_extract_type(c: &mut Criterion) {
 fn bench_extract_property(c: &mut Criterion) {
     let lines = [
         ("[] a sp:Select ; sp:text \"SELECT ?s WHERE { ?s a carrier:TextMessage }\" .", "sp:text"),
-        ("[] a carrier:SendMsg ; carrier:friendId 0 ; carrier:text \"hello world\" .", "carrier:text"),
-        ("[] a carrier:SetNick ; carrier:nick \"mynode\" .", "carrier:nick"),
+        ("[] a carrier:SendMsg ; carrier:contactUri \"abc\" ; carrier:text \"hello world\" .", "carrier:text"),
+        ("[] a carrier:SetNick ; carrier:displayName \"mynode\" .", "carrier:displayName"),
     ];
 
     c.bench_function("extract_property", |b| {

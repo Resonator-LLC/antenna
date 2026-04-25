@@ -11,12 +11,12 @@
 //! Example:
 //!
 //! ```text
-//! 2026-04-21T17:42:03.412Z DEBUG [DHT] bootstrap host=tox.plastiras.org ok=true
+//! 2026-04-21T17:42:03.412Z DEBUG [JAMI] account=abc123 registered ok
 //! ```
 //!
 //! The `TAG` is the event's `target` — Rust emitters use `tracing::event!(target:
-//! "TOX", ...)` etc., and the carrier→tracing bridge forwards carrier's CLOG tag
-//! as-is. Grep by tag works reliably: `grep '\[TOX\]' antenna.log`.
+//! "DISPATCH", ...)` etc., and the carrier→tracing bridge forwards carrier's
+//! CLOG tag as-is. Grep by tag works reliably: `grep '\[JAMI\]' antenna.log`.
 //!
 //! Filter precedence: `RUST_LOG` > `--log LEVEL` > `--debug` > default `warn`.
 //! `--log-tags` is an additional post-filter that drops records whose tag isn't
@@ -33,17 +33,14 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
-/// The 15-tag taxonomy (see control/CLAUDE.md and the DEBUG proposal).
-/// Used by `--log-tags` validation and by `carrier_tag_to_static` in
-/// carrier_tox.rs. Kept here as the single source of truth.
+/// Known log-tag taxonomy. Used by `--log-tags` validation and mirrors the
+/// static targets explicitly handled by `carrier::log_callback`. Tags emitted
+/// by the carrier shim ("JAMI", "SHIM"), antenna's own subsystems, and the
+/// catch-all ("CARRIER") all live here.
 pub const KNOWN_TAGS: &[&str] = &[
-    "TOX",
-    "DHT",
-    "FRIEND",
-    "GROUP",
-    "FILE",
-    "AV",
-    "PIPE",
+    "JAMI",
+    "SHIM",
+    "CARRIER",
     "DISPATCH",
     "SPARQL",
     "PIPELINE",
@@ -255,30 +252,30 @@ mod tests {
 
     #[test]
     fn parse_tags_one() {
-        let set = parse_allowed_tags("TOX").unwrap();
-        assert!(set.contains("TOX"));
+        let set = parse_allowed_tags("JAMI").unwrap();
+        assert!(set.contains("JAMI"));
         assert_eq!(set.len(), 1);
     }
 
     #[test]
     fn parse_tags_many_with_whitespace() {
-        let set = parse_allowed_tags(" TOX, DHT,  WS ").unwrap();
-        assert!(set.contains("TOX"));
-        assert!(set.contains("DHT"));
+        let set = parse_allowed_tags(" JAMI, SHIM,  WS ").unwrap();
+        assert!(set.contains("JAMI"));
+        assert!(set.contains("SHIM"));
         assert!(set.contains("WS"));
         assert_eq!(set.len(), 3);
     }
 
     #[test]
     fn parse_tags_skips_empty_tokens() {
-        let set = parse_allowed_tags("TOX,,DHT,").unwrap();
+        let set = parse_allowed_tags("JAMI,,SHIM,").unwrap();
         assert_eq!(set.len(), 2);
-        assert!(set.contains("TOX"));
-        assert!(set.contains("DHT"));
+        assert!(set.contains("JAMI"));
+        assert!(set.contains("SHIM"));
     }
 
     #[test]
-    fn known_tags_has_fifteen() {
-        assert_eq!(KNOWN_TAGS.len(), 15);
+    fn known_tags_count() {
+        assert_eq!(KNOWN_TAGS.len(), 11);
     }
 }

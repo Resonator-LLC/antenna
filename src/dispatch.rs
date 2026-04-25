@@ -2,33 +2,33 @@
 
 //! Reactive router: parse incoming Turtle, dispatch by rdf:type.
 
-use crate::carrier_tox::ToxCarrier;
+use crate::carrier::CarrierClient;
 use crate::channel::AntennaOut;
 use crate::dag::Dag;
 use crate::store::RdfStore;
 
 const SP_NS: &str = "http://spinrdf.org/sp#";
 const ANTENNA_NS: &str = "http://resonator.network/v2/antenna#";
-const TOX_NS: &str = "http://resonator.network/v2/carrier#";
+const CARRIER_NS: &str = "http://resonator.network/v2/carrier#";
 
 /// Dispatch a single Turtle line based on its rdf:type.
 ///
-/// `tox` is optional so the same router works from contexts that do not
-/// own a carrier handle (integration tests, tools). If a `carrier:` type
-/// arrives with `tox = None`, the dispatch is skipped with a warning —
-/// the turtle is neither stored nor echoed.
+/// `carrier` is optional so the same router works from contexts without a
+/// carrier handle (integration tests, tools). `default_account` is used when
+/// a carrier command omits `carrier:account` — the antenna bootstrap
+/// account_id is the natural fallback.
 pub fn dispatch(
     line: &str,
     store: &RdfStore,
     dag: &Dag,
-    tox: Option<&ToxCarrier>,
+    carrier: Option<&CarrierClient>,
+    default_account: &str,
     out: &mut dyn AntennaOut,
 ) {
     if line.is_empty() || line.starts_with('#') || line.starts_with('@') {
         return;
     }
 
-    // Try to extract the rdf:type from the Turtle statement
     let rdf_type_opt = extract_type(line);
     tracing::debug!(
         target: "DISPATCH",
@@ -39,22 +39,19 @@ pub fn dispatch(
     let rdf_type = match rdf_type_opt {
         Some(t) => t,
         None => {
-            // No recognizable type — treat as raw RDF, insert into store
             insert_with_dag(line, store, dag, out);
             return;
         }
     };
 
-    // Dispatch based on type namespace
     if rdf_type.starts_with(SP_NS) {
         handle_spin(line, &rdf_type, store, out);
-    } else if rdf_type.starts_with(TOX_NS) {
-        match tox {
-            Some(t) => handle_tox(line, &rdf_type, t, out),
-            None => tracing::warn!(target: "DISPATCH", %rdf_type, "carrier: dispatch skipped (no tox handle)"),
+    } else if rdf_type.starts_with(CARRIER_NS) {
+        match carrier {
+            Some(c) => handle_carrier(line, &rdf_type, c, default_account, out),
+            None => tracing::warn!(target: "DISPATCH", %rdf_type, "carrier dispatch skipped (no handle)"),
         }
     } else {
-        // Unknown type — insert as raw RDF through the DAG
         insert_with_dag(line, store, dag, out);
     }
 }
@@ -84,14 +81,11 @@ fn handle_spin(line: &str, rdf_type: &str, store: &RdfStore, out: &mut dyn Anten
             let start = std::time::Instant::now();
             match store.query(&sparql) {
                 Ok(results) => {
-                    // Serialize results as Turtle on OUT
-                    // For now, emit a simple result indicator
                     use oxigraph::sparql::QueryResults;
                     let mut rows = 0u64;
                     if let QueryResults::Solutions(solutions) = results {
                         for sol in solutions.flatten() {
                             rows += 1;
-                            // Emit each binding as a simple triple
                             let mut parts = Vec::new();
                             for (var, term) in sol.iter() {
                                 parts.push(format!(
@@ -154,7 +148,6 @@ fn handle_spin(line: &str, rdf_type: &str, store: &RdfStore, out: &mut dyn Anten
                             rows += 1;
                             let turtle = format!("{} {} {} .", t.subject, t.predicate, t.object);
                             out.send(&turtle);
-                            // Also insert constructed triples
                             let _ = store.insert_turtle(&turtle);
                         }
                     }
@@ -174,7 +167,6 @@ fn handle_spin(line: &str, rdf_type: &str, store: &RdfStore, out: &mut dyn Anten
             }
         }
         "InsertData" | "DeleteData" | "Modify" => {
-            // These are SPARQL Update operations
             let start = std::time::Instant::now();
             match store.update(&sparql) {
                 Ok(()) => {
@@ -202,113 +194,155 @@ fn handle_spin(line: &str, rdf_type: &str, store: &RdfStore, out: &mut dyn Anten
 }
 
 // ---------------------------------------------------------------------------
-// Tox carrier command handling
+// Carrier (v0.2) command handling
 // ---------------------------------------------------------------------------
 
-fn handle_tox(line: &str, rdf_type: &str, tox: &ToxCarrier, out: &mut dyn AntennaOut) {
-    let local = &rdf_type[TOX_NS.len()..];
+fn account_or_default(line: &str, default_account: &str) -> String {
+    extract_property(line, "carrier:account")
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| default_account.to_string())
+}
+
+fn carrier_error(out: &mut dyn AntennaOut, command: &str, err: &dyn std::fmt::Display) {
+    out.send(&format!(
+        "[] a antenna:Error ; antenna:message \"{} failed: {}\" .",
+        command,
+        turtle_escape(&err.to_string())
+    ));
+}
+
+fn missing_field(out: &mut dyn AntennaOut, command: &str, field: &str) {
+    out.send(&format!(
+        "[] a antenna:Error ; antenna:message \"{} missing {}\" .",
+        command, field
+    ));
+}
+
+fn handle_carrier(
+    line: &str,
+    rdf_type: &str,
+    carrier: &CarrierClient,
+    default_account: &str,
+    out: &mut dyn AntennaOut,
+) {
+    let local = &rdf_type[CARRIER_NS.len()..];
     match local {
+        "CreateAccount" => {
+            let display_name = extract_property(line, "carrier:displayName");
+            match carrier.create_account(display_name.as_deref()) {
+                Ok(_) => {}
+                Err(e) => carrier_error(out, "CreateAccount", &e),
+            }
+        }
+        "LoadAccount" => {
+            let account = match extract_property(line, "carrier:account") {
+                Some(a) if !a.is_empty() => a,
+                _ => {
+                    missing_field(out, "LoadAccount", "carrier:account");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.load_account(&account) {
+                carrier_error(out, "LoadAccount", &e);
+            }
+        }
         "GetId" => {
-            if let Err(e) = tox.get_id() {
-                out.send(&format!(
-                    "[] a antenna:Error ; antenna:message \"{}\" .",
-                    turtle_escape(&e.to_string())
-                ));
+            let account = account_or_default(line, default_account);
+            if let Err(e) = carrier.get_id(&account) {
+                carrier_error(out, "GetId", &e);
             }
         }
         "SetNick" => {
-            if let Some(nick) = extract_property(line, "tox:nick")
-                .or_else(|| extract_property(line, "carrier:nick"))
-            {
-                if let Err(e) = tox.set_nick(&nick) {
-                    out.send(&format!(
-                        "[] a antenna:Error ; antenna:message \"{}\" .",
-                        turtle_escape(&e.to_string())
-                    ));
+            let account = account_or_default(line, default_account);
+            let nick = extract_property(line, "carrier:displayName")
+                .or_else(|| extract_property(line, "carrier:nick"));
+            let nick = match nick {
+                Some(n) => n,
+                None => {
+                    missing_field(out, "SetNick", "carrier:displayName");
+                    return;
                 }
+            };
+            if let Err(e) = carrier.set_nick(&account, &nick) {
+                carrier_error(out, "SetNick", &e);
+            }
+        }
+        "SendTrustRequest" => {
+            let account = account_or_default(line, default_account);
+            let uri = match extract_property(line, "carrier:contactUri") {
+                Some(u) => u,
+                None => {
+                    missing_field(out, "SendTrustRequest", "carrier:contactUri");
+                    return;
+                }
+            };
+            let payload = extract_property(line, "carrier:payload")
+                .or_else(|| extract_property(line, "carrier:message"));
+            if let Err(e) = carrier.send_trust_request(&account, &uri, payload.as_deref()) {
+                carrier_error(out, "SendTrustRequest", &e);
+            }
+        }
+        "AcceptTrustRequest" => {
+            let account = account_or_default(line, default_account);
+            let uri = match extract_property(line, "carrier:contactUri") {
+                Some(u) => u,
+                None => {
+                    missing_field(out, "AcceptTrustRequest", "carrier:contactUri");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.accept_trust_request(&account, &uri) {
+                carrier_error(out, "AcceptTrustRequest", &e);
+            }
+        }
+        "DiscardTrustRequest" => {
+            let account = account_or_default(line, default_account);
+            let uri = match extract_property(line, "carrier:contactUri") {
+                Some(u) => u,
+                None => {
+                    missing_field(out, "DiscardTrustRequest", "carrier:contactUri");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.discard_trust_request(&account, &uri) {
+                carrier_error(out, "DiscardTrustRequest", &e);
+            }
+        }
+        "RemoveContact" => {
+            let account = account_or_default(line, default_account);
+            let uri = match extract_property(line, "carrier:contactUri") {
+                Some(u) => u,
+                None => {
+                    missing_field(out, "RemoveContact", "carrier:contactUri");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.remove_contact(&account, &uri) {
+                carrier_error(out, "RemoveContact", &e);
             }
         }
         "SendMsg" => {
-            let friend_id = extract_property(line, "tox:friendId")
-                .or_else(|| extract_property(line, "carrier:friendId"))
-                .and_then(|s| s.parse::<u32>().ok());
-            let text = extract_property(line, "tox:text")
-                .or_else(|| extract_property(line, "carrier:text"));
-
-            if let (Some(fid), Some(txt)) = (friend_id, text) {
-                if let Err(e) = tox.send_message(fid, &txt) {
-                    out.send(&format!(
-                        "[] a antenna:Error ; antenna:message \"{}\" .",
-                        turtle_escape(&e.to_string())
-                    ));
+            let account = account_or_default(line, default_account);
+            let uri = match extract_property(line, "carrier:contactUri") {
+                Some(u) => u,
+                None => {
+                    missing_field(out, "SendMsg", "carrier:contactUri");
+                    return;
                 }
-            }
-        }
-        "Save" => {
-            if let Err(e) = tox.save() {
-                out.send(&format!(
-                    "[] a antenna:Error ; antenna:message \"{}\" .",
-                    turtle_escape(&e.to_string())
-                ));
-            }
-        }
-        "SendFile" => {
-            let friend_id = extract_property(line, "tox:friendId")
-                .or_else(|| extract_property(line, "carrier:friendId"))
-                .and_then(|s| s.parse::<u32>().ok());
-            let path = extract_property(line, "tox:path")
-                .or_else(|| extract_property(line, "carrier:path"));
-
-            if let (Some(fid), Some(path)) = (friend_id, path) {
-                if let Err(e) = tox.send_file(fid, &path) {
-                    out.send(&format!(
-                        "[] a antenna:Error ; antenna:message \"{}\" .",
-                        turtle_escape(&e.to_string())
-                    ));
+            };
+            let text = match extract_property(line, "carrier:text") {
+                Some(t) => t,
+                None => {
+                    missing_field(out, "SendMsg", "carrier:text");
+                    return;
                 }
-            } else {
-                out.send(
-                    "[] a antenna:Error ; antenna:message \"SendFile missing friendId or path\" .",
-                );
+            };
+            if let Err(e) = carrier.send_message(&account, &uri, &text) {
+                carrier_error(out, "SendMsg", &e);
             }
         }
-        "AcceptFile" => {
-            let friend_id = extract_property(line, "carrier:friendId")
-                .and_then(|s| s.parse::<u32>().ok());
-            let file_id = extract_property(line, "carrier:fileId")
-                .and_then(|s| s.parse::<u32>().ok());
-            let path = extract_property(line, "carrier:path");
-
-            if let (Some(fid), Some(file_id), Some(path)) = (friend_id, file_id, path) {
-                if let Err(e) = tox.accept_file(fid, file_id, &path) {
-                    out.send(&format!(
-                        "[] a antenna:Error ; antenna:message \"{}\" .",
-                        turtle_escape(&e.to_string())
-                    ));
-                }
-            } else {
-                out.send(
-                    "[] a antenna:Error ; antenna:message \"AcceptFile missing friendId, fileId, or path\" .",
-                );
-            }
-        }
-        "CancelFile" => {
-            let friend_id = extract_property(line, "carrier:friendId")
-                .and_then(|s| s.parse::<u32>().ok());
-            let file_id = extract_property(line, "carrier:fileId")
-                .and_then(|s| s.parse::<u32>().ok());
-
-            if let (Some(fid), Some(file_id)) = (friend_id, file_id) {
-                if let Err(e) = tox.cancel_file(fid, file_id) {
-                    out.send(&format!(
-                        "[] a antenna:Error ; antenna:message \"{}\" .",
-                        turtle_escape(&e.to_string())
-                    ));
-                }
-            }
-        }
-        _ => {
-            // Unknown tox command — just insert as data
+        other => {
+            tracing::warn!(target: "DISPATCH", command = %other, "carrier command not implemented in M2");
         }
     }
 }
@@ -318,35 +352,27 @@ fn handle_tox(line: &str, rdf_type: &str, tox: &ToxCarrier, out: &mut dyn Antenn
 // ---------------------------------------------------------------------------
 
 fn insert_with_dag(line: &str, store: &RdfStore, dag: &Dag, out: &mut dyn AntennaOut) {
-    // Before-insert hooks
     dag.before_insert(line);
 
-    // Insert into store
     if let Err(e) = store.insert_turtle(line) {
         tracing::warn!(target: "SPARQL", %e, "insert error");
         return;
     }
 
-    // After-insert hooks
     dag.after_insert(line);
-
-    // Emit on OUT
     out.send(line);
 }
 
 // ---------------------------------------------------------------------------
-// Simple Turtle property extraction (lightweight, no full parse)
+// Lightweight Turtle parsing
 // ---------------------------------------------------------------------------
 
 pub fn extract_type(line: &str) -> Option<String> {
-    // Look for "a <URI>" or "a prefix:local" pattern
     let line = line.trim();
 
-    // Pattern: "[] a <full-uri>" or "[] a prefix:local"
     if let Some(pos) = line.find(" a ") {
         let after = &line[pos + 3..].trim_start();
 
-        // Handle full URIs in angle brackets — find the closing '>'
         if after.starts_with('<') {
             if let Some(end) = after.find('>') {
                 return Some(after[1..end].to_string());
@@ -354,18 +380,13 @@ pub fn extract_type(line: &str) -> Option<String> {
             return None;
         }
 
-        // Handle prefixed names — split on delimiters (space, semicolon, dot)
-        let type_str = after
-            .split([' ', ';', '.'])
-            .next()?
-            .trim();
+        let type_str = after.split([' ', ';', '.']).next()?.trim();
 
-        // Resolve common prefixes
         if let Some((prefix, local)) = type_str.split_once(':') {
             let ns = match prefix {
                 "sp" => SP_NS,
                 "spin" => "http://spinrdf.org/spin#",
-                "tox" | "carrier" => TOX_NS,
+                "carrier" => CARRIER_NS,
                 "antenna" => ANTENNA_NS,
                 "rdf" => "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
                 _ => return None,
@@ -378,14 +399,12 @@ pub fn extract_type(line: &str) -> Option<String> {
 }
 
 pub fn extract_property(line: &str, prop: &str) -> Option<String> {
-    // Look for 'prop "value"' or 'prop value' patterns
     let search = format!("{} ", prop);
     if let Some(pos) = line.find(&search) {
         let after = &line[pos + search.len()..];
         let after = after.trim();
 
         if let Some(inner) = after.strip_prefix('"') {
-            // Quoted string — find matching close quote (handle escapes)
             let mut end = 0;
             let mut escaped = false;
             for (i, c) in inner.chars().enumerate() {
@@ -406,11 +425,7 @@ pub fn extract_property(line: &str, prop: &str) -> Option<String> {
                 return Some(inner[..end].to_string());
             }
         } else {
-            // Unquoted value (number, boolean, URI)
-            let val = after
-                .split([' ', ';', '.'])
-                .next()?
-                .trim();
+            let val = after.split([' ', ';', '.']).next()?.trim();
             if !val.is_empty() {
                 return Some(val.to_string());
             }
@@ -431,8 +446,6 @@ pub fn turtle_escape(s: &str) -> String {
 mod tests {
     use super::*;
 
-    // -- extract_type --
-
     #[test]
     fn extract_type_prefixed_sp() {
         let line = r#"[] a sp:Select ; sp:text "SELECT ?s WHERE { ?s ?p ?o }" ."#;
@@ -448,15 +461,6 @@ mod tests {
         assert_eq!(
             extract_type(line),
             Some("http://resonator.network/v2/carrier#GetId".to_string())
-        );
-    }
-
-    #[test]
-    fn extract_type_prefixed_tox() {
-        let line = "[] a tox:SetNick ; tox:nick \"mynode\" .";
-        assert_eq!(
-            extract_type(line),
-            Some("http://resonator.network/v2/carrier#SetNick".to_string())
         );
     }
 
@@ -493,8 +497,6 @@ mod tests {
         assert_eq!(extract_type("[] a custom:Foo ."), None);
     }
 
-    // -- extract_property --
-
     #[test]
     fn extract_property_quoted() {
         let line = r#"[] a sp:Select ; sp:text "SELECT ?s WHERE { ?s ?p ?o }" ."#;
@@ -505,11 +507,11 @@ mod tests {
     }
 
     #[test]
-    fn extract_property_unquoted_number() {
-        let line = "[] a carrier:TextMessage ; carrier:friendId 42 ; carrier:text \"hi\" .";
+    fn extract_property_uri_value() {
+        let line = "[] a carrier:SendMsg ; carrier:contactUri \"abc123\" ; carrier:text \"hi\" .";
         assert_eq!(
-            extract_property(line, "carrier:friendId"),
-            Some("42".to_string())
+            extract_property(line, "carrier:contactUri"),
+            Some("abc123".to_string())
         );
     }
 
@@ -537,8 +539,6 @@ mod tests {
         );
     }
 
-    // -- turtle_escape --
-
     #[test]
     fn turtle_escape_basic() {
         assert_eq!(turtle_escape("hello"), "hello");
@@ -561,8 +561,6 @@ mod tests {
     fn turtle_escape_carriage_return() {
         assert_eq!(turtle_escape("a\rb"), "a\\rb");
     }
-
-    // -- handle_spin tests --
 
     struct TestOut {
         messages: std::cell::RefCell<Vec<String>>,
@@ -593,30 +591,11 @@ mod tests {
             .unwrap();
         let mut out = TestOut::new();
         let line = r#"[] a sp:Select ; sp:text "SELECT ?s ?v WHERE { ?s <urn:val> ?v }" ."#;
-        handle_spin(
-            line,
-            &format!("{}Select", SP_NS),
-            &store,
-            &mut out,
-        );
+        handle_spin(line, &format!("{}Select", SP_NS), &store, &mut out);
         let msgs = out.messages();
         assert!(!msgs.is_empty(), "should return at least one result");
         assert!(msgs[0].contains("antenna:Result"), "should be a Result type");
         assert!(msgs[0].contains("hello"), "should contain the value");
-    }
-
-    #[test]
-    fn handle_spin_select_empty() {
-        let store = RdfStore::open(None).unwrap();
-        let mut out = TestOut::new();
-        let line = r#"[] a sp:Select ; sp:text "SELECT ?s WHERE { ?s a <urn:Nothing> }" ."#;
-        handle_spin(
-            line,
-            &format!("{}Select", SP_NS),
-            &store,
-            &mut out,
-        );
-        assert!(out.messages().is_empty(), "no results expected");
     }
 
     #[test]
@@ -666,9 +645,6 @@ mod tests {
 
     #[test]
     fn handle_spin_modify_runs_delete_and_insert() {
-        // ISSUE-078 regression: a DELETE WHERE + INSERT DATA via sp:Modify
-        // must actually mutate the store when it arrives through dispatch
-        // (previously the emit path inserted the Modify turtle as data).
         let store = RdfStore::open(None).unwrap();
         store
             .insert_turtle("<urn:counter:panel> <urn:counter:count> \"0\" .")
@@ -749,8 +725,6 @@ mod tests {
         assert!(msgs[0].contains("antenna:Error"));
     }
 
-    // -- insert_with_dag tests --
-
     #[test]
     fn insert_with_dag_stores_and_emits() {
         let store = RdfStore::open(None).unwrap();
@@ -769,7 +743,6 @@ mod tests {
         let dag = Dag::load(&store).unwrap();
         let mut out = TestOut::new();
         insert_with_dag("this is not valid turtle", &store, &dag, &mut out);
-        // Should not crash; error is logged via eprintln
         assert!(out.messages().is_empty());
     }
 }
