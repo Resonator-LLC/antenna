@@ -15,6 +15,7 @@ const CARRIER_MESSAGE_ID_LEN: usize = 64;
 const CARRIER_NAME_LEN: usize = 128;
 const CARRIER_REACTION_LEN: usize = 32;
 const CARRIER_STATUS_LEN: usize = 16;
+const CARRIER_FILE_ID_LEN: usize = 96;
 const CARRIER_LOG_TAG_LEN: usize = 16;
 const CARRIER_LOG_MESSAGE_LEN: usize = 512;
 const CARRIER_ERROR_FIELD_LEN: usize = 64;
@@ -43,6 +44,9 @@ pub enum CarrierEventType {
     SwarmCommit,
     Reaction,
     Presence,
+    FileRecv,
+    FileProgress,
+    FileComplete,
     Error,
     System,
 }
@@ -183,6 +187,32 @@ pub struct PresenceData {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
+pub struct FileRecvData {
+    pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
+    pub contact_uri: [u8; CARRIER_URI_LEN],
+    pub message_id: [u8; CARRIER_MESSAGE_ID_LEN],
+    pub file_id: [u8; CARRIER_FILE_ID_LEN],
+    pub filename: [u8; CARRIER_NAME_LEN],
+    pub size: u64,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct FileProgressData {
+    pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
+    pub file_id: [u8; CARRIER_FILE_ID_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct FileCompleteData {
+    pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
+    pub file_id: [u8; CARRIER_FILE_ID_LEN],
+    pub status: [u8; CARRIER_STATUS_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
 pub struct ErrorData {
     pub command: [u8; CARRIER_ERROR_FIELD_LEN],
     pub class_: [u8; CARRIER_ERROR_FIELD_LEN],
@@ -216,6 +246,9 @@ pub union CarrierEventData {
     pub swarm_commit: SwarmCommitData,
     pub reaction: ReactionData,
     pub presence: PresenceData,
+    pub file_recv: FileRecvData,
+    pub file_progress: FileProgressData,
+    pub file_complete: FileCompleteData,
     pub error: ErrorData,
     pub system: SystemData,
 }
@@ -358,6 +391,27 @@ extern "C" {
         account_id: *const c_char,
         contact_uri: *const c_char,
         subscribe: bool,
+    ) -> c_int;
+    fn carrier_send_file(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        conversation_id: *const c_char,
+        path: *const c_char,
+        display_name: *const c_char,
+    ) -> c_int;
+    fn carrier_accept_file(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        conversation_id: *const c_char,
+        message_id: *const c_char,
+        file_id: *const c_char,
+        path: *const c_char,
+    ) -> c_int;
+    fn carrier_cancel_file(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        conversation_id: *const c_char,
+        file_id: *const c_char,
     ) -> c_int;
 }
 
@@ -760,6 +814,49 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                     ts
                 )
             }
+            CarrierEventType::FileRecv => {
+                let d = ev.data.file_recv;
+                let mut s = header("FileRecv", &ev.account_id);
+                s.push_str(&format!(
+                    " ; carrier:conversationId \"{}\" ; carrier:contactUri \"{}\" ; carrier:messageId \"{}\" ; carrier:fileId \"{}\"",
+                    turtle_escape(cstr_from_buf(&d.conversation_id)),
+                    turtle_escape(cstr_from_buf(&d.contact_uri)),
+                    turtle_escape(cstr_from_buf(&d.message_id)),
+                    turtle_escape(cstr_from_buf(&d.file_id)),
+                ));
+                let fname = cstr_from_buf(&d.filename);
+                if !fname.is_empty() {
+                    s.push_str(&format!(
+                        " ; carrier:filename \"{}\"",
+                        turtle_escape(fname)
+                    ));
+                }
+                s.push_str(&format!(" ; carrier:size {}", d.size));
+                s.push_str(&ts);
+                s.push_str(" .");
+                s
+            }
+            CarrierEventType::FileProgress => {
+                let d = ev.data.file_progress;
+                format!(
+                    "{} ; carrier:conversationId \"{}\" ; carrier:fileId \"{}\"{} .",
+                    header("FileProgress", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.conversation_id)),
+                    turtle_escape(cstr_from_buf(&d.file_id)),
+                    ts
+                )
+            }
+            CarrierEventType::FileComplete => {
+                let d = ev.data.file_complete;
+                format!(
+                    "{} ; carrier:conversationId \"{}\" ; carrier:fileId \"{}\" ; carrier:status \"{}\"{} .",
+                    header("FileComplete", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.conversation_id)),
+                    turtle_escape(cstr_from_buf(&d.file_id)),
+                    turtle_escape(cstr_from_buf(&d.status)),
+                    ts
+                )
+            }
             CarrierEventType::Error => {
                 let d = ev.data.error;
                 let text = cstr_to_string(d.text, "");
@@ -1138,6 +1235,80 @@ impl CarrierClient {
         };
         if rc < 0 {
             bail!("carrier_subscribe_presence failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn send_file(
+        &self,
+        account_id: &str,
+        conversation_id: &str,
+        path: &str,
+        display_name: Option<&str>,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let conv_c = CString::new(conversation_id)?;
+        let path_c = CString::new(path)?;
+        let name_c = display_name.map(CString::new).transpose()?;
+        let name_ptr = name_c.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
+        let rc = unsafe {
+            carrier_send_file(
+                self.ptr,
+                id_c.as_ptr(),
+                conv_c.as_ptr(),
+                path_c.as_ptr(),
+                name_ptr,
+            )
+        };
+        if rc < 0 {
+            bail!("carrier_send_file failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn accept_file(
+        &self,
+        account_id: &str,
+        conversation_id: &str,
+        message_id: &str,
+        file_id: &str,
+        path: &str,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let conv_c = CString::new(conversation_id)?;
+        let msg_c = CString::new(message_id)?;
+        let fid_c = CString::new(file_id)?;
+        let path_c = CString::new(path)?;
+        let rc = unsafe {
+            carrier_accept_file(
+                self.ptr,
+                id_c.as_ptr(),
+                conv_c.as_ptr(),
+                msg_c.as_ptr(),
+                fid_c.as_ptr(),
+                path_c.as_ptr(),
+            )
+        };
+        if rc < 0 {
+            bail!("carrier_accept_file failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn cancel_file(
+        &self,
+        account_id: &str,
+        conversation_id: &str,
+        file_id: &str,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let conv_c = CString::new(conversation_id)?;
+        let fid_c = CString::new(file_id)?;
+        let rc = unsafe {
+            carrier_cancel_file(self.ptr, id_c.as_ptr(), conv_c.as_ptr(), fid_c.as_ptr())
+        };
+        if rc < 0 {
+            bail!("carrier_cancel_file failed: {}", rc);
         }
         Ok(())
     }

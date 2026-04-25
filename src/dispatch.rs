@@ -470,6 +470,82 @@ fn handle_carrier(
                 carrier_error(out, cmd, &e);
             }
         }
+        "SendFile" => {
+            let account = account_or_default(line, default_account);
+            let conv = match extract_property(line, "carrier:conversationId") {
+                Some(c) => c,
+                None => {
+                    missing_field(out, "SendFile", "carrier:conversationId");
+                    return;
+                }
+            };
+            let path = match extract_property(line, "carrier:path") {
+                Some(p) => p,
+                None => {
+                    missing_field(out, "SendFile", "carrier:path");
+                    return;
+                }
+            };
+            let display = extract_property(line, "carrier:filename")
+                .or_else(|| extract_property(line, "carrier:displayName"));
+            if let Err(e) = carrier.send_file(&account, &conv, &path, display.as_deref()) {
+                carrier_error(out, "SendFile", &e);
+            }
+        }
+        "AcceptFile" => {
+            let account = account_or_default(line, default_account);
+            let conv = match extract_property(line, "carrier:conversationId") {
+                Some(c) => c,
+                None => {
+                    missing_field(out, "AcceptFile", "carrier:conversationId");
+                    return;
+                }
+            };
+            let msg = match extract_property(line, "carrier:messageId") {
+                Some(m) => m,
+                None => {
+                    missing_field(out, "AcceptFile", "carrier:messageId");
+                    return;
+                }
+            };
+            let fid = match extract_property(line, "carrier:fileId") {
+                Some(f) => f,
+                None => {
+                    missing_field(out, "AcceptFile", "carrier:fileId");
+                    return;
+                }
+            };
+            let path = match extract_property(line, "carrier:path") {
+                Some(p) => p,
+                None => {
+                    missing_field(out, "AcceptFile", "carrier:path");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.accept_file(&account, &conv, &msg, &fid, &path) {
+                carrier_error(out, "AcceptFile", &e);
+            }
+        }
+        "CancelFile" => {
+            let account = account_or_default(line, default_account);
+            let conv = match extract_property(line, "carrier:conversationId") {
+                Some(c) => c,
+                None => {
+                    missing_field(out, "CancelFile", "carrier:conversationId");
+                    return;
+                }
+            };
+            let fid = match extract_property(line, "carrier:fileId") {
+                Some(f) => f,
+                None => {
+                    missing_field(out, "CancelFile", "carrier:fileId");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.cancel_file(&account, &conv, &fid) {
+                carrier_error(out, "CancelFile", &e);
+            }
+        }
         other => {
             tracing::warn!(target: "DISPATCH", command = %other, "carrier command not implemented");
         }
