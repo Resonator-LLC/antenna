@@ -456,6 +456,20 @@ fn handle_carrier(
                 carrier_error(out, "SendReaction", &e);
             }
         }
+        cmd @ ("SubscribePresence" | "UnsubscribePresence") => {
+            let account = account_or_default(line, default_account);
+            let uri = match extract_property(line, "carrier:contactUri") {
+                Some(u) => u,
+                None => {
+                    missing_field(out, cmd, "carrier:contactUri");
+                    return;
+                }
+            };
+            let subscribe = cmd == "SubscribePresence";
+            if let Err(e) = carrier.subscribe_presence(&account, &uri, subscribe) {
+                carrier_error(out, cmd, &e);
+            }
+        }
         other => {
             tracing::warn!(target: "DISPATCH", command = %other, "carrier command not implemented");
         }

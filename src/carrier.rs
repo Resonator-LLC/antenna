@@ -14,6 +14,7 @@ const CARRIER_CONVERSATION_ID_LEN: usize = 64;
 const CARRIER_MESSAGE_ID_LEN: usize = 64;
 const CARRIER_NAME_LEN: usize = 128;
 const CARRIER_REACTION_LEN: usize = 32;
+const CARRIER_STATUS_LEN: usize = 16;
 const CARRIER_LOG_TAG_LEN: usize = 16;
 const CARRIER_LOG_MESSAGE_LEN: usize = 512;
 const CARRIER_ERROR_FIELD_LEN: usize = 64;
@@ -41,6 +42,7 @@ pub enum CarrierEventType {
     ConversationSyncFinished,
     SwarmCommit,
     Reaction,
+    Presence,
     Error,
     System,
 }
@@ -174,6 +176,13 @@ pub struct ReactionData {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
+pub struct PresenceData {
+    pub contact_uri: [u8; CARRIER_URI_LEN],
+    pub status: [u8; CARRIER_STATUS_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
 pub struct ErrorData {
     pub command: [u8; CARRIER_ERROR_FIELD_LEN],
     pub class_: [u8; CARRIER_ERROR_FIELD_LEN],
@@ -206,6 +215,7 @@ pub union CarrierEventData {
     pub conversation_sync_finished: ConversationSyncFinishedData,
     pub swarm_commit: SwarmCommitData,
     pub reaction: ReactionData,
+    pub presence: PresenceData,
     pub error: ErrorData,
     pub system: SystemData,
 }
@@ -342,6 +352,12 @@ extern "C" {
         conversation_id: *const c_char,
         message_id: *const c_char,
         reaction: *const c_char,
+    ) -> c_int;
+    fn carrier_subscribe_presence(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        contact_uri: *const c_char,
+        subscribe: bool,
     ) -> c_int;
 }
 
@@ -734,6 +750,16 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                 s.push_str(" .");
                 s
             }
+            CarrierEventType::Presence => {
+                let d = ev.data.presence;
+                format!(
+                    "{} ; carrier:contactUri \"{}\" ; carrier:status \"{}\"{} .",
+                    header("Presence", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.contact_uri)),
+                    turtle_escape(cstr_from_buf(&d.status)),
+                    ts
+                )
+            }
             CarrierEventType::Error => {
                 let d = ev.data.error;
                 let text = cstr_to_string(d.text, "");
@@ -1095,6 +1121,23 @@ impl CarrierClient {
         };
         if rc < 0 {
             bail!("carrier_send_reaction failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn subscribe_presence(
+        &self,
+        account_id: &str,
+        contact_uri: &str,
+        subscribe: bool,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let uri_c = CString::new(contact_uri)?;
+        let rc = unsafe {
+            carrier_subscribe_presence(self.ptr, id_c.as_ptr(), uri_c.as_ptr(), subscribe)
+        };
+        if rc < 0 {
+            bail!("carrier_subscribe_presence failed: {}", rc);
         }
         Ok(())
     }
