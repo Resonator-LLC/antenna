@@ -11,7 +11,9 @@ use std::time::Duration;
 const CARRIER_URI_LEN: usize = 128;
 const CARRIER_ACCOUNT_ID_LEN: usize = 64;
 const CARRIER_CONVERSATION_ID_LEN: usize = 64;
+const CARRIER_MESSAGE_ID_LEN: usize = 64;
 const CARRIER_NAME_LEN: usize = 128;
+const CARRIER_REACTION_LEN: usize = 32;
 const CARRIER_LOG_TAG_LEN: usize = 16;
 const CARRIER_LOG_MESSAGE_LEN: usize = 512;
 const CARRIER_ERROR_FIELD_LEN: usize = 64;
@@ -38,6 +40,7 @@ pub enum CarrierEventType {
     ConversationReady,
     ConversationSyncFinished,
     SwarmCommit,
+    Reaction,
     Error,
     System,
 }
@@ -93,7 +96,7 @@ pub struct ContactNameData {
 pub struct TextMessageData {
     pub contact_uri: [u8; CARRIER_URI_LEN],
     pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
-    pub message_id: u64,
+    pub message_id: [u8; CARRIER_MESSAGE_ID_LEN],
     pub text: *const c_char,
     pub text_len: usize,
 }
@@ -103,7 +106,7 @@ pub struct TextMessageData {
 pub struct MessageSentData {
     pub contact_uri: [u8; CARRIER_URI_LEN],
     pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
-    pub message_id: u64,
+    pub message_id: [u8; CARRIER_MESSAGE_ID_LEN],
     pub status: c_int,
 }
 
@@ -111,6 +114,7 @@ pub struct MessageSentData {
 #[derive(Copy, Clone)]
 pub struct GroupMessageData {
     pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
+    pub message_id: [u8; CARRIER_MESSAGE_ID_LEN],
     pub contact_uri: [u8; CARRIER_URI_LEN],
     pub display_name: [u8; CARRIER_NAME_LEN],
     pub text: *const c_char,
@@ -154,8 +158,18 @@ pub struct ConversationSyncFinishedData {
 #[derive(Copy, Clone)]
 pub struct SwarmCommitData {
     pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
-    pub message_id: u64,
+    pub message_id: [u8; CARRIER_MESSAGE_ID_LEN],
     pub contact_uri: [u8; CARRIER_URI_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ReactionData {
+    pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
+    pub message_id: [u8; CARRIER_MESSAGE_ID_LEN],
+    pub reaction_id: [u8; CARRIER_MESSAGE_ID_LEN],
+    pub contact_uri: [u8; CARRIER_URI_LEN],
+    pub text: [u8; CARRIER_REACTION_LEN],
 }
 
 #[repr(C)]
@@ -191,6 +205,7 @@ pub union CarrierEventData {
     pub conversation_ready: ConversationReadyData,
     pub conversation_sync_finished: ConversationSyncFinishedData,
     pub swarm_commit: SwarmCommitData,
+    pub reaction: ReactionData,
     pub error: ErrorData,
     pub system: SystemData,
 }
@@ -320,6 +335,13 @@ extern "C" {
         c: *mut Carrier,
         account_id: *const c_char,
         conversation_id: *const c_char,
+    ) -> c_int;
+    fn carrier_send_reaction(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        conversation_id: *const c_char,
+        message_id: *const c_char,
+        reaction: *const c_char,
     ) -> c_int;
 }
 
@@ -589,11 +611,11 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                 let d = ev.data.text_message;
                 let body = bytes_to_string(d.text, d.text_len);
                 format!(
-                    "{} ; carrier:contactUri \"{}\" ; carrier:conversationId \"{}\" ; carrier:messageId {} ; carrier:text \"{}\"{} .",
+                    "{} ; carrier:contactUri \"{}\" ; carrier:conversationId \"{}\" ; carrier:messageId \"{}\" ; carrier:text \"{}\"{} .",
                     header("TextMessage", &ev.account_id),
                     turtle_escape(cstr_from_buf(&d.contact_uri)),
                     turtle_escape(cstr_from_buf(&d.conversation_id)),
-                    d.message_id,
+                    turtle_escape(cstr_from_buf(&d.message_id)),
                     turtle_escape(&body),
                     ts
                 )
@@ -601,11 +623,11 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
             CarrierEventType::MessageSent => {
                 let d = ev.data.message_sent;
                 format!(
-                    "{} ; carrier:contactUri \"{}\" ; carrier:conversationId \"{}\" ; carrier:messageId {} ; carrier:status {}{} .",
+                    "{} ; carrier:contactUri \"{}\" ; carrier:conversationId \"{}\" ; carrier:messageId \"{}\" ; carrier:status {}{} .",
                     header("MessageSent", &ev.account_id),
                     turtle_escape(cstr_from_buf(&d.contact_uri)),
                     turtle_escape(cstr_from_buf(&d.conversation_id)),
-                    d.message_id,
+                    turtle_escape(cstr_from_buf(&d.message_id)),
                     d.status,
                     ts
                 )
@@ -615,8 +637,9 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                 let body = bytes_to_string(d.text, d.text_len);
                 let mut s = header("GroupMessage", &ev.account_id);
                 s.push_str(&format!(
-                    " ; carrier:conversationId \"{}\" ; carrier:contactUri \"{}\"",
+                    " ; carrier:conversationId \"{}\" ; carrier:messageId \"{}\" ; carrier:contactUri \"{}\"",
                     turtle_escape(cstr_from_buf(&d.conversation_id)),
+                    turtle_escape(cstr_from_buf(&d.message_id)),
                     turtle_escape(cstr_from_buf(&d.contact_uri))
                 ));
                 let dn = cstr_from_buf(&d.display_name);
@@ -682,13 +705,34 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
             CarrierEventType::SwarmCommit => {
                 let d = ev.data.swarm_commit;
                 format!(
-                    "{} ; carrier:conversationId \"{}\" ; carrier:contactUri \"{}\" ; carrier:messageId {}{} .",
+                    "{} ; carrier:conversationId \"{}\" ; carrier:contactUri \"{}\" ; carrier:messageId \"{}\"{} .",
                     header("SwarmCommit", &ev.account_id),
                     turtle_escape(cstr_from_buf(&d.conversation_id)),
                     turtle_escape(cstr_from_buf(&d.contact_uri)),
-                    d.message_id,
+                    turtle_escape(cstr_from_buf(&d.message_id)),
                     ts
                 )
+            }
+            CarrierEventType::Reaction => {
+                let d = ev.data.reaction;
+                let mut s = header("Reaction", &ev.account_id);
+                s.push_str(&format!(
+                    " ; carrier:conversationId \"{}\" ; carrier:messageId \"{}\" ; carrier:contactUri \"{}\" ; carrier:reaction \"{}\"",
+                    turtle_escape(cstr_from_buf(&d.conversation_id)),
+                    turtle_escape(cstr_from_buf(&d.message_id)),
+                    turtle_escape(cstr_from_buf(&d.contact_uri)),
+                    turtle_escape(cstr_from_buf(&d.text))
+                ));
+                let rid = cstr_from_buf(&d.reaction_id);
+                if !rid.is_empty() {
+                    s.push_str(&format!(
+                        " ; carrier:reactionId \"{}\"",
+                        turtle_escape(rid)
+                    ));
+                }
+                s.push_str(&ts);
+                s.push_str(" .");
+                s
             }
             CarrierEventType::Error => {
                 let d = ev.data.error;
@@ -1025,6 +1069,32 @@ impl CarrierClient {
         };
         if rc < 0 {
             bail!("carrier_remove_conversation failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn send_reaction(
+        &self,
+        account_id: &str,
+        conversation_id: &str,
+        message_id: &str,
+        reaction: &str,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let conv_c = CString::new(conversation_id)?;
+        let msg_c = CString::new(message_id)?;
+        let react_c = CString::new(reaction)?;
+        let rc = unsafe {
+            carrier_send_reaction(
+                self.ptr,
+                id_c.as_ptr(),
+                conv_c.as_ptr(),
+                msg_c.as_ptr(),
+                react_c.as_ptr(),
+            )
+        };
+        if rc < 0 {
+            bail!("carrier_send_reaction failed: {}", rc);
         }
         Ok(())
     }

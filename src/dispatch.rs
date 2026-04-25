@@ -429,6 +429,33 @@ fn handle_carrier(
                 carrier_error(out, "RemoveConversation", &e);
             }
         }
+        "SendReaction" => {
+            let account = account_or_default(line, default_account);
+            let conv = match extract_property(line, "carrier:conversationId") {
+                Some(c) => c,
+                None => {
+                    missing_field(out, "SendReaction", "carrier:conversationId");
+                    return;
+                }
+            };
+            let msg = match extract_property(line, "carrier:messageId") {
+                Some(m) => m,
+                None => {
+                    missing_field(out, "SendReaction", "carrier:messageId");
+                    return;
+                }
+            };
+            let react = match extract_property(line, "carrier:reaction") {
+                Some(r) => r,
+                None => {
+                    missing_field(out, "SendReaction", "carrier:reaction");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.send_reaction(&account, &conv, &msg, &react) {
+                carrier_error(out, "SendReaction", &e);
+            }
+        }
         other => {
             tracing::warn!(target: "DISPATCH", command = %other, "carrier command not implemented");
         }
