@@ -31,6 +31,13 @@ pub enum CarrierEventType {
     ContactName,
     TextMessage,
     MessageSent,
+    GroupMessage,
+    GroupPeerJoin,
+    GroupPeerExit,
+    ConversationRequest,
+    ConversationReady,
+    ConversationSyncFinished,
+    SwarmCommit,
     Error,
     System,
 }
@@ -102,6 +109,57 @@ pub struct MessageSentData {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
+pub struct GroupMessageData {
+    pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
+    pub contact_uri: [u8; CARRIER_URI_LEN],
+    pub display_name: [u8; CARRIER_NAME_LEN],
+    pub text: *const c_char,
+    pub text_len: usize,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct GroupPeerJoinData {
+    pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
+    pub member_uri: [u8; CARRIER_URI_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct GroupPeerExitData {
+    pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
+    pub member_uri: [u8; CARRIER_URI_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ConversationRequestData {
+    pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
+    pub contact_uri: [u8; CARRIER_URI_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ConversationReadyData {
+    pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ConversationSyncFinishedData {
+    pub _placeholder: u8,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct SwarmCommitData {
+    pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
+    pub message_id: u64,
+    pub contact_uri: [u8; CARRIER_URI_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
 pub struct ErrorData {
     pub command: [u8; CARRIER_ERROR_FIELD_LEN],
     pub class_: [u8; CARRIER_ERROR_FIELD_LEN],
@@ -126,6 +184,13 @@ pub union CarrierEventData {
     pub contact_name: ContactNameData,
     pub text_message: TextMessageData,
     pub message_sent: MessageSentData,
+    pub group_message: GroupMessageData,
+    pub group_peer_join: GroupPeerJoinData,
+    pub group_peer_exit: GroupPeerExitData,
+    pub conversation_request: ConversationRequestData,
+    pub conversation_ready: ConversationReadyData,
+    pub conversation_sync_finished: ConversationSyncFinishedData,
+    pub swarm_commit: SwarmCommitData,
     pub error: ErrorData,
     pub system: SystemData,
 }
@@ -222,6 +287,39 @@ extern "C" {
         account_id: *const c_char,
         contact_uri: *const c_char,
         text: *const c_char,
+    ) -> c_int;
+    fn carrier_create_conversation(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        privacy: *const c_char,
+        out_conversation_id: *mut c_char,
+    ) -> c_int;
+    fn carrier_send_conversation_message(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        conversation_id: *const c_char,
+        text: *const c_char,
+    ) -> c_int;
+    fn carrier_accept_conversation_request(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        conversation_id: *const c_char,
+    ) -> c_int;
+    fn carrier_decline_conversation_request(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        conversation_id: *const c_char,
+    ) -> c_int;
+    fn carrier_invite_to_conversation(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        conversation_id: *const c_char,
+        contact_uri: *const c_char,
+    ) -> c_int;
+    fn carrier_remove_conversation(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        conversation_id: *const c_char,
     ) -> c_int;
 }
 
@@ -512,6 +610,86 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                     ts
                 )
             }
+            CarrierEventType::GroupMessage => {
+                let d = ev.data.group_message;
+                let body = bytes_to_string(d.text, d.text_len);
+                let mut s = header("GroupMessage", &ev.account_id);
+                s.push_str(&format!(
+                    " ; carrier:conversationId \"{}\" ; carrier:contactUri \"{}\"",
+                    turtle_escape(cstr_from_buf(&d.conversation_id)),
+                    turtle_escape(cstr_from_buf(&d.contact_uri))
+                ));
+                let dn = cstr_from_buf(&d.display_name);
+                if !dn.is_empty() {
+                    s.push_str(&format!(
+                        " ; carrier:displayName \"{}\"",
+                        turtle_escape(dn)
+                    ));
+                }
+                s.push_str(&format!(
+                    " ; carrier:text \"{}\"{} .",
+                    turtle_escape(&body),
+                    ts
+                ));
+                s
+            }
+            CarrierEventType::GroupPeerJoin => {
+                let d = ev.data.group_peer_join;
+                format!(
+                    "{} ; carrier:conversationId \"{}\" ; carrier:memberUri \"{}\"{} .",
+                    header("GroupPeerJoin", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.conversation_id)),
+                    turtle_escape(cstr_from_buf(&d.member_uri)),
+                    ts
+                )
+            }
+            CarrierEventType::GroupPeerExit => {
+                let d = ev.data.group_peer_exit;
+                format!(
+                    "{} ; carrier:conversationId \"{}\" ; carrier:memberUri \"{}\"{} .",
+                    header("GroupPeerExit", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.conversation_id)),
+                    turtle_escape(cstr_from_buf(&d.member_uri)),
+                    ts
+                )
+            }
+            CarrierEventType::ConversationRequest => {
+                let d = ev.data.conversation_request;
+                format!(
+                    "{} ; carrier:conversationId \"{}\" ; carrier:contactUri \"{}\"{} .",
+                    header("ConversationRequest", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.conversation_id)),
+                    turtle_escape(cstr_from_buf(&d.contact_uri)),
+                    ts
+                )
+            }
+            CarrierEventType::ConversationReady => {
+                let d = ev.data.conversation_ready;
+                format!(
+                    "{} ; carrier:conversationId \"{}\"{} .",
+                    header("ConversationReady", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.conversation_id)),
+                    ts
+                )
+            }
+            CarrierEventType::ConversationSyncFinished => {
+                format!(
+                    "{}{} .",
+                    header("ConversationSyncFinished", &ev.account_id),
+                    ts
+                )
+            }
+            CarrierEventType::SwarmCommit => {
+                let d = ev.data.swarm_commit;
+                format!(
+                    "{} ; carrier:conversationId \"{}\" ; carrier:contactUri \"{}\" ; carrier:messageId {}{} .",
+                    header("SwarmCommit", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.conversation_id)),
+                    turtle_escape(cstr_from_buf(&d.contact_uri)),
+                    d.message_id,
+                    ts
+                )
+            }
             CarrierEventType::Error => {
                 let d = ev.data.error;
                 let text = cstr_to_string(d.text, "");
@@ -734,6 +912,119 @@ impl CarrierClient {
         };
         if rc < 0 {
             bail!("carrier_send_message failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn create_conversation(
+        &self,
+        account_id: &str,
+        privacy: Option<&str>,
+    ) -> Result<String> {
+        let id_c = CString::new(account_id)?;
+        let privacy_c = privacy.map(CString::new).transpose()?;
+        let privacy_ptr = privacy_c.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
+        let mut buf = [0u8; CARRIER_CONVERSATION_ID_LEN];
+        let rc = unsafe {
+            carrier_create_conversation(
+                self.ptr,
+                id_c.as_ptr(),
+                privacy_ptr,
+                buf.as_mut_ptr() as *mut c_char,
+            )
+        };
+        if rc < 0 {
+            bail!("carrier_create_conversation failed: {}", rc);
+        }
+        Ok(cstr_from_buf(&buf).to_string())
+    }
+
+    pub fn send_conversation_message(
+        &self,
+        account_id: &str,
+        conversation_id: &str,
+        text: &str,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let conv_c = CString::new(conversation_id)?;
+        let text_c = CString::new(text)?;
+        let rc = unsafe {
+            carrier_send_conversation_message(
+                self.ptr,
+                id_c.as_ptr(),
+                conv_c.as_ptr(),
+                text_c.as_ptr(),
+            )
+        };
+        if rc < 0 {
+            bail!("carrier_send_conversation_message failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn accept_conversation_request(
+        &self,
+        account_id: &str,
+        conversation_id: &str,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let conv_c = CString::new(conversation_id)?;
+        let rc = unsafe {
+            carrier_accept_conversation_request(self.ptr, id_c.as_ptr(), conv_c.as_ptr())
+        };
+        if rc < 0 {
+            bail!("carrier_accept_conversation_request failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn decline_conversation_request(
+        &self,
+        account_id: &str,
+        conversation_id: &str,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let conv_c = CString::new(conversation_id)?;
+        let rc = unsafe {
+            carrier_decline_conversation_request(self.ptr, id_c.as_ptr(), conv_c.as_ptr())
+        };
+        if rc < 0 {
+            bail!("carrier_decline_conversation_request failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn invite_to_conversation(
+        &self,
+        account_id: &str,
+        conversation_id: &str,
+        contact_uri: &str,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let conv_c = CString::new(conversation_id)?;
+        let uri_c = CString::new(contact_uri)?;
+        let rc = unsafe {
+            carrier_invite_to_conversation(
+                self.ptr,
+                id_c.as_ptr(),
+                conv_c.as_ptr(),
+                uri_c.as_ptr(),
+            )
+        };
+        if rc < 0 {
+            bail!("carrier_invite_to_conversation failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn remove_conversation(&self, account_id: &str, conversation_id: &str) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let conv_c = CString::new(conversation_id)?;
+        let rc = unsafe {
+            carrier_remove_conversation(self.ptr, id_c.as_ptr(), conv_c.as_ptr())
+        };
+        if rc < 0 {
+            bail!("carrier_remove_conversation failed: {}", rc);
         }
         Ok(())
     }

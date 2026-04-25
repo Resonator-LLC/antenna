@@ -341,8 +341,96 @@ fn handle_carrier(
                 carrier_error(out, "SendMsg", &e);
             }
         }
+        // CreateGroup is the v0.2 vocabulary name; CreateConversation is an
+        // alias since both libjami and the C API use the latter spelling.
+        "CreateConversation" | "CreateGroup" => {
+            let account = account_or_default(line, default_account);
+            let privacy = extract_property(line, "carrier:privacy");
+            if let Err(e) = carrier.create_conversation(&account, privacy.as_deref()) {
+                carrier_error(out, local, &e);
+            }
+        }
+        "SendConversationMsg" => {
+            let account = account_or_default(line, default_account);
+            let conv = match extract_property(line, "carrier:conversationId") {
+                Some(c) => c,
+                None => {
+                    missing_field(out, "SendConversationMsg", "carrier:conversationId");
+                    return;
+                }
+            };
+            let text = match extract_property(line, "carrier:text") {
+                Some(t) => t,
+                None => {
+                    missing_field(out, "SendConversationMsg", "carrier:text");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.send_conversation_message(&account, &conv, &text) {
+                carrier_error(out, "SendConversationMsg", &e);
+            }
+        }
+        "AcceptConversationRequest" => {
+            let account = account_or_default(line, default_account);
+            let conv = match extract_property(line, "carrier:conversationId") {
+                Some(c) => c,
+                None => {
+                    missing_field(out, "AcceptConversationRequest", "carrier:conversationId");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.accept_conversation_request(&account, &conv) {
+                carrier_error(out, "AcceptConversationRequest", &e);
+            }
+        }
+        "DeclineConversationRequest" => {
+            let account = account_or_default(line, default_account);
+            let conv = match extract_property(line, "carrier:conversationId") {
+                Some(c) => c,
+                None => {
+                    missing_field(out, "DeclineConversationRequest", "carrier:conversationId");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.decline_conversation_request(&account, &conv) {
+                carrier_error(out, "DeclineConversationRequest", &e);
+            }
+        }
+        "InviteContact" => {
+            let account = account_or_default(line, default_account);
+            let conv = match extract_property(line, "carrier:conversationId") {
+                Some(c) => c,
+                None => {
+                    missing_field(out, "InviteContact", "carrier:conversationId");
+                    return;
+                }
+            };
+            let uri = match extract_property(line, "carrier:contactUri") {
+                Some(u) => u,
+                None => {
+                    missing_field(out, "InviteContact", "carrier:contactUri");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.invite_to_conversation(&account, &conv, &uri) {
+                carrier_error(out, "InviteContact", &e);
+            }
+        }
+        "RemoveConversation" => {
+            let account = account_or_default(line, default_account);
+            let conv = match extract_property(line, "carrier:conversationId") {
+                Some(c) => c,
+                None => {
+                    missing_field(out, "RemoveConversation", "carrier:conversationId");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.remove_conversation(&account, &conv) {
+                carrier_error(out, "RemoveConversation", &e);
+            }
+        }
         other => {
-            tracing::warn!(target: "DISPATCH", command = %other, "carrier command not implemented in M2");
+            tracing::warn!(target: "DISPATCH", command = %other, "carrier command not implemented");
         }
     }
 }
