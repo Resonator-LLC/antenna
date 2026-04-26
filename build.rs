@@ -119,24 +119,46 @@ fn main() {
 
     // ------------------------------------------------------------------
     // libjami + contrib (mirror of carrier/Makefile §Link flags)
+    //
+    // Resolved to a pre-built static prefix at $JAMI_PREFIX, defaulting to
+    // ${XDG_CACHE_HOME:-$HOME/.cache}/resonator/libjami/<sha>/ where <sha>
+    // is the line from carrier/JAMI_VERSION. All archives (libjami-core.a +
+    // ~39 contrib libs) live flat under $JAMI_PREFIX/lib/. See
+    // arch/jami-migration.md D21.
     // ------------------------------------------------------------------
-    let jami_dir = carrier_dir.join("third_party").join("jami-daemon");
-    let jami_build = jami_dir.join("build");
-    let jami_lib = jami_build.join("libjami-core.a");
+    let jami_prefix = if let Ok(val) = std::env::var("JAMI_PREFIX") {
+        PathBuf::from(val)
+    } else {
+        let pin_file = carrier_dir.join("JAMI_VERSION");
+        let sha = std::fs::read_to_string(&pin_file)
+            .unwrap_or_else(|e| panic!("could not read {}: {}", pin_file.display(), e))
+            .trim()
+            .to_string();
+        if sha.is_empty() {
+            panic!("{} is empty; expected a libjami SHA", pin_file.display());
+        }
+        let cache_root = std::env::var("XDG_CACHE_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                PathBuf::from(std::env::var("HOME").expect("HOME unset")).join(".cache")
+            });
+        cache_root.join("resonator").join("libjami").join(sha)
+    };
+    let jami_lib_dir = jami_prefix.join("lib");
+    let jami_lib = jami_lib_dir.join("libjami-core.a");
     if !jami_lib.exists() {
         panic!(
             "libjami-core.a not found at {}.\n\
-             Build it first:\n  cd {} && make libjami-build",
+             Build it first:\n  cd {} && make libjami-build\n\
+             Or set JAMI_PREFIX to point at an existing libjami install.",
             jami_lib.display(),
             carrier_dir.display(),
         );
     }
-    println!("cargo:rustc-link-search=native={}", jami_build.display());
+    println!("cargo:rustc-link-search=native={}", jami_lib_dir.display());
     println!("cargo:rustc-link-lib=static=jami-core");
 
-    let (host, pj) = host_triple();
-    let contrib_lib = jami_dir.join("contrib").join(&host).join("lib");
-    println!("cargo:rustc-link-search=native={}", contrib_lib.display());
+    let (_host, pj) = host_triple();
 
     let contrib_static = [
         "dhtnet",
@@ -234,7 +256,12 @@ fn main() {
     println!("cargo:rerun-if-changed={}", carrier_inc.display());
     println!(
         "cargo:rerun-if-changed={}",
+        carrier_dir.join("JAMI_VERSION").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
         src_dir.join("quickjs_shim.c").display()
     );
     println!("cargo:rerun-if-env-changed=CARRIER_DIR");
+    println!("cargo:rerun-if-env-changed=JAMI_PREFIX");
 }
