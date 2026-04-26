@@ -148,8 +148,15 @@ impl AntennaContext {
     }
 
     pub fn run(&mut self, input: &mut dyn AntennaIn, output: &mut dyn AntennaOut) -> Result<()> {
+        // Cap the per-iteration sleep so WS-driven input and async script
+        // emits aren't parked behind libjami's idle interval (which can
+        // grow to ~5s when nothing is happening on the swarm). The cap is
+        // an upper bound; libjami's `iteration_interval` is still honored
+        // when it asks us to wake sooner.
+        const MAX_SLEEP_MS: i32 = 25;
         loop {
-            let timeout_ms = self.carrier.iteration_interval().as_millis() as i32;
+            let timeout_ms = (self.carrier.iteration_interval().as_millis() as i32)
+                .clamp(1, MAX_SLEEP_MS);
 
             if let Some(clock_fd) = input.clock_fd() {
                 let mut pfd = libc::pollfd {
