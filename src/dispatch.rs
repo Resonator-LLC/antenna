@@ -546,6 +546,40 @@ fn handle_carrier(
                 carrier_error(out, "CancelFile", &e);
             }
         }
+        "LinkDevice" => {
+            // No payload — fire-and-forget. The new account_id appears
+            // synchronously inside libcarrier; the DeviceLinkPin event
+            // surfaces it externally.
+            if let Err(e) = carrier.create_linking_account() {
+                carrier_error(out, "LinkDevice", &e);
+            }
+        }
+        "AuthorizeDevice" => {
+            let account = account_or_default(line, default_account);
+            let pin = match extract_property(line, "carrier:pin") {
+                Some(p) => p,
+                None => {
+                    missing_field(out, "AuthorizeDevice", "carrier:pin");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.authorize_device(&account, &pin) {
+                carrier_error(out, "AuthorizeDevice", &e);
+            }
+        }
+        "RevokeDevice" => {
+            let account = account_or_default(line, default_account);
+            let device_id = match extract_property(line, "carrier:contactUri") {
+                Some(d) => d,
+                None => {
+                    missing_field(out, "RevokeDevice", "carrier:contactUri");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.revoke_device(&account, &device_id) {
+                carrier_error(out, "RevokeDevice", &e);
+            }
+        }
         other => {
             tracing::warn!(target: "DISPATCH", command = %other, "carrier command not implemented");
         }

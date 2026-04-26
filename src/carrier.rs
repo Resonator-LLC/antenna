@@ -16,6 +16,8 @@ const CARRIER_NAME_LEN: usize = 128;
 const CARRIER_REACTION_LEN: usize = 32;
 const CARRIER_STATUS_LEN: usize = 16;
 const CARRIER_FILE_ID_LEN: usize = 96;
+const CARRIER_DEVICE_ID_LEN: usize = 96;
+const CARRIER_PIN_LEN: usize = 128;
 const CARRIER_LOG_TAG_LEN: usize = 16;
 const CARRIER_LOG_MESSAGE_LEN: usize = 512;
 const CARRIER_ERROR_FIELD_LEN: usize = 64;
@@ -47,6 +49,9 @@ pub enum CarrierEventType {
     FileRecv,
     FileProgress,
     FileComplete,
+    DeviceLinkPin,
+    DeviceLinked,
+    DeviceUnlinked,
     Error,
     System,
 }
@@ -213,6 +218,24 @@ pub struct FileCompleteData {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
+pub struct DeviceLinkPinData {
+    pub pin: [u8; CARRIER_PIN_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct DeviceLinkedData {
+    pub device_id: [u8; CARRIER_DEVICE_ID_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct DeviceUnlinkedData {
+    pub device_id: [u8; CARRIER_DEVICE_ID_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
 pub struct ErrorData {
     pub command: [u8; CARRIER_ERROR_FIELD_LEN],
     pub class_: [u8; CARRIER_ERROR_FIELD_LEN],
@@ -249,6 +272,9 @@ pub union CarrierEventData {
     pub file_recv: FileRecvData,
     pub file_progress: FileProgressData,
     pub file_complete: FileCompleteData,
+    pub device_link_pin: DeviceLinkPinData,
+    pub device_linked: DeviceLinkedData,
+    pub device_unlinked: DeviceUnlinkedData,
     pub error: ErrorData,
     pub system: SystemData,
 }
@@ -412,6 +438,20 @@ extern "C" {
         account_id: *const c_char,
         conversation_id: *const c_char,
         file_id: *const c_char,
+    ) -> c_int;
+    fn carrier_create_linking_account(
+        c: *mut Carrier,
+        out_account_id: *mut c_char,
+    ) -> c_int;
+    fn carrier_authorize_device(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        pin: *const c_char,
+    ) -> c_int;
+    fn carrier_revoke_device(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        device_id: *const c_char,
     ) -> c_int;
 }
 
@@ -854,6 +894,33 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                     turtle_escape(cstr_from_buf(&d.conversation_id)),
                     turtle_escape(cstr_from_buf(&d.file_id)),
                     turtle_escape(cstr_from_buf(&d.status)),
+                    ts
+                )
+            }
+            CarrierEventType::DeviceLinkPin => {
+                let d = ev.data.device_link_pin;
+                format!(
+                    "{} ; carrier:pin \"{}\"{} .",
+                    header("DeviceLinkPin", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.pin)),
+                    ts
+                )
+            }
+            CarrierEventType::DeviceLinked => {
+                let d = ev.data.device_linked;
+                format!(
+                    "{} ; carrier:contactUri \"{}\"{} .",
+                    header("DeviceLinked", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.device_id)),
+                    ts
+                )
+            }
+            CarrierEventType::DeviceUnlinked => {
+                let d = ev.data.device_unlinked;
+                format!(
+                    "{} ; carrier:contactUri \"{}\"{} .",
+                    header("DeviceUnlinked", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.device_id)),
                     ts
                 )
             }
@@ -1309,6 +1376,41 @@ impl CarrierClient {
         };
         if rc < 0 {
             bail!("carrier_cancel_file failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn create_linking_account(&self) -> Result<String> {
+        let mut buf = [0u8; CARRIER_ACCOUNT_ID_LEN];
+        let rc = unsafe {
+            carrier_create_linking_account(self.ptr, buf.as_mut_ptr() as *mut c_char)
+        };
+        if rc < 0 {
+            bail!("carrier_create_linking_account failed: {}", rc);
+        }
+        Ok(cstr_from_buf(&buf).to_string())
+    }
+
+    pub fn authorize_device(&self, account_id: &str, pin: &str) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let pin_c = CString::new(pin)?;
+        let rc = unsafe {
+            carrier_authorize_device(self.ptr, id_c.as_ptr(), pin_c.as_ptr())
+        };
+        if rc < 0 {
+            bail!("carrier_authorize_device failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn revoke_device(&self, account_id: &str, device_id: &str) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let did_c = CString::new(device_id)?;
+        let rc = unsafe {
+            carrier_revoke_device(self.ptr, id_c.as_ptr(), did_c.as_ptr())
+        };
+        if rc < 0 {
+            bail!("carrier_revoke_device failed: {}", rc);
         }
         Ok(())
     }
