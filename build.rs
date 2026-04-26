@@ -199,32 +199,28 @@ fn main() {
         "bzip2",
         "secp256k1",
         "yaml-cpp",
+        "git2",
+        "jsoncpp",
+        "opus",
+        "vpx",
+        "argon2",
+        "gnutls",
+        "hogweed",
+        "nettle",
+        "gmp",
+        "ssl",
+        "crypto",
+        "tls",
+        "z",
     ];
     for lib in contrib_static {
         println!("cargo:rustc-link-lib=static={lib}");
     }
 
     // ------------------------------------------------------------------
-    // System deps via pkg-config (Homebrew on macOS, distro on Linux)
+    // All third-party C/C++ deps come from contrib (hermetic, D21). Only
+    // system frameworks + the C runtime are pulled from outside the prefix.
     // ------------------------------------------------------------------
-    for pkg in &[
-        "gnutls",
-        "nettle",
-        "hogweed",
-        "libgit2",
-        "jsoncpp",
-        "vpx",
-        "opus",
-        "openssl",
-        "libargon2",
-        "gmp",
-    ] {
-        let _ = pkg_config::Config::new()
-            .statik(false)
-            .probe(pkg)
-            .unwrap_or_else(|e| panic!("pkg-config could not find {pkg}: {e}"));
-    }
-
     if cfg!(target_os = "macos") {
         for fw in &[
             "AVFoundation",
@@ -241,11 +237,11 @@ fn main() {
         ] {
             println!("cargo:rustc-link-lib=framework={fw}");
         }
-        for sys in &["compression", "resolv", "c++", "z", "iconv"] {
+        for sys in &["compression", "resolv", "c++", "iconv"] {
             println!("cargo:rustc-link-lib={sys}");
         }
     } else {
-        for sys in &["stdc++", "dl", "rt", "resolv", "z"] {
+        for sys in &["stdc++", "dl", "rt", "resolv"] {
             println!("cargo:rustc-link-lib={sys}");
         }
     }
