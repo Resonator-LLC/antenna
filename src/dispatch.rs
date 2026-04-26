@@ -644,9 +644,12 @@ pub fn extract_property(line: &str, prop: &str) -> Option<String> {
         let after = after.trim();
 
         if let Some(inner) = after.strip_prefix('"') {
+            // char_indices yields byte offsets so the slice below is a valid
+            // UTF-8 boundary even when the literal contains multibyte chars
+            // (e.g. emoji reactions on carrier:SendReaction).
             let mut end = 0;
             let mut escaped = false;
-            for (i, c) in inner.chars().enumerate() {
+            for (i, c) in inner.char_indices() {
                 if escaped {
                     escaped = false;
                     continue;
@@ -775,6 +778,17 @@ mod tests {
         assert_eq!(
             extract_property(line, "sp:boolean"),
             Some("true".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_property_multibyte_literal() {
+        // Reactions ship UTF-8 emoji; previously the loop used a char index
+        // for a byte-indexed slice and panicked on the first non-ASCII char.
+        let line = "[] a carrier:SendReaction ; carrier:reaction \"\u{1F44D}\" .";
+        assert_eq!(
+            extract_property(line, "carrier:reaction"),
+            Some("\u{1F44D}".to_string())
         );
     }
 
