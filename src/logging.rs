@@ -183,9 +183,10 @@ fn parse_allowed_tags(raw: &str) -> Option<HashSet<String>> {
 /// `RUST_LOG` always wins when set.
 pub fn init(default_level: &str, tags: &str) -> Result<()> {
     // The level directive applies to the antenna crate by default. Carrier
-    // records come through with `target: "TOX"` etc. (not a module path),
-    // so they're filtered by the root-level directive. We set the root to
-    // the same level so carrier's CLOG lines flow at the requested level.
+    // records come through with `target: "JAMI"` or `target: "SHIM"` (not
+    // a module path), so they're filtered by the root-level directive. We
+    // set the root to the same level so carrier's CLOG lines flow at the
+    // requested level.
     //
     // EnvFilter::try_from_default_env() reads RUST_LOG if present; else
     // we build a default with two directives: root = default_level, and
