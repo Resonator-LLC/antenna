@@ -1,0 +1,124 @@
+@prefix design: <http://resonator.network/v2/design#> .
+@prefix sp:     <http://spinrdf.org/sp#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+
+# =============================================================================
+# Theme resolver — three SPIN-encoded CONSTRUCT queries that, given an active
+# design:Theme in the store, emit a flat resolved theme graph.
+#
+# Last-wins precedence over the design:extends inheritance chain. Most-derived
+# theme that binds a role / declares a hasToken with a given name / sets a
+# strokeWidth wins.
+#
+# Vocabulary:   ../../arch/ontology/design.ttl
+# Decision:     H2 — resolution lives as RDF data (these queries), not Rust.
+#
+# Output shape (consumed by Station's ThemeStore):
+#
+#   ?activeTheme  a design:ResolvedTheme .
+#   ?role         design:resolvesTo ?token .          # role layer
+#   ?token        design:hex / design:family / ...   # token properties
+#   ?activeTheme  design:hasToken ?bareToken .       # flat tokens (radii, spacing, icons)
+#   ?bareToken    design:name / design:px / design:svgPath / ...
+#   ?activeTheme  design:strokeWidth ?n .
+# =============================================================================
+
+<urn:resolver:theme> a design:ThemeResolver ;
+    rdfs:label "Voidline theme resolver" ;
+    rdfs:comment "Three SPARQL CONSTRUCT queries that resolve an extends-chain into a flat theme graph." ;
+    design:resolves <urn:resolver:theme/role-bindings> ,
+                    <urn:resolver:theme/has-token> ,
+                    <urn:resolver:theme/stroke-width> .
+
+# -----------------------------------------------------------------------------
+# Query 1 — role bindings + token properties for bound tokens
+#
+# Walks the extends* chain from ?activeTheme. For each (role, token) binding
+# on any ancestor, emits ?role design:resolvesTo ?token unless a strictly more
+# derived ancestor also binds the same role. Emits the bound token's own
+# properties so consumers can read hex / family / size / etc. without a second
+# round-trip.
+# -----------------------------------------------------------------------------
+
+<urn:resolver:theme/role-bindings> a sp:Construct ;
+    rdfs:label "Resolve role bindings" ;
+    sp:text """
+PREFIX design: <http://resonator.network/v2/design#>
+CONSTRUCT {
+  ?activeTheme a design:ResolvedTheme .
+  ?role design:resolvesTo ?token .
+  ?token ?tProp ?tVal .
+}
+WHERE {
+  ?activeTheme a design:Theme ;
+               design:active true .
+  ?activeTheme design:extends* ?ancestor .
+  ?ancestor design:bindsRole ?binding .
+  ?binding design:role ?role ;
+           design:to ?token .
+  FILTER NOT EXISTS {
+    ?activeTheme design:extends* ?moreDerived .
+    ?moreDerived design:extends+ ?ancestor .
+    ?moreDerived design:bindsRole ?override .
+    ?override design:role ?role .
+  }
+  OPTIONAL { ?token ?tProp ?tVal }
+}
+""" .
+
+# -----------------------------------------------------------------------------
+# Query 2 — flat tokens (radii, spacing, icons)
+#
+# These are declared via ?theme design:hasToken ?t and identified by
+# design:name (e.g. "r2", "s4", "lock"). For each name, the most-derived
+# ancestor's token wins.
+# -----------------------------------------------------------------------------
+
+<urn:resolver:theme/has-token> a sp:Construct ;
+    rdfs:label "Resolve flat tokens" ;
+    sp:text """
+PREFIX design: <http://resonator.network/v2/design#>
+CONSTRUCT {
+  ?activeTheme design:hasToken ?token .
+  ?token ?tProp ?tVal .
+}
+WHERE {
+  ?activeTheme a design:Theme ;
+               design:active true .
+  ?activeTheme design:extends* ?ancestor .
+  ?ancestor design:hasToken ?token .
+  ?token design:name ?name .
+  FILTER NOT EXISTS {
+    ?activeTheme design:extends* ?moreDerived .
+    ?moreDerived design:extends+ ?ancestor .
+    ?moreDerived design:hasToken ?override .
+    ?override design:name ?name .
+  }
+  ?token ?tProp ?tVal .
+}
+""" .
+
+# -----------------------------------------------------------------------------
+# Query 3 — strokeWidth (single-valued theme property)
+# -----------------------------------------------------------------------------
+
+<urn:resolver:theme/stroke-width> a sp:Construct ;
+    rdfs:label "Resolve stroke width" ;
+    sp:text """
+PREFIX design: <http://resonator.network/v2/design#>
+CONSTRUCT {
+  ?activeTheme design:strokeWidth ?sw .
+}
+WHERE {
+  ?activeTheme a design:Theme ;
+               design:active true .
+  ?activeTheme design:extends* ?ancestor .
+  ?ancestor design:strokeWidth ?sw .
+  FILTER NOT EXISTS {
+    ?activeTheme design:extends* ?moreDerived .
+    ?moreDerived design:extends+ ?ancestor .
+    ?moreDerived design:strokeWidth ?override .
+  }
+}
+""" .

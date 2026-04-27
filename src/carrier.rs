@@ -1439,6 +1439,7 @@ unsafe extern "C" fn placeholder_event_cb(_event: *const CarrierEvent, _userdata
 pub const TURTLE_PREFIXES: &str = "\
 @prefix carrier: <http://resonator.network/v2/carrier#> .\n\
 @prefix antenna: <http://resonator.network/v2/antenna#> .\n\
+@prefix design: <http://resonator.network/v2/design#> .\n\
 @prefix sp: <http://spinrdf.org/sp#> .\n\
 @prefix spin: <http://spinrdf.org/spin#> .\n\
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .";

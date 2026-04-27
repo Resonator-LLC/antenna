@@ -18,6 +18,7 @@ pub mod llm;
 pub mod logging;
 pub mod script_vm;
 pub mod store;
+pub mod theme;
 pub mod ws;
 
 use anyhow::Result;
@@ -28,6 +29,20 @@ use crate::carrier::CarrierClient;
 use crate::channel::{AntennaIn, AntennaOut};
 use crate::dag::Dag;
 use crate::store::RdfStore;
+
+/// Design ontology + canonical themes embedded at compile time. Loaded on
+/// every antenna boot so Station's B2 theme gate opens regardless of which
+/// radio is running. Keep ordering: ontology first, then voidline (canonical),
+/// then voidline-cb-safe (extends voidline).
+const DESIGN_BUNDLE: &[&str] = &[
+    include_str!("../../arch/ontology/design.ttl"),
+    include_str!("../../themes/voidline/voidline.ttl"),
+    include_str!("../../themes/voidline-cb-safe/voidline-cb-safe.ttl"),
+];
+
+/// SPIN-encoded theme resolver — three CONSTRUCT queries the dispatch
+/// handler runs against the store on `design:ResolveActiveTheme`.
+const THEME_RESOLVER_TTL: &str = include_str!("../spin/theme_resolver.spin.ttl");
 
 pub struct AntennaContext {
     pub store: RdfStore,
@@ -48,6 +63,17 @@ impl AntennaContext {
     ) -> Result<Self> {
         let store = RdfStore::open(store_path)?;
         tracing::info!(target: "PIPELINE", "store opened");
+
+        // Load the design ontology, canonical themes, and the SPIN-encoded
+        // theme resolver into every antenna instance so Station's B2 boot
+        // gate can open without each radio having to seed its own theme.
+        // The TTL is embedded at compile time so the binary is self-
+        // contained — no workspace-relative paths at runtime.
+        for ttl in DESIGN_BUNDLE {
+            store.insert_turtle(ttl)?;
+        }
+        theme::load_resolver_str(&store, THEME_RESOLVER_TTL)?;
+        tracing::info!(target: "DESIGN", "loaded design ontology + voidline themes + resolver");
 
         if let Some(path) = pipeline_path {
             let ttl = std::fs::read_to_string(path)?;
@@ -257,5 +283,28 @@ mod tests {
         assert!(builder.store_path.is_none());
         assert!(builder.pipeline_path.is_none());
         assert!(builder.seed_path.is_none());
+    }
+
+    /// Phase 1c-1 acceptance: the antenna binary must boot with the design
+    /// ontology + canonical themes + resolver pre-loaded so Station's B2
+    /// theme gate opens without each radio having to seed its own theme.
+    /// Mirrors the load path inside [`AntennaContext::new`] without
+    /// constructing a CarrierClient.
+    #[test]
+    fn design_bundle_and_resolver_install_into_fresh_store() {
+        let store = RdfStore::open(None).expect("in-memory store");
+        for ttl in DESIGN_BUNDLE {
+            store.insert_turtle(ttl).expect("insert design ttl");
+        }
+        theme::load_resolver_str(&store, THEME_RESOLVER_TTL)
+            .expect("load resolver");
+
+        let triples = theme::resolve_active_theme(&store)
+            .expect("resolver runs against pre-loaded design data");
+        assert!(
+            !triples.is_empty(),
+            "ResolveActiveTheme must yield a non-zero bundle on a fresh \
+             antenna boot — Station's B2 gate stays black otherwise",
+        );
     }
 }

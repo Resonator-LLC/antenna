@@ -10,6 +10,7 @@ use crate::store::RdfStore;
 const SP_NS: &str = "http://spinrdf.org/sp#";
 const ANTENNA_NS: &str = "http://resonator.network/v2/antenna#";
 const CARRIER_NS: &str = "http://resonator.network/v2/carrier#";
+const DESIGN_NS: &str = "http://resonator.network/v2/design#";
 
 /// Dispatch a single Turtle line based on its rdf:type.
 ///
@@ -51,8 +52,61 @@ pub fn dispatch(
             Some(c) => handle_carrier(line, &rdf_type, c, default_account, out),
             None => tracing::warn!(target: "DISPATCH", %rdf_type, "carrier dispatch skipped (no handle)"),
         }
+    } else if rdf_type.starts_with(DESIGN_NS) {
+        handle_design(&rdf_type, store, out);
     } else {
         insert_with_dag(line, store, dag, out);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Design system handling
+//
+// Station's `ThemeStore` requests a flat resolved theme bundle by sending
+// `[] a design:ResolveActiveTheme .`. This branch runs the SPIN-encoded
+// resolver in `theme.rs` against the live store and streams every resolved
+// triple back over the same channel. A trailing
+// `[] a design:ThemeBundleComplete ; design:bundleSize <N> .` marker tells
+// the client the bundle has finished; the client uses that marker to swap
+// in the new theme atomically (rather than painting partial bundles).
+// ---------------------------------------------------------------------------
+
+fn handle_design(rdf_type: &str, store: &RdfStore, out: &mut dyn AntennaOut) {
+    let local = &rdf_type[DESIGN_NS.len()..];
+    match local {
+        "ResolveActiveTheme" => {
+            let start = std::time::Instant::now();
+            match crate::theme::resolve_active_theme(store) {
+                Ok(triples) => {
+                    for t in &triples {
+                        out.send(&format!("{} {} {} .", t.subject, t.predicate, t.object));
+                    }
+                    out.send(&format!(
+                        "[] a design:ThemeBundleComplete ; design:bundleSize {} .",
+                        triples.len()
+                    ));
+                    tracing::debug!(
+                        target: "DESIGN",
+                        op = "resolve",
+                        triples = triples.len(),
+                        ms = start.elapsed().as_millis() as u64,
+                    );
+                }
+                Err(e) => {
+                    out.send(&format!(
+                        "[] a antenna:Error ; antenna:message \"ResolveActiveTheme failed: {}\" .",
+                        turtle_escape(&e.to_string())
+                    ));
+                }
+            }
+        }
+        other => {
+            tracing::warn!(target: "DISPATCH", %other, "design type not implemented");
+            out.send(&format!(
+                "[] a antenna:Error ; antenna:message \"Unknown design type: {}\" .",
+                other
+            ));
+        }
     }
 }
 
@@ -627,6 +681,7 @@ pub fn extract_type(line: &str) -> Option<String> {
                 "spin" => "http://spinrdf.org/spin#",
                 "carrier" => CARRIER_NS,
                 "antenna" => ANTENNA_NS,
+                "design" => DESIGN_NS,
                 "rdf" => "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
                 _ => return None,
             };
@@ -997,5 +1052,122 @@ mod tests {
         let mut out = TestOut::new();
         insert_with_dag("this is not valid turtle", &store, &dag, &mut out);
         assert!(out.messages().is_empty());
+    }
+
+    // ---- design dispatch ----------------------------------------------------
+
+    fn workspace_root() -> std::path::PathBuf {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("antenna sits one level under the workspace root")
+            .to_path_buf()
+    }
+
+    fn store_with_voidline() -> RdfStore {
+        let store = RdfStore::open(None).expect("in-memory store");
+        for path in [
+            "arch/ontology/design.ttl",
+            "themes/voidline/voidline.ttl",
+            "themes/voidline-cb-safe/voidline-cb-safe.ttl",
+        ] {
+            let ttl = std::fs::read_to_string(workspace_root().join(path))
+                .expect("read theme file");
+            store.insert_turtle(&ttl).expect("insert theme");
+        }
+        crate::theme::load_resolver(
+            &store,
+            &workspace_root().join("antenna/spin/theme_resolver.spin.ttl"),
+        )
+        .expect("load resolver");
+        store
+    }
+
+    #[test]
+    fn extract_type_design() {
+        let line = "[] a design:ResolveActiveTheme .";
+        assert_eq!(
+            extract_type(line),
+            Some("http://resonator.network/v2/design#ResolveActiveTheme".to_string()),
+        );
+    }
+
+    #[test]
+    fn handle_design_resolve_active_theme_emits_bundle() {
+        let store = store_with_voidline();
+        let dag = Dag::load(&store).unwrap();
+        let mut out = TestOut::new();
+        dispatch(
+            "[] a design:ResolveActiveTheme .",
+            &store,
+            &dag,
+            None,
+            "",
+            &mut out,
+        );
+        let msgs = out.messages();
+        assert!(msgs.len() > 1, "should emit resolved triples + marker");
+
+        // The trailing message must be the completion marker, with a
+        // bundleSize that matches the count of triples emitted before it.
+        let last = msgs.last().unwrap();
+        assert!(
+            last.contains("design:ThemeBundleComplete"),
+            "trailing marker missing: {last}",
+        );
+        let triple_count = msgs.len() - 1;
+        assert!(
+            last.contains(&format!("design:bundleSize {}", triple_count)),
+            "bundleSize must equal emitted triple count ({triple_count}); got {last}",
+        );
+
+        // The bundle should include the canonical voidline cyan binding.
+        let resolved = msgs[..triple_count].join("\n");
+        assert!(
+            resolved.contains("liveData") && resolved.contains("resonanceCyan"),
+            "voidline liveData→resonanceCyan triple expected in bundle:\n{resolved}",
+        );
+    }
+
+    #[test]
+    fn handle_design_unknown_type_returns_error() {
+        let store = RdfStore::open(None).unwrap();
+        let dag = Dag::load(&store).unwrap();
+        let mut out = TestOut::new();
+        dispatch(
+            "[] a design:Bogus .",
+            &store,
+            &dag,
+            None,
+            "",
+            &mut out,
+        );
+        let msgs = out.messages();
+        assert_eq!(msgs.len(), 1);
+        assert!(msgs[0].contains("Unknown design type"));
+    }
+
+    #[test]
+    fn handle_design_resolve_with_no_active_theme_emits_empty_bundle() {
+        let store = RdfStore::open(None).unwrap();
+        crate::theme::load_resolver(
+            &store,
+            &workspace_root().join("antenna/spin/theme_resolver.spin.ttl"),
+        )
+        .expect("load resolver");
+        let dag = Dag::load(&store).unwrap();
+        let mut out = TestOut::new();
+        dispatch(
+            "[] a design:ResolveActiveTheme .",
+            &store,
+            &dag,
+            None,
+            "",
+            &mut out,
+        );
+        let msgs = out.messages();
+        // Empty store still emits exactly one marker message with bundleSize 0.
+        assert_eq!(msgs.len(), 1);
+        assert!(msgs[0].contains("design:ThemeBundleComplete"));
+        assert!(msgs[0].contains("design:bundleSize 0"));
     }
 }
