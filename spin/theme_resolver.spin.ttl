@@ -7,6 +7,14 @@
 # Theme resolver — three SPIN-encoded CONSTRUCT queries that, given an active
 # design:Theme in the store, emit a flat resolved theme graph.
 #
+# Active-theme selection (Decision VV, WW):
+#
+#   1. If any triple `?_ radio:hasTheme ?t` exists, use ?t.
+#   2. Otherwise fall back to `?t a design:Theme ; design:active true`.
+#
+# The two branches are expressed as a UNION with FILTER NOT EXISTS guarding
+# the fallback so the per-radio override wins outright when present.
+#
 # Last-wins precedence over the design:extends inheritance chain. Most-derived
 # theme that binds a role / declares a hasToken with a given name / sets a
 # strokeWidth wins.
@@ -45,14 +53,22 @@
     rdfs:label "Resolve role bindings" ;
     sp:text """
 PREFIX design: <http://resonator.network/v2/design#>
+PREFIX radio:  <http://resonator.network/v2/radio#>
 CONSTRUCT {
   ?activeTheme a design:ResolvedTheme .
   ?role design:resolvesTo ?token .
   ?token ?tProp ?tVal .
 }
 WHERE {
-  ?activeTheme a design:Theme ;
-               design:active true .
+  {
+    ?_radio radio:hasTheme ?activeTheme .
+  }
+  UNION
+  {
+    ?activeTheme a design:Theme ;
+                 design:active true .
+    FILTER NOT EXISTS { ?_anyRadio radio:hasTheme ?_anyT }
+  }
   ?activeTheme design:extends* ?ancestor .
   ?ancestor design:bindsRole ?binding .
   ?binding design:role ?role ;
@@ -79,13 +95,21 @@ WHERE {
     rdfs:label "Resolve flat tokens" ;
     sp:text """
 PREFIX design: <http://resonator.network/v2/design#>
+PREFIX radio:  <http://resonator.network/v2/radio#>
 CONSTRUCT {
   ?activeTheme design:hasToken ?token .
   ?token ?tProp ?tVal .
 }
 WHERE {
-  ?activeTheme a design:Theme ;
-               design:active true .
+  {
+    ?_radio radio:hasTheme ?activeTheme .
+  }
+  UNION
+  {
+    ?activeTheme a design:Theme ;
+                 design:active true .
+    FILTER NOT EXISTS { ?_anyRadio radio:hasTheme ?_anyT }
+  }
   ?activeTheme design:extends* ?ancestor .
   ?ancestor design:hasToken ?token .
   ?token design:name ?name .
@@ -107,12 +131,20 @@ WHERE {
     rdfs:label "Resolve stroke width" ;
     sp:text """
 PREFIX design: <http://resonator.network/v2/design#>
+PREFIX radio:  <http://resonator.network/v2/radio#>
 CONSTRUCT {
   ?activeTheme design:strokeWidth ?sw .
 }
 WHERE {
-  ?activeTheme a design:Theme ;
-               design:active true .
+  {
+    ?_radio radio:hasTheme ?activeTheme .
+  }
+  UNION
+  {
+    ?activeTheme a design:Theme ;
+                 design:active true .
+    FILTER NOT EXISTS { ?_anyRadio radio:hasTheme ?_anyT }
+  }
   ?activeTheme design:extends* ?ancestor .
   ?ancestor design:strokeWidth ?sw .
   FILTER NOT EXISTS {

@@ -85,12 +85,25 @@ fn handle_design(rdf_type: &str, store: &RdfStore, out: &mut dyn AntennaOut) {
                         "[] a design:ThemeBundleComplete ; design:bundleSize {} .",
                         triples.len()
                     ));
-                    tracing::debug!(
-                        target: "DESIGN",
-                        op = "resolve",
-                        triples = triples.len(),
-                        ms = start.elapsed().as_millis() as u64,
-                    );
+                    if triples.is_empty() {
+                        // Decision WW: empty graph + WARN signals "theme not
+                        // found" to the radio author. Station boots black per
+                        // B2; the log line lets the typo surface in the dev
+                        // pane rather than silently masking the bug.
+                        tracing::warn!(
+                            target: "DESIGN",
+                            op = "resolve",
+                            reason = "theme-not-found",
+                            "no active theme resolved (radio:hasTheme URI unresolved or no design:active true)",
+                        );
+                    } else {
+                        tracing::debug!(
+                            target: "DESIGN",
+                            op = "resolve",
+                            triples = triples.len(),
+                            ms = start.elapsed().as_millis() as u64,
+                        );
+                    }
                 }
                 Err(e) => {
                     out.send(&format!(

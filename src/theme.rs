@@ -112,11 +112,11 @@ fn run_construct(store: &RdfStore, sparql: &str, out: &mut Vec<Triple>) -> Resul
     }
 }
 
-/// Number of role bindings voidline declares: 41 color roles + 15 type
+/// Number of role bindings voidline declares: 47 color roles + 15 type
 /// roles. Exposed for tests and for callers wanting to sanity-check
 /// completeness; not load-bearing in the resolver itself.
 #[doc(hidden)]
-pub const VOIDLINE_ROLE_COUNT: usize = 56;
+pub const VOIDLINE_ROLE_COUNT: usize = 62;
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -481,6 +481,68 @@ mod tests {
         assert_eq!(
             count, 1,
             "structural must resolve to exactly one token; got {count}",
+        );
+    }
+
+    // ---- per-radio override (Decisions VV + WW) -----------------------------
+
+    const RADIO_NS: &str = "http://resonator.network/v2/radio#";
+
+    /// Insert a `<urn:radio:self> radio:hasTheme <theme>` triple. Mirrors what
+    /// a radio's seed.ttl declares for per-radio scoping.
+    fn set_radio_theme(store: &RdfStore, theme_iri: &str) {
+        let upd = format!(
+            "PREFIX radio: <{RADIO_NS}>
+             INSERT DATA {{ <urn:radio:self> radio:hasTheme <{theme_iri}> }}"
+        );
+        store.update(&upd).expect("set radio:hasTheme");
+    }
+
+    #[test]
+    fn radio_has_theme_overrides_design_active() {
+        // Voidline is design:active true (set by build_store via the .ttl
+        // bundle). Pin :voidlineCbSafe via radio:hasTheme — the override
+        // branch must win.
+        let store = build_store();
+        set_radio_theme(&store, &format!("{CB_NS}voidlineCbSafe"));
+        let triples = resolve_active_theme(&store).expect("resolve");
+        let roles = role_map(&triples);
+
+        assert_eq!(
+            roles.get(&iri(DESIGN_NS, "structural")).map(String::as_str),
+            Some(iri(CB_NS, "pulseMagentaCb").as_str()),
+            "radio:hasTheme override must select cb-safe's structural binding",
+        );
+    }
+
+    #[test]
+    fn no_radio_has_theme_falls_back_to_design_active() {
+        // No radio:hasTheme triple — resolver falls back to :voidline (the
+        // theme carrying design:active true in the .ttl bundle).
+        let store = build_store();
+        let triples = resolve_active_theme(&store).expect("resolve");
+        let roles = role_map(&triples);
+
+        assert_eq!(
+            roles.get(&iri(DESIGN_NS, "structural")).map(String::as_str),
+            Some(iri(VOIDLINE_NS, "pulseMagenta").as_str()),
+            "without radio:hasTheme, fallback must pick :voidline",
+        );
+    }
+
+    #[test]
+    fn radio_has_theme_unresolved_uri_yields_empty_graph() {
+        // radio:hasTheme points at a URI that has no design:Theme triples —
+        // resolver emits empty (Decision WW). The dispatch layer surfaces a
+        // WARN log on top of that; the resolver itself is silent.
+        let store = build_store();
+        set_radio_theme(&store, "urn:no-such-theme");
+        let triples = resolve_active_theme(&store).expect("resolve");
+
+        assert!(
+            triples.is_empty(),
+            "unresolved radio:hasTheme URI yields empty graph; got {} triples",
+            triples.len(),
         );
     }
 }
