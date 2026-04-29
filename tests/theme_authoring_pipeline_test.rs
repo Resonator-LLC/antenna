@@ -74,6 +74,14 @@ fn build_pipeline() -> (RdfStore, Dag) {
         .insert_turtle(&pipeline_ttl)
         .expect("insert pipeline");
 
+    // Cut C: the seed declares the editor objects whose LOD widgets the
+    // script rebuilds on each mutation. Earlier cuts didn't need it because
+    // they only asserted token-hex changes; loading it here keeps every
+    // assertion against the same store the live radio runs.
+    let seed_ttl = std::fs::read_to_string(rel("radios/theme-authoring/seed.ttl"))
+        .expect("read theme-authoring seed");
+    store.insert_turtle(&seed_ttl).expect("insert seed");
+
     let dag = Dag::load(&store).expect("load dag");
     (store, dag)
 }
@@ -109,6 +117,26 @@ fn current_hex(store: &RdfStore, token_iri: &str) -> Option<String> {
     if let QueryResults::Solutions(solutions) = results {
         for sol in solutions.flatten() {
             if let Some(oxigraph::model::Term::Literal(lit)) = sol.get("h") {
+                return Some(lit.value().to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Pull the editor's LOD widget string out of the store. The script's
+/// `rebuildEditor` helper deletes the prior `antenna:lod` triple and inserts
+/// a new lod whose `antenna:widget` literal embeds the just-mutated hex.
+fn editor_widget(store: &RdfStore, editor_uri: &str) -> Option<String> {
+    let q = format!(
+        "SELECT ?w WHERE {{ \
+         <{editor_uri}> <{ANTENNA_NS}lod> ?l . \
+         ?l <{ANTENNA_NS}widget> ?w }}",
+    );
+    let results = store.query(&q).ok()?;
+    if let QueryResults::Solutions(solutions) = results {
+        for sol in solutions.flatten() {
+            if let Some(oxigraph::model::Term::Literal(lit)) = sol.get("w") {
                 return Some(lit.value().to_string());
             }
         }
@@ -153,6 +181,44 @@ fn slider_mutates_resonance_cyan_and_rebroadcasts_bundle() {
         new_hex_in_bundle,
         "bundle should carry mutated hex on resonanceCyan; messages = {:?}",
         out.messages,
+    );
+}
+
+#[test]
+fn slider_drive_rebuilds_editor_lod_with_fresh_hex() {
+    // Cut C plan question 2 / Decision (a): the script must rebuild each
+    // editor's LOD widget per mutation so the in-panel hex readout and the
+    // R/G/B channel labels track the store live. Asserting it here keeps
+    // the rebuild path under test rather than relying on visual smoke.
+    let (store, dag) = build_pipeline();
+    let mut out = CaptureOut::new();
+
+    let initial = editor_widget(&store, "urn:ta:editor:cyan")
+        .expect("seed must declare an editor lod widget");
+    assert!(
+        initial.contains("#5CE0E0"),
+        "seed lod widget must show the authored hex; got {initial}",
+    );
+
+    // Drive cyan-r to 0.0 → byte 0x00. New hex is #00E0E0; rebuilt widget
+    // must show the mutated hex in both the readout text and the R label.
+    let evt = slider_event("urn:ta:cyan-r", 0.0);
+    dispatch::dispatch(&evt, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 20);
+
+    let after = editor_widget(&store, "urn:ta:editor:cyan")
+        .expect("editor lod widget must remain present after rebuild");
+    assert!(
+        after.contains("#00E0E0"),
+        "rebuilt widget must carry the mutated hex in the readout; got {after}",
+    );
+    assert!(
+        !after.contains("#5CE0E0"),
+        "stale authored hex must not survive the rebuild; got {after}",
+    );
+    assert!(
+        after.contains("value=0,fontSize=9"),
+        "rebuilt R-channel slider value label must show the new byte; got {after}",
     );
 }
 
