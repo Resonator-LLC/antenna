@@ -14,7 +14,7 @@ src/
   dispatch.rs       Reactive router: parse Turtle type -> SPIN/Tox/store dispatch
   dag.rs            Channel-based script DAG, thread spawning, SemanticRouter
   script_vm.rs      QuickJS C FFI: runtime, context, JS globals (emit, print, store)
-  carrier_tox.rs    Tox P2P FFI bindings, CarrierEvent -> Turtle serialization
+  carrier.rs        Jami P2P FFI bindings, CarrierEvent -> Turtle serialization
   llm.rs            LLM backend abstraction (Ollama, HTTP, Platform)
   ws.rs             WebSocket server: multi-client, sequential accept
   quickjs_shim.c    C shim for QuickJS static inline functions
@@ -98,12 +98,12 @@ User-defined channels connect script nodes into arbitrary topologies.
 
 ## FFI Boundaries
 
-### libcarrier (Tox P2P)
+### libcarrier (Jami P2P)
 
-- `carrier_tox.rs` defines `#[repr(C)]` types matching `carrier.h`
+- `carrier.rs` defines `#[repr(C)]` types matching `carrier.h`
 - 29 event types in a tagged union (`CarrierEventType` + `CarrierEventData`)
 - Event callback registered via opaque pointer to `Sender<String>`
-- Safe wrapper: `ToxCarrier` with `iterate()`, `send_message()`, etc.
+- Safe wrapper: `JamiCarrier` with `iterate()`, `send_message()`, etc.
 
 ### QuickJS (JavaScript engine)
 
@@ -115,13 +115,14 @@ User-defined channels connect script nodes into arbitrary topologies.
 
 ### Build System
 
-`build.rs` compiles carrier from the git submodule (`third_party/carrier`)
-and links system-installed libraries for everything else:
+`build.rs` links against pre-built artifacts and compiles one shim:
 
-- **serd** — found via `pkg-config serd-0`
-- **toxcore** — found via `pkg-config toxcore` (pulls in libsodium, opus, vpx)
+- **carrier** — pre-built `libcarrier.a` from `CARRIER_DIR` (default: `third_party/carrier/build/`)
+- **libjami + contrib** — pre-built static archives from `JAMI_PREFIX` (~40 libs, see `arch/jami-migration.md`)
 - **quickjs** — located via Homebrew prefix or standard system paths
-- **carrier** — compiled from source (`third_party/carrier` submodule, 2 C files)
+- **quickjs_shim.c** — compiled in-tree (wraps QuickJS static inline functions)
+
+`CARRIER_DIR`, `JAMI_PREFIX`, and `QUICKJS_DIR` environment variables can override the defaults.
 
 `CARRIER_DIR` and `QUICKJS_DIR` environment variables can override the defaults.
 
