@@ -26,7 +26,18 @@ pub fn dispatch(
     default_account: &str,
     out: &mut dyn AntennaOut,
 ) {
-    if line.is_empty() || line.starts_with('#') || line.starts_with('@') {
+    if line.is_empty() || line.starts_with('#') {
+        return;
+    }
+
+    // Strip any leading `@prefix` / `@base` directives (ISSUE-088). Clients
+    // that bundle a directive plus a typed declaration onto a single line —
+    // legal Turtle, common with line-mode WebSocket clients — used to be
+    // dropped silently. `extract_type` already maps the well-known prefixes
+    // (`sp`, `carrier`, `antenna`, `design`, `rdf`, `spin`), so any inline
+    // declaration is redundant and safe to discard.
+    let line = strip_leading_directives(line);
+    if line.is_empty() {
         return;
     }
 
@@ -673,6 +684,34 @@ fn insert_with_dag(line: &str, store: &RdfStore, dag: &Dag, out: &mut dyn Antenn
 // Lightweight Turtle parsing
 // ---------------------------------------------------------------------------
 
+/// Strip any leading `@prefix` / `@base` directives (case-insensitive on the
+/// keyword) and return the remainder, trimmed. Each directive ends at the
+/// first `.` outside an `<…>` IRI. If the input contains nothing but
+/// directives, returns `""`.
+fn strip_leading_directives(line: &str) -> &str {
+    let mut s = line.trim_start();
+    while s.starts_with('@') {
+        let mut in_iri = false;
+        let mut end = None;
+        for (i, c) in s.char_indices() {
+            match c {
+                '<' => in_iri = true,
+                '>' => in_iri = false,
+                '.' if !in_iri => {
+                    end = Some(i + 1);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        match end {
+            Some(e) => s = s[e..].trim_start(),
+            None => return "",
+        }
+    }
+    s
+}
+
 pub fn extract_type(line: &str) -> Option<String> {
     let line = line.trim();
 
@@ -795,6 +834,52 @@ mod tests {
     #[test]
     fn extract_type_none_for_no_type() {
         assert_eq!(extract_type("[] rdfs:label \"foo\" ."), None);
+    }
+
+    #[test]
+    fn strip_directives_passthrough_when_no_prefix() {
+        let line = "[] a sp:Select ; sp:text \"ASK { ?s ?p ?o }\" .";
+        assert_eq!(strip_leading_directives(line), line);
+    }
+
+    #[test]
+    fn strip_directives_drops_inline_prefix() {
+        let line = "@prefix sp: <http://spinrdf.org/sp#> . [] a sp:Select ; sp:text \"ASK { ?s ?p ?o }\" .";
+        assert_eq!(
+            strip_leading_directives(line),
+            "[] a sp:Select ; sp:text \"ASK { ?s ?p ?o }\" ."
+        );
+    }
+
+    #[test]
+    fn strip_directives_drops_chained_prefixes() {
+        let line = "@prefix sp: <http://spinrdf.org/sp#> . @prefix antenna: <http://resonator.network/v2/antenna#> . [] a antenna:Bookmark .";
+        assert_eq!(
+            strip_leading_directives(line),
+            "[] a antenna:Bookmark ."
+        );
+    }
+
+    #[test]
+    fn strip_directives_handles_base() {
+        let line = "@base <http://example.org/> . [] a sp:Select .";
+        assert_eq!(strip_leading_directives(line), "[] a sp:Select .");
+    }
+
+    #[test]
+    fn strip_directives_directives_only_returns_empty() {
+        assert_eq!(
+            strip_leading_directives("@prefix sp: <http://spinrdf.org/sp#> ."),
+            ""
+        );
+    }
+
+    #[test]
+    fn strip_directives_dot_inside_iri_does_not_terminate() {
+        // The `.` in `2.0` is inside the IRI angle brackets and must not
+        // close the directive prematurely.
+        let line = "@prefix v2: <http://example.org/v2.0/ns#> . [] a v2:Foo .";
+        assert_eq!(strip_leading_directives(line), "[] a v2:Foo .");
     }
 
     #[test]
