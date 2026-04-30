@@ -33,11 +33,21 @@ use crate::store::RdfStore;
 /// Design ontology + canonical themes embedded at compile time. Loaded on
 /// every antenna boot so Station's B2 theme gate opens regardless of which
 /// radio is running. Keep ordering: ontology first, then voidline (canonical),
-/// then voidline-cb-safe (extends voidline).
+/// then everything that extends voidline.
 const DESIGN_BUNDLE: &[&str] = &[
     include_str!("../../arch/ontology/design.ttl"),
     include_str!("../../themes/voidline/voidline.ttl"),
     include_str!("../../themes/voidline-cb-safe/voidline-cb-safe.ttl"),
+    include_str!("../../themes/tokyo-night/tokyo-night.ttl"),
+    include_str!("../../themes/tokyo-night-day/tokyo-night-day.ttl"),
+    include_str!("../../themes/catppuccin-mocha/catppuccin-mocha.ttl"),
+    include_str!("../../themes/catppuccin-latte/catppuccin-latte.ttl"),
+    include_str!("../../themes/dracula/dracula.ttl"),
+    include_str!("../../themes/dracula-light/dracula-light.ttl"),
+    include_str!("../../themes/nord/nord.ttl"),
+    include_str!("../../themes/nord-light/nord-light.ttl"),
+    include_str!("../../themes/rose-pine/rose-pine.ttl"),
+    include_str!("../../themes/rose-pine-dawn/rose-pine-dawn.ttl"),
 ];
 
 /// Emoji catalog — categorised glyph table loaded into every antenna so

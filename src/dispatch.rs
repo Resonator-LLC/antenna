@@ -1180,6 +1180,111 @@ mod tests {
         store
     }
 
+    fn store_with_all_themes() -> RdfStore {
+        let store = store_with_voidline();
+        for (dir, _local) in &[
+            ("tokyo-night", "tokyoNight"),
+            ("tokyo-night-day", "tokyoNightDay"),
+            ("catppuccin-mocha", "catppuccinMocha"),
+            ("catppuccin-latte", "catppuccinLatte"),
+            ("dracula", "dracula"),
+            ("dracula-light", "draculaLight"),
+            ("nord", "nord"),
+            ("nord-light", "nordLight"),
+            ("rose-pine", "rosePine"),
+            ("rose-pine-dawn", "rosePineDawn"),
+        ] {
+            let ttl = std::fs::read_to_string(
+                workspace_root().join(format!("themes/{dir}/{dir}.ttl")),
+            )
+            .expect("read terminal theme");
+            store.insert_turtle(&ttl).expect("insert terminal theme");
+        }
+        store
+    }
+
+    /// End-to-end: dispatch the picker's exact wire format line by line and
+    /// confirm the OUT bundle includes the inherited `copy` icon. Catches
+    /// the live messenger crash where StationIcon asserted on the freshly
+    /// swapped Tokyo Night bundle.
+    #[test]
+    fn picker_wire_format_resolves_inherited_icon_after_swap() {
+        let store = store_with_all_themes();
+        let dag = Dag::load(&store).unwrap();
+        // Mimic the messenger seed: radio:hasTheme starts on voidline.
+        store
+            .update(
+                "PREFIX radio: <http://resonator.network/v2/radio#> \
+                 INSERT DATA { <urn:radio:self> radio:hasTheme \
+                 <http://resonator.network/v2/themes/voidline#voidline> }",
+            )
+            .unwrap();
+
+        // Exact bytes the picker sends. Newlines split into separate dispatch
+        // lines (the WS server does the same in production).
+        let target = "http://resonator.network/v2/themes/tokyo-night#tokyoNight";
+        let radio_pred = "<http://resonator.network/v2/radio#hasTheme>";
+        let sparql = format!(
+            "DELETE {{ <urn:radio:self> {radio_pred} ?old }} \
+             INSERT {{ <urn:radio:self> {radio_pred} <{target}> }} \
+             WHERE  {{ OPTIONAL {{ <urn:radio:self> {radio_pred} ?old }} }}"
+        );
+        let wire = format!(
+            "@prefix sp: <http://spinrdf.org/sp#> .\n\
+             @prefix design: <http://resonator.network/v2/design#> .\n\
+             [] a sp:Modify ; sp:text \"{sparql}\" .\n\
+             [] a design:ResolveActiveTheme .\n"
+        );
+
+        let mut out = TestOut::new();
+        for line in wire.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            dispatch(line, &store, &dag, None, "", &mut out);
+        }
+
+        let msgs = out.messages();
+        // No antenna:Error messages — the SPARQL update parses cleanly.
+        for m in &msgs {
+            assert!(
+                !m.contains("antenna:Error"),
+                "unexpected error in OUT bundle: {m}",
+            );
+        }
+        // Bundle includes a canvas binding from the tokyo-night namespace —
+        // proving the swap actually flipped, not just that voidline was read.
+        let joined = msgs.join("\n");
+        assert!(
+            joined.contains("themes/tokyo-night#"),
+            "bundle should reference tokyo-night tokens after swap",
+        );
+        // And the `copy` icon must reach Station: a `design:name "copy"` line
+        // and a matching `design:svgPath` line on the same blank-node subject.
+        let mut copy_subject: Option<&str> = None;
+        for m in &msgs {
+            if m.contains("design#name") && m.contains("\"copy\"") {
+                if let Some(s) = m.split_whitespace().next() {
+                    copy_subject = Some(s);
+                }
+            }
+        }
+        let subj = copy_subject
+            .expect("post-swap bundle must include a design:name \"copy\" triple");
+        let mut svg_paired = false;
+        for m in &msgs {
+            if m.starts_with(subj) && m.contains("design#svgPath") {
+                svg_paired = true;
+                break;
+            }
+        }
+        assert!(
+            svg_paired,
+            "the design:name \"copy\" subject must also carry a design:svgPath triple in the same OUT bundle (Station's _PendingToken keys on the subject string)",
+        );
+    }
+
     #[test]
     fn extract_type_design() {
         let line = "[] a design:ResolveActiveTheme .";

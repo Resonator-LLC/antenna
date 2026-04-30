@@ -145,15 +145,24 @@ mod tests {
         workspace_root().join(p)
     }
 
-    /// Build a fresh in-memory store with vocab, both themes, and the
-    /// resolver loaded.
+    /// Build a fresh in-memory store with vocab, every shipped theme, and
+    /// the resolver loaded.
     fn build_store() -> RdfStore {
         let store = RdfStore::open(None).expect("in-memory store");
-        for path in [
-            "arch/ontology/design.ttl",
-            "themes/voidline/voidline.ttl",
-            "themes/voidline-cb-safe/voidline-cb-safe.ttl",
-        ] {
+        let bundles: Vec<String> = std::iter::once("arch/ontology/design.ttl".to_string())
+            .chain(std::iter::once(
+                "themes/voidline/voidline.ttl".to_string(),
+            ))
+            .chain(std::iter::once(
+                "themes/voidline-cb-safe/voidline-cb-safe.ttl".to_string(),
+            ))
+            .chain(
+                TERMINAL_THEMES
+                    .iter()
+                    .map(|(dir, _local)| format!("themes/{dir}/{dir}.ttl")),
+            )
+            .collect();
+        for path in &bundles {
             let ttl = std::fs::read_to_string(rel(path)).expect("read theme file");
             store.insert_turtle(&ttl).expect("insert theme");
         }
@@ -161,6 +170,23 @@ mod tests {
             .expect("load resolver");
         store
     }
+
+    /// Terminal-derived themes shipped alongside voidline. Tuple is
+    /// (directory under `themes/` == file stem, local IRI name). Tested for
+    /// role completeness en masse below so a typo in any new bundle surfaces
+    /// in CI.
+    const TERMINAL_THEMES: &[(&str, &str)] = &[
+        ("tokyo-night",      "tokyoNight"),
+        ("tokyo-night-day",  "tokyoNightDay"),
+        ("catppuccin-mocha", "catppuccinMocha"),
+        ("catppuccin-latte", "catppuccinLatte"),
+        ("dracula",          "dracula"),
+        ("dracula-light",    "draculaLight"),
+        ("nord",             "nord"),
+        ("nord-light",       "nordLight"),
+        ("rose-pine",        "rosePine"),
+        ("rose-pine-dawn",   "rosePineDawn"),
+    ];
 
     fn activate(store: &RdfStore, theme_iri: &str) {
         let upd = format!(
@@ -547,5 +573,188 @@ mod tests {
             "unresolved radio:hasTheme URI yields empty graph; got {} triples",
             triples.len(),
         );
+    }
+
+    // ---- terminal-derived themes -------------------------------------------
+
+    /// Each terminal-derived bundle must bind every role voidline declares.
+    /// This is the parametric guard that catches a missed binding in any new
+    /// theme: the role count must equal `VOIDLINE_ROLE_COUNT` (54 colour
+    /// roles + 15 type roles, all inherited via design:extends voidline plus
+    /// a wholesale colour-role rebind).
+    #[test]
+    fn terminal_themes_bind_every_role() {
+        let store = build_store();
+        for (dir, local) in TERMINAL_THEMES {
+            let ns = format!("http://resonator.network/v2/themes/{dir}#");
+            let theme_iri = format!("{ns}{local}");
+            activate(&store, &theme_iri);
+            let triples =
+                resolve_active_theme(&store).expect(&format!("resolve {local}"));
+            let roles = role_map(&triples);
+            assert_eq!(
+                roles.len(),
+                VOIDLINE_ROLE_COUNT,
+                "{local} must bind {VOIDLINE_ROLE_COUNT} roles (54 colour + 15 type via voidline inheritance); got {}",
+                roles.len(),
+            );
+        }
+    }
+
+    /// What goes over the wire after a theme swap, line-by-line. The
+    /// `{subject} {predicate} {object} .` serialization is exactly what
+    /// dispatch.rs's handle_design emits — this dumps it for a single theme
+    /// so we can eyeball whether icon name + svgPath chain by blank-node
+    /// label or not (Station's ThemeStore depends on that chaining).
+    #[test]
+    #[ignore]
+    fn dump_resolved_wire_format_for_tokyo_night() {
+        let store = build_store();
+        let theme_iri = "http://resonator.network/v2/themes/tokyo-night#tokyoNight";
+        activate(&store, theme_iri);
+        let triples = resolve_active_theme(&store).expect("resolve");
+        for t in triples
+            .iter()
+            .filter(|t| {
+                t.predicate.to_string().contains("name")
+                    || t.predicate.to_string().contains("svgPath")
+            })
+            .take(15)
+        {
+            eprintln!("{} {} {} .", t.subject, t.predicate, t.object);
+        }
+    }
+
+    /// Icons declared via design:hasToken on voidline must reach extending
+    /// themes through the SPIN resolver's `design:extends*` walk *and* the
+    /// triples for each icon must chain by blank-node label, so Station's
+    /// ThemeStore can accumulate `design:name` + `design:svgPath` into the
+    /// same _PendingToken. Without this guard, switching to e.g. Tokyo Night
+    /// would leave StationIcon asserting on every glyph (`theme has no icon
+    /// "copy"`).
+    #[test]
+    fn terminal_themes_inherit_voidline_icons() {
+        let store = build_store();
+        for (dir, local) in TERMINAL_THEMES {
+            let ns = format!("http://resonator.network/v2/themes/{dir}#");
+            let theme_iri = format!("{ns}{local}");
+            activate(&store, &theme_iri);
+            let triples =
+                resolve_active_theme(&store).expect(&format!("resolve {local}"));
+
+            let svg_pred = format!("<{DESIGN_NS}svgPath>");
+            let name_pred = format!("<{DESIGN_NS}name>");
+
+            // Collect (subject -> name) and (subject -> svgPath) maps so we
+            // can verify the triples for one icon share a subject.
+            let mut names: HashMap<String, String> = HashMap::new();
+            let mut svgs: HashMap<String, String> = HashMap::new();
+            for t in &triples {
+                let p = t.predicate.to_string();
+                if p == name_pred {
+                    names.insert(t.subject.to_string(), t.object.to_string());
+                }
+                if p == svg_pred {
+                    svgs.insert(t.subject.to_string(), t.object.to_string());
+                }
+            }
+
+            // Pair them up: every icon needs both a name and an svgPath
+            // emitted under the same subject term.
+            let mut copy_seen = false;
+            for (subject, raw_name) in &names {
+                let stripped = raw_name.trim_matches('"');
+                if stripped == "copy" && svgs.contains_key(subject) {
+                    copy_seen = true;
+                }
+            }
+            assert!(
+                copy_seen,
+                "{local}: an icon named \"copy\" must resolve with both design:name and design:svgPath chained by blank-node label",
+            );
+        }
+    }
+
+    /// Driving the picker swaps `radio:hasTheme` rather than flipping
+    /// `design:active true`. This regression test exercises the exact wire
+    /// format the picker emits — it verifies the SPARQL update lands the
+    /// new IRI and the next resolve returns the inherited icons under it.
+    /// Without this guard, the live messenger crash (`StationIcon: theme
+    /// has no icon "copy"`) wouldn't be caught by tests that activate via
+    /// the design:active path instead.
+    #[test]
+    fn radio_has_theme_swap_resolves_inherited_icons() {
+        let store = build_store();
+        // Mimic the messenger seed: radio starts on voidline.
+        set_radio_theme(&store, "http://resonator.network/v2/themes/voidline#voidline");
+
+        // The exact SPARQL the Station picker emits, parametrised on the
+        // target theme. Mirrors station/lib/ui/components/theme_picker.dart.
+        let target = "http://resonator.network/v2/themes/tokyo-night#tokyoNight";
+        let radio_pred = "<http://resonator.network/v2/radio#hasTheme>";
+        let upd = format!(
+            "DELETE {{ <urn:radio:self> {radio_pred} ?old }} \
+             INSERT {{ <urn:radio:self> {radio_pred} <{target}> }} \
+             WHERE  {{ OPTIONAL {{ <urn:radio:self> {radio_pred} ?old }} }}"
+        );
+        store.update(&upd).expect("apply picker swap");
+
+        let triples = resolve_active_theme(&store).expect("resolve after swap");
+        let svg_pred = format!("<{DESIGN_NS}svgPath>");
+        let name_pred = format!("<{DESIGN_NS}name>");
+        let mut copy_seen = false;
+        for t in &triples {
+            if t.predicate.to_string() == name_pred
+                && t.object.to_string().trim_matches('"') == "copy"
+            {
+                let subject = t.subject.to_string();
+                if triples
+                    .iter()
+                    .any(|u| u.subject.to_string() == subject && u.predicate.to_string() == svg_pred)
+                {
+                    copy_seen = true;
+                    break;
+                }
+            }
+        }
+        assert!(
+            copy_seen,
+            "post-swap resolve must still emit the \"copy\" icon (name + svgPath chained)",
+        );
+
+        // And the canvas role must come from tokyoNight's own namespace —
+        // proving the swap actually flipped, not just that voidline's data
+        // was read.
+        let roles = role_map(&triples);
+        let canvas = roles
+            .get(&iri(DESIGN_NS, "canvas"))
+            .expect("canvas role bound after swap");
+        assert!(
+            canvas.contains("tokyo-night"),
+            "post-swap canvas must resolve to a tokyo-night token; got {canvas}",
+        );
+    }
+
+    /// Each terminal-derived bundle's canvas binding must come from its OWN
+    /// namespace, not voidline's. Catches the easy mistake of pasting a
+    /// binding that points at `voidline:voidLine` instead of the local token.
+    #[test]
+    fn terminal_themes_bind_canvas_from_own_namespace() {
+        let store = build_store();
+        for (dir, local) in TERMINAL_THEMES {
+            let ns = format!("http://resonator.network/v2/themes/{dir}#");
+            let theme_iri = format!("{ns}{local}");
+            activate(&store, &theme_iri);
+            let triples =
+                resolve_active_theme(&store).expect(&format!("resolve {local}"));
+            let roles = role_map(&triples);
+            let canvas = roles
+                .get(&iri(DESIGN_NS, "canvas"))
+                .unwrap_or_else(|| panic!("{local}: canvas role unbound"));
+            assert!(
+                canvas.contains(dir),
+                "{local}: canvas should resolve to a token in own namespace, got {canvas}",
+            );
+        }
     }
 }
