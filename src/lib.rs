@@ -40,6 +40,13 @@ const DESIGN_BUNDLE: &[&str] = &[
     include_str!("../../themes/voidline-cb-safe/voidline-cb-safe.ttl"),
 ];
 
+/// Emoji catalog — categorised glyph table loaded into every antenna so
+/// any radio that wants the press-and-hold full picker (messenger today,
+/// others later) can SPARQL-walk it without shipping its own copy. Forks
+/// can layer larger catalogs by emitting more `antenna:EmojiCategory`
+/// nodes at seed time.
+const EMOJI_CATALOG_TTL: &str = include_str!("../../arch/ontology/emoji.ttl");
+
 /// SPIN-encoded theme resolver — three CONSTRUCT queries the dispatch
 /// handler runs against the store on `design:ResolveActiveTheme`.
 const THEME_RESOLVER_TTL: &str = include_str!("../spin/theme_resolver.spin.ttl");
@@ -73,7 +80,8 @@ impl AntennaContext {
             store.insert_turtle(ttl)?;
         }
         theme::load_resolver_str(&store, THEME_RESOLVER_TTL)?;
-        tracing::info!(target: "DESIGN", "loaded design ontology + voidline themes + resolver");
+        store.insert_turtle(EMOJI_CATALOG_TTL)?;
+        tracing::info!(target: "DESIGN", "loaded design ontology + voidline themes + resolver + emoji catalog");
 
         if let Some(path) = pipeline_path {
             let ttl = std::fs::read_to_string(path)?;
@@ -283,6 +291,36 @@ mod tests {
         assert!(builder.store_path.is_none());
         assert!(builder.pipeline_path.is_none());
         assert!(builder.seed_path.is_none());
+    }
+
+    /// Phase 3 acceptance: the antenna binary must boot with the emoji
+    /// catalog pre-loaded so any radio's press-and-hold picker can walk
+    /// it via store.query() without shipping its own catalog.
+    #[test]
+    fn emoji_catalog_loads_with_at_least_one_category_per_section() {
+        let store = RdfStore::open(None).expect("in-memory store");
+        store.insert_turtle(EMOJI_CATALOG_TTL).expect("insert emoji catalog");
+
+        let results = store
+            .query(
+                "SELECT (COUNT(DISTINCT ?cat) AS ?n) WHERE { \
+                    ?cat a <http://resonator.network/v2/antenna#EmojiCategory> \
+                }",
+            )
+            .expect("emoji category count query");
+        let mut count_str = String::new();
+        if let oxigraph::sparql::QueryResults::Solutions(solutions) = results {
+            for sol in solutions.flatten() {
+                if let Some(term) = sol.get("n") {
+                    count_str = term.to_string();
+                    break;
+                }
+            }
+        }
+        assert!(
+            count_str.contains("\"9\"") || count_str.contains("9"),
+            "emoji catalog should declare 9 categories on a fresh boot, got {count_str}",
+        );
     }
 
     /// Phase 1c-1 acceptance: the antenna binary must boot with the design

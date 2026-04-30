@@ -112,11 +112,14 @@ fn run_construct(store: &RdfStore, sparql: &str, out: &mut Vec<Triple>) -> Resul
     }
 }
 
-/// Number of role bindings voidline declares: 47 color roles + 15 type
-/// roles. Exposed for tests and for callers wanting to sanity-check
+/// Number of role bindings voidline declares: 54 color roles + 15 type
+/// roles. (Press-and-hold overlay added 7 colour roles in the messenger
+/// reactions rewrite — overlayScrim, reactionBarBg, reactionBarBorder,
+/// menuSurface, menuDivider, menuDestructiveBg, menuDestructiveFg.)
+/// Exposed for tests and for callers wanting to sanity-check
 /// completeness; not load-bearing in the resolver itself.
 #[doc(hidden)]
-pub const VOIDLINE_ROLE_COUNT: usize = 62;
+pub const VOIDLINE_ROLE_COUNT: usize = 69;
 
 // ---------------------------------------------------------------------------
 // Tests
