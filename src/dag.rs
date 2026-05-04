@@ -15,6 +15,10 @@ use crate::script_vm::{QueryRequest, ScriptVm};
 use crate::store::RdfStore;
 
 const ANTENNA_NS: &str = "http://resonator.network/v2/antenna#";
+/// IRI of the high-frequency platform clock channel. Broadcasts and inbox-recv
+/// log lines for this channel are demoted to TRACE so they don't drown out
+/// other DEBUG output at the platform clock cadence (40-1000 Hz per tick).
+const ANTENNA_CLOCK_IRI: &str = "http://resonator.network/v2/antenna#clock";
 const DEFAULT_CHANNEL_CAPACITY: usize = 65536;
 const DEFAULT_JS_MEMORY_LIMIT: usize = 32 * 1024 * 1024; // 32 MB per script
 
@@ -218,12 +222,10 @@ impl Dag {
                                     if turtle.is_empty() {
                                         continue;
                                     }
-                                    tracing::debug!(
-                                        target: "SCRIPT",
-                                        node = %node_uri,
-                                        channel = %inbox_channel_uris[i],
-                                        bytes = turtle.len(),
-                                        "inbox recv",
+                                    log_script_inbox_recv(
+                                        &node_uri,
+                                        &inbox_channel_uris[i],
+                                        turtle.len(),
                                     );
                                     match std::panic::catch_unwind(
                                         std::panic::AssertUnwindSafe(|| {
@@ -535,13 +537,7 @@ impl Dag {
     /// Broadcast a Turtle string to all subscribers of a named channel.
     pub fn broadcast(&self, channel_uri: &str, turtle: &str) {
         if let Some(writers) = self.channel_writers.get(channel_uri) {
-            tracing::debug!(
-                target: "CHANNEL",
-                channel = %channel_uri,
-                subscribers = writers.len(),
-                bytes = turtle.len(),
-                "broadcast",
-            );
+            log_channel_broadcast(channel_uri, writers.len(), turtle.len());
             for writer in writers {
                 let _ = writer.send(turtle);
             }
@@ -556,6 +552,58 @@ impl Dag {
     /// Broadcast to the afterInsert channel.
     pub fn after_insert(&self, turtle: &str) {
         self.broadcast(&format!("{}afterInsert", ANTENNA_NS), turtle);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Logging helpers
+// ---------------------------------------------------------------------------
+//
+// The platform clock channel ticks at 40-1000 Hz; logging every broadcast
+// and every script-inbox recv at DEBUG drowns out everything else. These
+// helpers split the call between TRACE (clock) and DEBUG (everything else)
+// so a developer running with `RUST_LOG=debug` still gets the per-event
+// signal for non-clock channels without the clock noise.
+
+/// Log a channel-broadcast event. Demotes clock-channel broadcasts to TRACE.
+fn log_channel_broadcast(channel_uri: &str, subscribers: usize, bytes: usize) {
+    if channel_uri == ANTENNA_CLOCK_IRI {
+        tracing::trace!(
+            target: "CHANNEL",
+            channel = %channel_uri,
+            subscribers,
+            bytes,
+            "broadcast",
+        );
+    } else {
+        tracing::debug!(
+            target: "CHANNEL",
+            channel = %channel_uri,
+            subscribers,
+            bytes,
+            "broadcast",
+        );
+    }
+}
+
+/// Log a script-inbox recv event. Demotes clock-channel recvs to TRACE.
+fn log_script_inbox_recv(node_uri: &str, channel_uri: &str, bytes: usize) {
+    if channel_uri == ANTENNA_CLOCK_IRI {
+        tracing::trace!(
+            target: "SCRIPT",
+            node = %node_uri,
+            channel = %channel_uri,
+            bytes,
+            "inbox recv",
+        );
+    } else {
+        tracing::debug!(
+            target: "SCRIPT",
+            node = %node_uri,
+            channel = %channel_uri,
+            bytes,
+            "inbox recv",
+        );
     }
 }
 
@@ -715,4 +763,104 @@ fn short_uri(uri: &str) -> &str {
         .or_else(|| uri.rsplit_once(':'))
         .map(|(_, name)| name)
         .unwrap_or(uri)
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+    use tracing::{Event, Level, Metadata, Subscriber};
+    use tracing::span::{Attributes, Id, Record};
+
+    /// Minimal `tracing::Subscriber` that records (level, target) for every
+    /// event so unit tests can assert on log levels. We avoid pulling in
+    /// `tracing-test` as a dev-dependency; `tracing-subscriber` is already
+    /// in `Cargo.toml` but its `Layer` API still requires more boilerplate
+    /// than this hand-rolled subscriber.
+    #[derive(Clone, Default)]
+    struct CaptureSubscriber {
+        events: Arc<Mutex<Vec<(Level, String)>>>,
+    }
+
+    impl Subscriber for CaptureSubscriber {
+        fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _attrs: &Attributes<'_>) -> Id {
+            Id::from_u64(1)
+        }
+        fn record(&self, _span: &Id, _values: &Record<'_>) {}
+        fn record_follows_from(&self, _span: &Id, _follows: &Id) {}
+        fn event(&self, event: &Event<'_>) {
+            let meta = event.metadata();
+            self.events
+                .lock()
+                .unwrap()
+                .push((*meta.level(), meta.target().to_string()));
+        }
+        fn enter(&self, _span: &Id) {}
+        fn exit(&self, _span: &Id) {}
+    }
+
+    fn run_with_capture<F: FnOnce()>(f: F) -> Vec<(Level, String)> {
+        let sub = CaptureSubscriber::default();
+        let events = Arc::clone(&sub.events);
+        tracing::subscriber::with_default(sub, f);
+        let guard = events.lock().unwrap();
+        guard.clone()
+    }
+
+    #[test]
+    fn log_channel_broadcast_clock_iri_is_trace() {
+        let captured = run_with_capture(|| {
+            log_channel_broadcast(ANTENNA_CLOCK_IRI, 1, 54);
+        });
+        assert_eq!(
+            captured,
+            vec![(Level::TRACE, "CHANNEL".to_string())],
+            "clock-channel broadcast must log at TRACE on the CHANNEL target",
+        );
+    }
+
+    #[test]
+    fn log_channel_broadcast_non_clock_iri_is_debug() {
+        let other = "http://resonator.network/v2/antenna#beforeInsert";
+        let captured = run_with_capture(|| {
+            log_channel_broadcast(other, 2, 128);
+        });
+        assert_eq!(
+            captured,
+            vec![(Level::DEBUG, "CHANNEL".to_string())],
+            "non-clock channel broadcasts must remain at DEBUG",
+        );
+    }
+
+    #[test]
+    fn log_script_inbox_recv_clock_iri_is_trace() {
+        let captured = run_with_capture(|| {
+            log_script_inbox_recv("urn:msg:node:main", ANTENNA_CLOCK_IRI, 54);
+        });
+        assert_eq!(
+            captured,
+            vec![(Level::TRACE, "SCRIPT".to_string())],
+            "clock-channel inbox recv must log at TRACE on the SCRIPT target",
+        );
+    }
+
+    #[test]
+    fn log_script_inbox_recv_non_clock_iri_is_debug() {
+        let other = "http://resonator.network/v2/antenna#beforeInsert";
+        let captured = run_with_capture(|| {
+            log_script_inbox_recv("urn:msg:node:main", other, 128);
+        });
+        assert_eq!(
+            captured,
+            vec![(Level::DEBUG, "SCRIPT".to_string())],
+            "non-clock channel inbox recv must remain at DEBUG",
+        );
+    }
 }

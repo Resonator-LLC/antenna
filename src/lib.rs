@@ -61,6 +61,37 @@ const EMOJI_CATALOG_TTL: &str = include_str!("../../arch/ontology/emoji.ttl");
 /// handler runs against the store on `design:ResolveActiveTheme`.
 const THEME_RESOLVER_TTL: &str = include_str!("../spin/theme_resolver.spin.ttl");
 
+/// Replace the pipeline triples in the store with the contents of `ttl`.
+///
+/// Persistent (`--store <path>`) Oxigraph stores accumulate one
+/// `<urn:…:src:main> antenna:body "…"` triple per boot when run.sh edits
+/// pipeline.ttl and restarts. `query_script_nodes` (dag.rs) has no
+/// `ORDER BY` and uses `or_insert_with` (first-write-wins) so a stale
+/// boot's body silently wins on subsequent runs — debuggable only by
+/// `rm -rf $STORE_DIR`. Wiping the type-anchored ScriptNode and
+/// ScriptSource triples before the new INSERT keeps radio-authored RDF
+/// (drafts, peer-cache, design bundle) intact while making
+/// pipeline.ttl-as-single-source-of-truth actually hold across restarts.
+///
+/// Pattern (b) from the proposal in arch/improvement-suggestions.md
+/// § "Test roundtrip speedups (2026-05)" #1 — type-targeted, not
+/// URI-targeted, on the radio convention "one pipeline file = one source
+/// of truth for all script nodes." On a fresh store both DELETEs match
+/// nothing and behave as no-ops.
+pub fn replace_pipeline(store: &RdfStore, ttl: &str) -> Result<()> {
+    const PIPELINE_RESET_NODES: &str = "
+        PREFIX antenna: <http://resonator.network/v2/antenna#>
+        DELETE WHERE { ?s a antenna:ScriptNode ; ?p ?o }
+    ";
+    const PIPELINE_RESET_SOURCES: &str = "
+        PREFIX antenna: <http://resonator.network/v2/antenna#>
+        DELETE WHERE { ?s a antenna:ScriptSource ; ?p ?o }
+    ";
+    store.update(PIPELINE_RESET_NODES)?;
+    store.update(PIPELINE_RESET_SOURCES)?;
+    store.insert_turtle(ttl)
+}
+
 pub struct AntennaContext {
     pub store: RdfStore,
     pub dag: Dag,
@@ -95,7 +126,7 @@ impl AntennaContext {
 
         if let Some(path) = pipeline_path {
             let ttl = std::fs::read_to_string(path)?;
-            store.insert_turtle(&ttl)?;
+            replace_pipeline(&store, &ttl)?;
             tracing::info!(target: "PIPELINE", path, "loaded pipeline");
         }
 
