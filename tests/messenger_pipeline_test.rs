@@ -202,6 +202,54 @@ fn self_id_event(self_uri: &str) -> String {
     )
 }
 
+/// M4-A — synthetic carrier:FileRecv. Mirrors the carrier emit shape per
+/// `carrier/src/turtle_emit.c:275-292` — conversationId / contactUri /
+/// messageId / fileId (quoted strings), filename (quoted), size (raw
+/// integer literal). Wrapped as antenna:Test so dispatch routes the line
+/// through the script's beforeInsert broadcast (the same trick reaction_event
+/// + contact_online_event use), letting the carrier:FileRecv else-if branch
+/// in pipeline.ttl pick it up via substring match.
+fn file_recv_event(
+    conv_id: &str,
+    sender_uri: &str,
+    msg_id: &str,
+    file_id: &str,
+    filename: &str,
+    size: u64,
+) -> String {
+    // M4-InvA — `carrier:account` is REQUIRED on the FileRecv event so
+    // the pipeline's auto-accept branch can forward it to AcceptFile
+    // (carrier rejects AcceptFile without account per
+    // carrier/src/turtle_parse.c:415-431). turtle_emit.c:275 always
+    // sets account on real FileRecv events; the fixture must mirror
+    // that contract or the test diverges from production behavior.
+    format!(
+        "[] a antenna:Test ; \
+         carrier:FileRecv \"_\" ; \
+         carrier:account \"{TEST_ACCOUNT_ID}\" ; \
+         carrier:conversationId \"{conv_id}\" ; \
+         carrier:contactUri \"{sender_uri}\" ; \
+         carrier:messageId \"{msg_id}\" ; \
+         carrier:fileId \"{file_id}\" ; \
+         carrier:filename \"{filename}\" ; \
+         carrier:size {size} ."
+    )
+}
+
+/// M4-A — synthetic carrier:FileComplete. Per
+/// `carrier/src/turtle_emit.c:303-312`: conversationId / fileId / status
+/// (status="finished" on success). The script's else-if branch ratchets
+/// the attachment state to `complete` when status="finished".
+fn file_complete_event(conv_id: &str, file_id: &str, status: &str) -> String {
+    format!(
+        "[] a antenna:Test ; \
+         carrier:FileComplete \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ; \
+         carrier:fileId \"{file_id}\" ; \
+         carrier:status \"{status}\" ."
+    )
+}
+
 /// Pull a peer-cache field out of the store by SPARQL. Used to assert
 /// the `<urn:msg:peer-cache:<uri>> messenger:online | displayName` triple
 /// the M1-B brief (§5) requires for `bin/station sparql` smoke-tests.
@@ -3706,6 +3754,550 @@ fn teleport_urn_handler_emits_antenna_teleport() {
     );
 }
 
+// M4-A — UC4 Attachment Inline Ladder, tier 1 (file event wiring + bubble
+// icon). carrier:FileRecv mints a messenger:Attachment placed object beside
+// its parent bubble, auto-emits carrier:AcceptFile, and rebuilds tier-1 row
+// (paperclip + filename) on every chat rebuild. carrier:FileComplete
+// settles state to `complete`.
+
+const ATTACH_FILE_ID: &str = "abc123fileid";
+const ATTACH_FILENAME: &str = "secret.jpg";
+// M4-InvA — synthetic account ID for FileRecv → AcceptFile round-trip
+// fixtures. Real libjami account IDs are 16-hex; the test only needs
+// a non-empty string so the pipeline's `account` truthy gate fires
+// and the AcceptFile emit carries the field through.
+const TEST_ACCOUNT_ID: &str = "abc1234567890def";
+
+fn attach_uri(file_id: &str) -> String {
+    format!("urn:msg:attach:{file_id}")
+}
+
+/// Settle that ALSO captures every raw emit (pre-dispatch) into `raw`.
+/// Needed for M4-A's carrier:AcceptFile assertion: dispatch::dispatch with
+/// carrier=None drops carrier:* emits on the floor without pushing to
+/// `out`, so the only place to observe the auto-accept emit is the raw
+/// pump_emits stream. Mirrors `settle()`'s loop shape exactly otherwise.
+fn settle_capturing_emits(
+    dag: &Dag,
+    store: &RdfStore,
+    out: &mut CaptureOut,
+    raw: &mut Vec<String>,
+    max_iters: usize,
+) {
+    const EMPTY_BREAK: usize = 5;
+    let mut empty_streak = 0usize;
+    let mut saw_emit = false;
+    for _ in 0..max_iters {
+        std::thread::sleep(Duration::from_millis(40));
+        dag.pump_queries(store);
+        let emits = dag.pump_emits();
+        if emits.is_empty() {
+            empty_streak += 1;
+            if saw_emit && empty_streak >= EMPTY_BREAK {
+                break;
+            }
+            continue;
+        }
+        saw_emit = true;
+        empty_streak = 0;
+        for turtle in &emits {
+            raw.push(turtle.clone());
+            dispatch::dispatch(turtle, store, dag, None, "", out);
+        }
+    }
+}
+
+#[test]
+fn file_recv_mints_attachment_placed_object_and_emits_accept() {
+    // Inject a TextMessage so the parent bubble exists and bubbleAnchor
+    // is populated. Then inject FileRecv. Assert:
+    //   1. carrier:AcceptFile is auto-emitted with the right
+    //      conversationId / messageId / fileId / path predicates.
+    //   2. messenger:Attachment placed object exists with x/y/worldWidth
+    //      /worldHeight + 4 antenna:lod blocks.
+    //   3. messenger:fileId / fileName / fileSize / state / bubbleRef
+    //      etc. predicates are present per M4-attachments.md § 3.
+    //   4. Tier-1 widget contains the filename literal so M4.2 ("paperclip
+    //      + filename visible at default zoom") is provable from the store.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    // Boot the script.
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    // Drive ConversationReady so subsequent emits land cleanly. The router
+    // gates a few paths on globalThis.conversationId; use the bubble-test
+    // pattern.
+    let conv_id = "conv-m4a-files";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    // Parent bubble — message arrived with the file. The mid is the
+    // Swarm commit id; carrier:FileRecv carries the same mid.
+    let parent_mid = "mid-with-file-1234567890";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "here is the spec"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    // FileRecv arrives carrying our parent bubble's mid. Capture raw emits
+    // so the carrier:AcceptFile auto-emit is observable (carrier=None
+    // dispatch drops carrier:* lines without pushing them to out).
+    let mut raw_emits: Vec<String> = Vec::new();
+    dispatch::dispatch(
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            ATTACH_FILE_ID,
+            ATTACH_FILENAME,
+            500_000,
+        ),
+        &store, &dag, None, "", &mut out,
+    );
+    settle_capturing_emits(&dag, &store, &mut out, &mut raw_emits, 20);
+
+    // (1) carrier:AcceptFile auto-emitted.
+    //
+    // M4-InvA — assertions cover EVERY field the carrier dispatcher
+    // requires (carrier/src/turtle_parse.c:415-431 — account +
+    // conversationId + messageId + fileId + path; all are
+    // require_account / explicit-NULL-check gated). The original M4-A
+    // assertion set was missing `carrier:account`, which let a regression
+    // ship that broke every persistent-setup transfer with a silent
+    // MissingField error → libjami `closed_by_host` close-out. Keeping
+    // the field set here in lockstep with `require_account` /
+    // `find_pred(stmt, …)` checks in the dispatcher means a future
+    // required field can't slip through the same hole.
+    let accept = raw_emits
+        .iter()
+        .find(|m| m.contains("carrier:AcceptFile"))
+        .expect("carrier:FileRecv must trigger an auto-emit of carrier:AcceptFile");
+    assert!(
+        accept.contains(&format!("carrier:account \"{TEST_ACCOUNT_ID}\"")),
+        "AcceptFile must carry carrier:account (carrier dispatcher require_account; \
+         M4-InvA regression) — got: {accept}"
+    );
+    assert!(
+        accept.contains(&format!("carrier:fileId \"{ATTACH_FILE_ID}\"")),
+        "AcceptFile must carry carrier:fileId — got: {accept}"
+    );
+    assert!(
+        accept.contains(&format!("carrier:messageId \"{parent_mid}\"")),
+        "AcceptFile must carry carrier:messageId — got: {accept}"
+    );
+    assert!(
+        accept.contains(&format!("carrier:conversationId \"{conv_id}\"")),
+        "AcceptFile must carry carrier:conversationId — got: {accept}"
+    );
+    assert!(
+        accept.contains("carrier:path \"")
+            && accept.contains(&format!("/{ATTACH_FILE_ID}/{ATTACH_FILENAME}\"")),
+        "AcceptFile must carry carrier:path with <fileId>/<filename> tail — got: {accept}"
+    );
+
+    // (2) messenger:Attachment placed object exists.
+    let auri = attach_uri(ATTACH_FILE_ID);
+    let geom = placed_geom(&store, &auri)
+        .expect("messenger:Attachment placed object must emit with x/y/worldWidth/worldHeight");
+    assert!(geom.w > 0.0 && geom.w < 200.0,
+        "attachment worldWidth must be ~90 — got: {}", geom.w);
+    assert!(geom.h > 0.0 && geom.h < 50.0,
+        "attachment worldHeight must be tier-1 row height — got: {}", geom.h);
+
+    // 4 LOD blocks (icon / thumbnail / provenance / preview).
+    assert_eq!(
+        lod_count(&store, &auri),
+        4,
+        "M4-A attachment must emit 4 LOD blocks (icon / thumbnail / provenance / preview)"
+    );
+
+    // (3) Per-tier metadata triples per M4-attachments.md § 3.
+    let q_filename = format!(
+        "ASK WHERE {{ <{auri}> <http://resonator.network/v2/messenger#fileName> \"{ATTACH_FILENAME}\" }}"
+    );
+    match store.query(&q_filename).expect("ASK fileName") {
+        QueryResults::Boolean(b) => assert!(b, "messenger:fileName triple must be present"),
+        _ => panic!("ASK must return boolean"),
+    }
+
+    let q_state = format!(
+        "ASK WHERE {{ <{auri}> <http://resonator.network/v2/messenger#state> \"pending\" }}"
+    );
+    match store.query(&q_state).expect("ASK state") {
+        QueryResults::Boolean(b) => {
+            assert!(b, "fresh attachment must be in `pending` state immediately after FileRecv");
+        }
+        _ => panic!("ASK must return boolean"),
+    }
+
+    let q_bubble_ref = format!(
+        "ASK WHERE {{ <{auri}> <http://resonator.network/v2/messenger#bubbleRef> <urn:msg:bubble:{parent_mid}> }}"
+    );
+    match store.query(&q_bubble_ref).expect("ASK bubbleRef") {
+        QueryResults::Boolean(b) => {
+            assert!(b, "messenger:bubbleRef must point at urn:msg:bubble:<parent_mid>");
+        }
+        _ => panic!("ASK must return boolean"),
+    }
+
+    // Type triple: a antenna:Object , messenger:Attachment.
+    let q_type = format!(
+        "ASK WHERE {{ <{auri}> a <http://resonator.network/v2/messenger#Attachment> }}"
+    );
+    match store.query(&q_type).expect("ASK Attachment type") {
+        QueryResults::Boolean(b) => {
+            assert!(b, "attachment must be typed messenger:Attachment");
+        }
+        _ => panic!("ASK must return boolean"),
+    }
+
+    // (4) Tier-1 widget DSL contains the filename literal — proves M4.2
+    // acceptance (paperclip + filename visible).
+    let widget = lod_widget_at(&store, &auri, 60.0)
+        .expect("tier-1 LOD (below=60) must carry a widget literal");
+    assert!(
+        widget.contains(ATTACH_FILENAME),
+        "tier-1 widget DSL must contain filename literal — got: {widget}"
+    );
+    let tier_label = lod_tier_label_at(&store, &auri, 60.0)
+        .expect("tier-1 LOD must carry tierLabel");
+    assert_eq!(tier_label, "icon", "tier-1 label must be `icon`");
+}
+
+#[test]
+fn file_complete_settles_attachment_state_to_complete() {
+    // Drive FileRecv → FileComplete (status="finished") and assert the
+    // attachment's messenger:state ratchets to `complete`.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let conv_id = "conv-m4a-complete";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let parent_mid = "mid-complete-12345";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "ack"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    dispatch::dispatch(
+        &file_recv_event(conv_id, "did:tox:peer", parent_mid, "fid-complete", "doc.txt", 1024),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 20);
+
+    dispatch::dispatch(
+        &file_complete_event(conv_id, "fid-complete", "finished"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 20);
+
+    let auri = attach_uri("fid-complete");
+    let q_state = format!(
+        "ASK WHERE {{ <{auri}> <http://resonator.network/v2/messenger#state> \"complete\" }}"
+    );
+    match store.query(&q_state).expect("ASK state=complete") {
+        QueryResults::Boolean(b) => {
+            assert!(
+                b,
+                "FileComplete with status=finished must settle state to `complete`"
+            );
+        }
+        _ => panic!("ASK must return boolean"),
+    }
+}
+
+#[test]
+fn file_recv_attachment_positioned_right_of_received_bubble() {
+    // Bubble for received message sits LEFT-aligned (bubble centerX < 0
+    // panel centerline). Attachment must be positioned to the RIGHT of
+    // the bubble (attachment x > bubble x + bubble.w/2).
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let conv_id = "conv-m4a-pos";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let parent_mid = "mid-positioning-12345";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "with file"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    dispatch::dispatch(
+        &file_recv_event(conv_id, "did:tox:peer", parent_mid, "fid-pos", "img.jpg", 4096),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 20);
+
+    let bub_geom = placed_geom(&store, &bubble_uri(parent_mid))
+        .expect("parent bubble must have geometry");
+    let att_geom = placed_geom(&store, &attach_uri("fid-pos"))
+        .expect("attachment must have geometry");
+
+    let bubble_right_edge = bub_geom.x + bub_geom.w / 2.0;
+    let att_left_edge = att_geom.x - att_geom.w / 2.0;
+    assert!(
+        att_left_edge >= bubble_right_edge,
+        "attachment left edge ({att_left_edge}) must be at or right-of bubble right edge ({bubble_right_edge}) for received messages"
+    );
+    // Same Y as the bubble's anchor center — exact match per M4-attachments.md § 3.
+    assert!(
+        (att_geom.y - bub_geom.y).abs() < 0.01,
+        "attachment Y must match bubble center Y — bubble.y={} att.y={}",
+        bub_geom.y, att_geom.y
+    );
+}
+
+#[test]
+fn file_recv_tier2_image_widget_uses_image_file_path_primitive() {
+    // M4-B — for an image/* mime in `complete` state the tier-2 LOD
+    // widget DSL must contain the file-backed Image{} primitive with
+    // path=<urlencoded savePath> and fit=cover. Proves test-plan M4.4
+    // ("real image thumbnail rendered from disk") at the emit-shape
+    // layer — the actual Image.file render is covered by Station's
+    // widget_renderer test suite.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let conv_id = "conv-m4b-image";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let parent_mid = "mid-img-tier2";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "with image"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    let file_id = "fid-img-tier2";
+    dispatch::dispatch(
+        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "snap.jpg", 81_920),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+
+    // Settle to `complete` — pre-complete state degrades to the
+    // generic-icon branch (no live bytes yet on disk).
+    dispatch::dispatch(
+        &file_complete_event(conv_id, file_id, "finished"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+
+    let auri = attach_uri(file_id);
+    let widget = lod_widget_at(&store, &auri, 200.0)
+        .expect("tier-2 LOD (below=200) must carry a widget literal after FileComplete");
+
+    // (1) Tier-2 DSL contains the Image{} primitive routed through the
+    //     new file-backed `path=` branch (legacy `src=` pre-M4-B is the
+    //     network/asset code path).
+    assert!(
+        widget.contains("Image{path="),
+        "tier-2 widget must use the M4-B Image{{path=…}} file-backed primitive — got: {widget}"
+    );
+    assert!(
+        widget.contains("fit=cover"),
+        "tier-2 image thumbnail must use fit=cover per UC4 §Tier 2 aesthetic — got: {widget}"
+    );
+
+    // (2) Path is URL-encoded — separators (`/`) and the auto-accept
+    //     dir's trailing slash become %2F so a comma-bearing filename
+    //     can't desync the prop tokenizer's depth-0 split.
+    assert!(
+        widget.contains("%2F"),
+        "tier-2 widget path prop must be URL-encoded (path separators → %2F) — got: {widget}"
+    );
+    assert!(
+        widget.contains(file_id),
+        "tier-2 widget path prop must include the libjami fileId tail — got: {widget}"
+    );
+
+    // (3) tierLabel is `thumbnail`, matching M4-A's LOD ladder labels.
+    let label = lod_tier_label_at(&store, &auri, 200.0)
+        .expect("tier-2 LOD must carry tierLabel");
+    assert_eq!(label, "thumbnail", "tier-2 label must be `thumbnail`");
+
+    // (4) Per-tier worldWidth/worldHeight grew to 150 × 96 so Station's
+    //     _LODContent renders the card against the right bound. Anchor
+    //     (placed-object level) stays at tier-1 dims so screenPx<60 fires
+    //     off the same rectangle as M4-A.
+    let tier2_h = lod_world_height_at(&store, &auri, 200.0)
+        .expect("tier-2 LOD must carry per-tier worldHeight (M1-D bubble parity)");
+    assert!(
+        tier2_h > 50.0 && tier2_h < 200.0,
+        "tier-2 worldHeight must reflect thumbnail-card size — got: {tier2_h}"
+    );
+
+    // (5) Filename + size + relative-time strings are in the tier-2 DSL.
+    assert!(
+        widget.contains("snap.jpg"),
+        "tier-2 widget must carry the filename literal — got: {widget}"
+    );
+    assert!(
+        widget.contains("80.0 KB"),
+        "tier-2 widget must format the file size as a human-readable string — got: {widget}"
+    );
+}
+
+#[test]
+fn file_recv_tier2_non_image_widget_falls_back_to_glyph_and_extension_badge() {
+    // M4-B — non-image mime types (PDF / video / archive / unknown) at
+    // tier 2 must NOT use the Image{path=…} primitive. They fall back to
+    // a per-mime glyph + extension badge so the user can still tell what
+    // landed in the bubble before M4-D wires up real PDF / video render.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let conv_id = "conv-m4b-zip";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let parent_mid = "mid-zip-tier2";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "binary"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    let file_id = "fid-zip-tier2";
+    dispatch::dispatch(
+        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "drop.zip", 4_096),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+    dispatch::dispatch(
+        &file_complete_event(conv_id, file_id, "finished"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+
+    let auri = attach_uri(file_id);
+    let widget = lod_widget_at(&store, &auri, 200.0)
+        .expect("tier-2 LOD must carry a widget literal");
+
+    // (1) NO Image{} primitive — non-image branch must not invoke the
+    //     file-backed image render.
+    assert!(
+        !widget.contains("Image{path="),
+        "non-image tier-2 widget must NOT route through Image{{path=…}} — got: {widget}"
+    );
+
+    // (2) Extension badge `.zip` is present in the DSL so the user
+    //     reads the file type at a glance.
+    assert!(
+        widget.contains(".zip"),
+        "non-image tier-2 widget must include extension badge — got: {widget}"
+    );
+
+    // (3) Filename literal + size string still rendered.
+    assert!(
+        widget.contains("drop.zip"),
+        "tier-2 widget must carry the filename literal — got: {widget}"
+    );
+    assert!(
+        widget.contains("4.0 KB"),
+        "tier-2 widget must format the file size — got: {widget}"
+    );
+}
+
+#[test]
+fn file_recv_tier2_pre_complete_image_falls_back_to_glyph() {
+    // M4-B — an image/* mime that hasn't reached `complete` yet (pending
+    // / downloading) must NOT route through Image{path=…} — the file at
+    // savePath isn't fully written yet and Image.file would surface a
+    // half-image error. Pre-complete state degrades to the same glyph
+    // fallback as a non-image mime.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let conv_id = "conv-m4b-pending";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let parent_mid = "mid-img-pending";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "incoming"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    let file_id = "fid-img-pending";
+    dispatch::dispatch(
+        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "midflight.jpg", 250_000),
+        &store, &dag, None, "", &mut out,
+    );
+    // No FileComplete — state stays `pending`.
+    settle(&dag, &store, &mut out, 15);
+
+    let auri = attach_uri(file_id);
+    let widget = lod_widget_at(&store, &auri, 200.0)
+        .expect("tier-2 LOD must carry a widget literal even for in-flight transfers");
+    assert!(
+        !widget.contains("Image{path="),
+        "in-flight image must not point Image.file at a partially-written file — got: {widget}"
+    );
+    // .jpg extension badge still surfaces so the user sees the file type
+    // even before the bytes are local.
+    assert!(
+        widget.contains(".jpg"),
+        "pre-complete image tier-2 must carry the extension badge — got: {widget}"
+    );
+}
+
 #[test]
 fn out_of_buffer_teleport_day_logs_noop_no_emit() {
     // Tap an unknown day — pipeline must NOT emit antenna:Teleport.
@@ -3732,5 +4324,878 @@ fn out_of_buffer_teleport_day_logs_noop_no_emit() {
         }),
         "out-of-buffer teleport-day must NOT emit antenna:Teleport — \
          got: {post_tap:?}"
+    );
+}
+
+// ── M4-Bfix — file-only carrier:FileRecv mints a synthetic parent bubble ──
+//
+// libjami's Swarm sometimes ships a file in a commit with no sibling
+// `carrier:TextMessage` (a "file-only" commit). M4-A's pipeline tracked
+// bubbles via the TextMessage handler only — `globalThis.bubbleAnchor`
+// stayed empty for the file's `messageId`, so `rebuildAttachments`
+// skipped the placed object even though the metadata triples were in
+// the store. Fix: in the FileRecv handler, mint a synthetic placeholder
+// bubble at the same `messageId` (empty body, just timestamp chrome) so
+// the anchor exists by the time `rebuildAttachments` runs.
+
+#[test]
+fn file_only_filerecv_mints_synthetic_bubble_and_paints_attachment() {
+    // Drive a FileRecv with NO preceding TextMessage carrying the same
+    // messageId. Assert:
+    //   (a) a synthetic bubble placed object exists at the file's mid
+    //       (urn:msg:bubble-obj:<mid>) — proves the anchor was minted.
+    //   (b) the messenger:Attachment placed object exists with valid
+    //       geometry — proves rebuildAttachments did NOT skip on a
+    //       missing-anchor lookup.
+    //   (c) the attachment is positioned to the right of the synthetic
+    //       bubble at the same Y — proves the M4-A right-of-bubble
+    //       layout still holds against a synthetic anchor.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let conv_id = "conv-m4bfix-fileonly";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    // FileRecv arrives with NO matching TextMessage. The script must
+    // mint a synthetic bubble at this mid before rebuildAttachments
+    // runs, otherwise the bubbleAnchor lookup misses and the placed
+    // object never paints.
+    let parent_mid = "mid-fileonly-1234567890";
+    let file_id = "fid-fileonly";
+    dispatch::dispatch(
+        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "lone.jpg", 8192),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 20);
+
+    // (a) Synthetic bubble at the file's messageId. The placed object's
+    // URI is bubble_uri(parent_mid) — same shape as a TextMessage-driven
+    // bubble; the consumer (Station) cannot distinguish.
+    let bub_geom = placed_geom(&store, &bubble_uri(parent_mid))
+        .expect("file-only FileRecv must mint a synthetic bubble at the file's messageId — \
+                 without it bubbleAnchor lookup misses and the attachment is skipped");
+
+    // (b) Attachment placed object exists with geometry.
+    let att_geom = placed_geom(&store, &attach_uri(file_id))
+        .expect("attachment placed object must paint when the synthetic bubble is in place");
+    assert!(att_geom.w > 0.0 && att_geom.h > 0.0,
+        "attachment must have non-zero geometry — got w={}, h={}", att_geom.w, att_geom.h);
+
+    // (c) Attachment positioned to the right of the synthetic bubble
+    // at the same Y (received message → bubble on the left, attachment
+    // on the right).
+    let bubble_right_edge = bub_geom.x + bub_geom.w / 2.0;
+    let att_left_edge = att_geom.x - att_geom.w / 2.0;
+    assert!(
+        att_left_edge >= bubble_right_edge,
+        "attachment must paint right-of the synthetic bubble — \
+         bubble right edge={bubble_right_edge}, attachment left edge={att_left_edge}"
+    );
+    assert!(
+        (att_geom.y - bub_geom.y).abs() < 0.01,
+        "attachment Y must match the synthetic bubble's anchor Y — \
+         bubble.y={}, attachment.y={}",
+        bub_geom.y, att_geom.y
+    );
+
+    // (d) The bubbleRef on the attachment points at the synthetic bubble.
+    // This is the same predicate the M4-A test asserts on the
+    // TextMessage-driven path; ensure the synthetic-bubble path
+    // produces the same store shape.
+    let auri = attach_uri(file_id);
+    let q_bubble_ref = format!(
+        "ASK WHERE {{ <{auri}> <{MESSENGER_NS}bubbleRef> <urn:msg:bubble:{parent_mid}> }}"
+    );
+    match store.query(&q_bubble_ref).expect("ASK bubbleRef") {
+        QueryResults::Boolean(b) => {
+            assert!(b, "messenger:bubbleRef must point at urn:msg:bubble:<mid> — \
+                     same shape regardless of whether the bubble is real or synthetic");
+        }
+        _ => panic!("ASK must return boolean"),
+    }
+}
+
+#[test]
+fn file_only_filerecv_then_textmessage_does_not_double_register_bubble() {
+    // libjami may split file announce + body across two commits, so a
+    // real TextMessage at the same mid may arrive AFTER the synthetic
+    // bubble was minted. The synthetic-bubble guard is keyed on
+    // findMessageById(mid) — once the synthetic entry is in
+    // globalThis.messages, a follow-up TextMessage's logMsg call still
+    // adds the real entry (logMsg has no dedup), but the synthetic one
+    // remains. That's acceptable: rebuildBubbles emits only one bubble
+    // URN per mid (last entry wins on bubbleAnchor map write), so the
+    // store stays consistent. Pin that behavior — the file's bubble
+    // placed object exists exactly once after both events land.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let conv_id = "conv-m4bfix-late-text";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let parent_mid = "mid-fileonly-late-text";
+    let file_id = "fid-fileonly-late";
+    dispatch::dispatch(
+        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "doc.txt", 1024),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+
+    // Bubble exists from the synthetic mint.
+    placed_geom(&store, &bubble_uri(parent_mid))
+        .expect("synthetic bubble must exist after FileRecv");
+
+    // Late TextMessage at the same mid lands.
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "here it is"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+
+    // The bubble URN is still present and unique. SPARQL count must be 1.
+    let q_count = format!(
+        "SELECT (COUNT(?b) AS ?n) WHERE {{ \
+         BIND(<{}> AS ?b) ?b a <{ANTENNA_NS}Object> }}",
+        bubble_uri(parent_mid)
+    );
+    if let QueryResults::Solutions(solutions) = store.query(&q_count).expect("count query") {
+        for sol in solutions.flatten() {
+            if let Some(oxigraph::model::Term::Literal(lit)) = sol.get("n") {
+                let n: i64 = lit.value().parse().unwrap_or(0);
+                assert_eq!(n, 1,
+                    "exactly one bubble placed object must exist for parent_mid={parent_mid} \
+                     after both FileRecv (synthetic mint) and TextMessage (late real bubble) — \
+                     got count={n}");
+            }
+        }
+    }
+}
+
+// ── M4-Bfix — DayBucket flush wraps scheme-less participant URIs ──────────
+//
+// Real Jami contactUris are 40-hex fingerprints with NO scheme. They flow
+// through `m.fromUri` into `aggregateDayBuckets`'s participants list verbatim,
+// and the M3-B emit site spliced them in as `<40-hex>` — a relative IRI that
+// Oxigraph's parser rejects with "No scheme found in an absolute IRI",
+// surfacing as a `WARN [SPARQL] insert error` on every rebuildChat (~30 s
+// cadence in alice's antenna log, since rebuildChat fires on every libjami
+// presence/contact event). Fix: scheme-less values get the same
+// `urn:msg:participant:` synthetic prefix that aggregateDayBuckets's
+// falsy-fromUri path uses, so all DayBucket participant rows are valid
+// absolute IRIs at the emit site.
+
+#[test]
+fn day_bucket_wraps_bare_hex_participant_uri_in_synthetic_scheme() {
+    // Drive a TextMessage with a 40-hex bare-fingerprint contactUri (the
+    // real Jami shape). After flushDayBuckets runs (it auto-flushes on
+    // every rebuildChat), assert:
+    //   (a) a DayBucket exists with a `messenger:participants` triple,
+    //       proving the emit parsed cleanly (no "No scheme" parser warn).
+    //   (b) the participant IRI starts with `urn:msg:participant:` — the
+    //       wrapped form proves the fix wraps scheme-less values.
+    //   (c) the participant IRI's tail is the original 40-hex
+    //       fingerprint, proving the wrap preserves identity (no data
+    //       loss).
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    let bare_hex = "abcdef0123456789abcdef0123456789abcdef01"; // 40 hex chars, no scheme
+    drive_to_ready(&store, &dag, &mut out, "did:tox:self", bare_hex, "conv-m4bfix-bare");
+
+    // Send a TextMessage from the bare-hex peer. logMsg pushes the
+    // entry with fromUri=bare_hex, then rebuildChat → flushDayBuckets
+    // emits a DayBucket triple referencing the participant.
+    send_text_message(&store, &dag, &mut out, bare_hex, "mid-bare-hex-1", "ping");
+
+    // (a) DayBucket participants triple exists in the store. If the
+    // emit had failed parsing, NO participant triples would land at
+    // all — the store-level presence is the cleanest "no parser warn"
+    // proof we can pin without a tracing capture.
+    let q_parts = format!(
+        "SELECT ?p WHERE {{ ?b a <{MSG_NS}DayBucket> ; \
+         <{MSG_NS}participants> ?p }}"
+    );
+    let mut found_participant: Option<String> = None;
+    if let QueryResults::Solutions(solutions) = store.query(&q_parts).expect("participants query") {
+        for sol in solutions.flatten() {
+            if let Some(oxigraph::model::Term::NamedNode(n)) = sol.get("p") {
+                found_participant = Some(n.as_str().to_string());
+                break;
+            }
+        }
+    }
+    let part = found_participant.expect(
+        "DayBucket must carry at least one messenger:participants triple — \
+         missing triple means the emit failed parsing (the M4-Bfix SPARQL warn)",
+    );
+
+    // (b) The wrapped form. Pre-fix would have produced `<bare_hex>`
+    // which the parser rejects, so the bare form would never appear in
+    // the store. With the fix in place, the participant IRI is the
+    // synthetic `urn:msg:participant:<bare_hex>`.
+    assert!(
+        part.starts_with("urn:msg:participant:"),
+        "scheme-less participant must be wrapped in the urn:msg:participant: \
+         synthetic — got: {part}"
+    );
+    // (c) Tail preserves the original fingerprint.
+    assert!(
+        part.ends_with(bare_hex),
+        "wrapped participant must preserve the original fingerprint as the URN \
+         tail — got: {part} (expected tail: {bare_hex})"
+    );
+}
+
+#[test]
+fn day_bucket_preserves_existing_scheme_on_participant_uri() {
+    // Companion to the bare-hex test: contactUris that already carry a
+    // scheme (did:tox:peer, etc.) must pass through unchanged — the
+    // `pUri.indexOf(':') < 0` guard only wraps when the value has no
+    // colon. Pin that behavior so synthetic test fixtures and any
+    // future scheme'd transport keep their identity.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    let scheme_uri = "did:tox:peerWithScheme";
+    drive_to_ready(&store, &dag, &mut out, "did:tox:self", scheme_uri, "conv-m4bfix-scheme");
+    send_text_message(&store, &dag, &mut out, scheme_uri, "mid-scheme-1", "hi");
+
+    let q_parts = format!(
+        "SELECT ?p WHERE {{ ?b a <{MSG_NS}DayBucket> ; \
+         <{MSG_NS}participants> ?p }}"
+    );
+    let mut found_scheme = false;
+    if let QueryResults::Solutions(solutions) = store.query(&q_parts).expect("participants query") {
+        for sol in solutions.flatten() {
+            if let Some(oxigraph::model::Term::NamedNode(n)) = sol.get("p") {
+                if n.as_str() == scheme_uri {
+                    found_scheme = true;
+                    break;
+                }
+            }
+        }
+    }
+    assert!(found_scheme,
+        "scheme-bearing participant URI ({scheme_uri}) must be emitted \
+         verbatim — the M4-Bfix wrap must only fire on scheme-less values");
+}
+
+// ── M4-C — UC4 Tier 3 (provenance card + Quote-in-reply) ─────────────────
+//
+// Tier-3 widget (200 ≤ screenPx < 500) renders the provenance card per
+// UC4 § Tier 3: filename + size·mime header, divider, four metadata rows
+// (Sender / Received / SHA3 / Local), divider, button row [Quote in reply,
+// Re-host]. Quote-in-reply taps inject `<file:<fileName>>` into the
+// conversation's draft body via `flushDraft` so the M2-built draft
+// stack (tier-3 composer) reflects the new content on next rebuild.
+
+const ATTACH_TIER3_BELOW: f64 = 500.0;
+
+#[test]
+fn attachment_tier3_widget_carries_provenance_field_labels_and_buttons() {
+    // M4-C — tier-3 LOD widget DSL must contain:
+    //   * `Sender` / `Received` / `SHA3` / `Local` row labels
+    //   * `Quote in reply` + `Re-host` button text
+    //   * `urn:composer:quote-attach:<encoded-fileId>` onTap target
+    //   * `urn:msg:rehost-noop:<encoded-fileId>` onTap target
+    //   * tierLabel `provenance`
+    //   * worldWidth/Height that landed inside the screenPx ∈ [200,500) gate
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let conv_id = "conv-m4c-tier3-shape";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let parent_mid = "mid-m4c-tier3-shape";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "with file"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    let file_id = "fid-m4c-tier3";
+    let filename = "secret.pdf";
+    dispatch::dispatch(
+        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, filename, 1_234_567),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+    dispatch::dispatch(
+        &file_complete_event(conv_id, file_id, "finished"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+
+    let auri = attach_uri(file_id);
+
+    // (1) tierLabel = "provenance".
+    let label = lod_tier_label_at(&store, &auri, ATTACH_TIER3_BELOW)
+        .expect("tier-3 LOD must carry tierLabel");
+    assert_eq!(label, "provenance", "tier-3 label must be `provenance`");
+
+    let widget = lod_widget_at(&store, &auri, ATTACH_TIER3_BELOW)
+        .expect("tier-3 LOD (below=500) must carry a widget literal");
+
+    // (2) All four metadata row labels per UC4 § Tier 3 layout.
+    for label in ["Sender", "Received", "SHA3", "Local"] {
+        assert!(
+            widget.contains(label),
+            "tier-3 widget must include `{label}` row label per UC4 layout — got: {widget}"
+        );
+    }
+
+    // (3) Both action button labels.
+    assert!(
+        widget.contains("Quote in reply"),
+        "tier-3 widget must include `Quote in reply` button text — got: {widget}"
+    );
+    assert!(
+        widget.contains("Re-host"),
+        "tier-3 widget must include `Re-host` placeholder button text — got: {widget}"
+    );
+
+    // (4) Quote-in-reply onTap URN with URL-encoded fileId tail.
+    let quote_urn = format!("urn:composer:quote-attach:{file_id}");
+    assert!(
+        widget.contains(&quote_urn),
+        "tier-3 widget must wire Quote-in-reply onTap to {quote_urn} — got: {widget}"
+    );
+
+    // (5) Re-host placeholder URN.
+    let rehost_urn = format!("urn:msg:rehost-noop:{file_id}");
+    assert!(
+        widget.contains(&rehost_urn),
+        "tier-3 widget must wire Re-host onTap to {rehost_urn} — got: {widget}"
+    );
+
+    // (6) Header line carries filename + formatted size · mime.
+    assert!(
+        widget.contains(filename),
+        "tier-3 widget must include the filename literal — got: {widget}"
+    );
+    assert!(
+        widget.contains("1.2 MB"),
+        "tier-3 widget must format the file size in human units — got: {widget}"
+    );
+    assert!(
+        widget.contains("application/pdf"),
+        "tier-3 widget must surface the mime type alongside the size — got: {widget}"
+    );
+
+    // (7) Per-tier worldHeight grew so Station's _LODContent renders
+    //     against a card-sized bound rather than the tier-1 row anchor.
+    //     Anchor footprint (placed-object level) stays at tier-1 dims so
+    //     the screenPx<60 boundary fires off the same rectangle.
+    let tier3_h = lod_world_height_at(&store, &auri, ATTACH_TIER3_BELOW)
+        .expect("tier-3 LOD must carry per-tier worldHeight (M1-D bubble parity)");
+    assert!(
+        tier3_h > 150.0 && tier3_h < 300.0,
+        "tier-3 worldHeight must reflect the provenance-card layout — got: {tier3_h}"
+    );
+}
+
+#[test]
+fn attachment_tier3_pending_state_shows_computing_and_pending_labels() {
+    // M4-C — pre-FileComplete (state stays `pending` because libjami's
+    // M4-InvB stall blocks the completion event, OR because the smoke
+    // test simply hasn't fired FileComplete yet) the tier-3 widget MUST
+    // surface honest placeholders rather than blank rows:
+    //   * SHA3 row → "...computing"  (sha3sum is empty until completion)
+    //   * Local row → "pending"      (per UC4 § Edge cases state mapping)
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let conv_id = "conv-m4c-pending";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let parent_mid = "mid-m4c-pending";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "incoming"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    let file_id = "fid-m4c-pending";
+    dispatch::dispatch(
+        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "midflight.bin", 4096),
+        &store, &dag, None, "", &mut out,
+    );
+    // No FileComplete — state stays `pending`, sha3sum stays empty.
+    settle(&dag, &store, &mut out, 15);
+
+    let auri = attach_uri(file_id);
+    let widget = lod_widget_at(&store, &auri, ATTACH_TIER3_BELOW)
+        .expect("tier-3 LOD must carry a widget even pre-FileComplete");
+
+    assert!(
+        widget.contains("...computing"),
+        "tier-3 widget must show `...computing` for empty SHA3 (M4-InvB / pre-complete) — \
+         got: {widget}"
+    );
+    // The Local row must read `pending` for the pre-AcceptFile / no-progress state.
+    // Use a slightly anchored substring so we don't match the parent message bubble
+    // text. The row helper renders the value as `Text{value=pending,...}`.
+    assert!(
+        widget.contains("value=pending,"),
+        "tier-3 widget must render Local row value=`pending` for pre-progress state — \
+         got: {widget}"
+    );
+}
+
+#[test]
+fn quote_in_reply_tap_appends_file_reference_to_conversation_draft() {
+    // M4-C — the `Quote in reply` button on the tier-3 attachment card
+    // emits a TapEvent on `urn:composer:quote-attach:<encodeURIComponent(fileId)>`.
+    // The pipeline handler must:
+    //   (a) decode the fileId from the URN
+    //   (b) resolve the attachment + look up `messenger:fileName`
+    //   (c) APPEND `<file:<fileName>>` to the conversation's persisted
+    //       draft body (with a leading space when the prior body is
+    //       non-empty), via flushDraft → store + JS mirror
+    //   (d) clear pendingDraft so a stale debounce doesn't overwrite the
+    //       injection on the next ClockTick
+    //
+    // We exercise the empty-draft path here (current = "" → next = ref).
+    // A second test below covers the append-to-existing path.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m4c-quote");
+
+    let parent_mid = "mid-m4c-quote";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "have a look"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    let file_id = "fid-m4c-quote";
+    let filename = "image.jpg";
+    dispatch::dispatch(
+        &file_recv_event("conv-m4c-quote", "did:tox:peer", parent_mid, file_id, filename, 65_536),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 20);
+
+    // No draft on disk yet — the conversation is fresh.
+    assert!(
+        draft_body(&store, "conv-m4c-quote").is_none(),
+        "precondition: no draft persisted before the Quote-in-reply tap"
+    );
+
+    // Fire the TapEvent. URN format mirrors what the tier-3 widget's
+    // Button onTap renders. fileId has no special chars → encoded form
+    // matches the raw string.
+    let tap_event = format!(
+        "[] a <{ANTENNA_NS}TapEvent> ; \
+         <{ANTENNA_NS}target> <urn:composer:quote-attach:{file_id}> ."
+    );
+    dispatch::dispatch(&tap_event, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 20);
+
+    let body = draft_body(&store, "conv-m4c-quote").expect(
+        "after Quote-in-reply tap, the conversation's draft URN must carry \
+         the appended <file:<filename>> reference",
+    );
+    let expected_ref = format!("<file:{filename}>");
+    assert_eq!(
+        body, expected_ref,
+        "empty-draft Quote-in-reply must persist exactly the file reference, \
+         no leading space — got: {body}"
+    );
+}
+
+#[test]
+fn quote_in_reply_appends_to_existing_draft_with_leading_space() {
+    // M4-C — append-not-replace contract (UC4 § Tier 3 + brief): when
+    // the user has already typed something into the composer, tapping
+    // `Quote in reply` must APPEND the file reference with a leading
+    // space, NOT overwrite their typed content.
+    //
+    // We seed `pendingDraft` via a TextChanged event + 280 ms wait + one
+    // ClockTick — same flow the M2-C draft tests use to land a persisted
+    // body. Then fire the Quote-in-reply tap and assert the resulting
+    // body is `<typed> <file:<fileName>>`.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m4c-append");
+
+    let parent_mid = "mid-m4c-append";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "ack"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    let file_id = "fid-m4c-append";
+    let filename = "report.pdf";
+    dispatch::dispatch(
+        &file_recv_event("conv-m4c-append", "did:tox:peer", parent_mid, file_id, filename, 8192),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+
+    // Seed a typed draft body via TextChanged + debounce + ClockTick.
+    dispatch::dispatch(
+        &text_changed_event("urn:msg:chatinput", "see attached"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 1);
+    std::thread::sleep(Duration::from_millis(280));
+    tick_clock(&dag);
+    settle(&dag, &store, &mut out, 10);
+
+    assert_eq!(
+        draft_body(&store, "conv-m4c-append").as_deref(),
+        Some("see attached"),
+        "precondition: the typed body must be persisted before the Quote-in-reply tap",
+    );
+
+    // Fire Quote-in-reply.
+    let tap_event = format!(
+        "[] a <{ANTENNA_NS}TapEvent> ; \
+         <{ANTENNA_NS}target> <urn:composer:quote-attach:{file_id}> ."
+    );
+    dispatch::dispatch(&tap_event, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 20);
+
+    let body = draft_body(&store, "conv-m4c-append").expect(
+        "draft must remain after Quote-in-reply (append, not drop)",
+    );
+    let expected = format!("see attached <file:{filename}>");
+    assert_eq!(
+        body, expected,
+        "Quote-in-reply must append `<file:<name>>` with a leading space, \
+         preserving the user's typed body — got: {body}"
+    );
+}
+
+// ── M4-D — UC4 Tier 4 (full preview: image at intrinsic size + hex dump) ──
+//
+// Tier-4 widget (screenPx ≥ 500) renders the full-resolution preview per
+// UC4 § Tier 4:
+//   * image/* + state=complete → Image{path=…,fit=contain,maxHeight=…}
+//     (native res, no crop; vs M4-B tier-2's fit=cover)
+//   * everything else complete → HexDump{bytes=…,maxBytes=1024} + Open
+//     externally button placeholder
+//   * pre-complete (any mime)  → "pending - preview unavailable" text
+//
+// Per-tier worldWidth/worldHeight on the LOD blank node grow to the
+// tier-4 dims (600 × 450 in world units) so Station's _LODContent
+// renders the deepest tier against a full-preview-sized bound. Anchor
+// (placed-object level) stays at tier-1 dims so the screenPx<60 boundary
+// fires off the same rectangle as M4-A/B/C — no LOD-threshold drift.
+
+const ATTACH_TIER4_BELOW: f64 = 99999.0;
+
+#[test]
+fn attachment_tier4_image_widget_uses_image_file_path_with_fit_contain() {
+    // M4-D — for an image/* mime in `complete` state the tier-4 LOD
+    // widget DSL must contain the file-backed Image{} primitive with
+    // path=<urlencoded savePath>, fit=contain (vs M4-B tier-2's
+    // fit=cover), and a maxHeight that pins the image to the tier-4
+    // bound. URL-encoded savePath proves the pipeline routes through
+    // encodeURIComponent so a comma-bearing filename can't desync the
+    // widget DSL prop tokenizer.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let conv_id = "conv-m4d-tier4-image";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let parent_mid = "mid-m4d-tier4-image";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "with image"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    let file_id = "fid-m4d-tier4-img";
+    dispatch::dispatch(
+        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "snap.jpg", 524_288),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+    dispatch::dispatch(
+        &file_complete_event(conv_id, file_id, "finished"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+
+    let auri = attach_uri(file_id);
+
+    // (1) tierLabel = "preview".
+    let label = lod_tier_label_at(&store, &auri, ATTACH_TIER4_BELOW)
+        .expect("tier-4 LOD must carry tierLabel");
+    assert_eq!(label, "preview", "tier-4 label must be `preview`");
+
+    let widget = lod_widget_at(&store, &auri, ATTACH_TIER4_BELOW)
+        .expect("tier-4 LOD (below=99999) must carry a widget literal after FileComplete");
+
+    // (2) Tier-4 DSL contains the file-backed Image{} primitive with
+    //     fit=contain (whole-image preview, not cropped fill).
+    assert!(
+        widget.contains("Image{path="),
+        "tier-4 image widget must use the M4-B Image{{path=…}} file-backed primitive — got: {widget}"
+    );
+    assert!(
+        widget.contains("fit=contain"),
+        "tier-4 image preview must use fit=contain (whole image, no crop) — got: {widget}"
+    );
+    assert!(
+        widget.contains("maxHeight="),
+        "tier-4 image preview must pin a maxHeight so the bound matches the tier-4 card — got: {widget}"
+    );
+
+    // (3) Path is URL-encoded — separators become %2F so commas / brackets
+    //     in a filename can't desync the prop tokenizer.
+    assert!(
+        widget.contains("%2F"),
+        "tier-4 widget path prop must be URL-encoded (path separators → %2F) — got: {widget}"
+    );
+    assert!(
+        widget.contains(file_id),
+        "tier-4 widget path prop must include the libjami fileId tail — got: {widget}"
+    );
+
+    // (4) Header carries filename + size · mime so the user reads
+    //     provenance metadata at the same zoom as the preview itself.
+    assert!(
+        widget.contains("snap.jpg"),
+        "tier-4 widget header must include the filename literal — got: {widget}"
+    );
+    assert!(
+        widget.contains("image/jpeg"),
+        "tier-4 widget header must include the mime type — got: {widget}"
+    );
+
+    // (5) Per-tier worldHeight grew so Station's _LODContent renders
+    //     against a preview-sized bound rather than the tier-3 card.
+    //     Anchor (placed-object level) stays at tier-1 dims.
+    let tier4_h = lod_world_height_at(&store, &auri, ATTACH_TIER4_BELOW)
+        .expect("tier-4 LOD must carry per-tier worldHeight (M1-D bubble parity)");
+    assert!(
+        tier4_h > 300.0 && tier4_h < 800.0,
+        "tier-4 worldHeight must reflect the full-preview-card layout — got: {tier4_h}"
+    );
+}
+
+#[test]
+fn attachment_tier4_non_image_widget_uses_hex_dump() {
+    // M4-D — for a non-image mime in `complete` state (here `.zip` =
+    // application/zip) the tier-4 LOD widget DSL must:
+    //   * NOT use Image{path=…} (no preview thumbnail for binaries)
+    //   * Contain the new HexDump{bytes=…} primitive with maxBytes=1024
+    //   * Contain a header row showing filename + size + mime literal
+    //   * Wire the `Open externally` button onTap to
+    //     `urn:msg:open-external-noop:<fileId>` per UC4 § Tier 4
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let conv_id = "conv-m4d-tier4-zip";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let parent_mid = "mid-m4d-tier4-zip";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "binary"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    let file_id = "fid-m4d-tier4-zip";
+    dispatch::dispatch(
+        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "drop.zip", 4_096),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+    dispatch::dispatch(
+        &file_complete_event(conv_id, file_id, "finished"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 15);
+
+    let auri = attach_uri(file_id);
+    let widget = lod_widget_at(&store, &auri, ATTACH_TIER4_BELOW)
+        .expect("tier-4 LOD must carry a widget literal");
+
+    // (1) Non-image branch must NOT route through Image{path=…}.
+    assert!(
+        !widget.contains("Image{path="),
+        "tier-4 non-image widget must NOT route through Image{{path=…}} — got: {widget}"
+    );
+
+    // (2) HexDump{} primitive with the savePath + maxBytes cap.
+    assert!(
+        widget.contains("HexDump{bytes="),
+        "tier-4 non-image widget must use the M4-D HexDump{{bytes=…}} primitive — got: {widget}"
+    );
+    assert!(
+        widget.contains("maxBytes=1024"),
+        "tier-4 HexDump must cap reads at maxBytes=1024 — got: {widget}"
+    );
+    // URL-encoded savePath plumbing — same encoding contract as Image{path=…}.
+    assert!(
+        widget.contains("%2F"),
+        "tier-4 HexDump bytes prop must be URL-encoded — got: {widget}"
+    );
+    assert!(
+        widget.contains(file_id),
+        "tier-4 HexDump bytes prop must include the libjami fileId tail — got: {widget}"
+    );
+
+    // (3) Header carries filename + formatted size + mime literal.
+    assert!(
+        widget.contains("drop.zip"),
+        "tier-4 widget header must include the filename literal — got: {widget}"
+    );
+    assert!(
+        widget.contains("4.0 KB"),
+        "tier-4 widget header must format the file size in human units — got: {widget}"
+    );
+    assert!(
+        widget.contains("application/zip"),
+        "tier-4 widget header must surface the mime type — got: {widget}"
+    );
+
+    // (4) Open externally button text + onTap URN.
+    assert!(
+        widget.contains("Open externally"),
+        "tier-4 non-image widget must include the `Open externally` button text — got: {widget}"
+    );
+    let open_urn = format!("urn:msg:open-external-noop:{file_id}");
+    assert!(
+        widget.contains(&open_urn),
+        "tier-4 widget must wire the Open externally onTap to {open_urn} — got: {widget}"
+    );
+}
+
+#[test]
+fn attachment_tier4_pre_complete_image_falls_back_to_hex_dump() {
+    // M4-D — an image/* mime that hasn't reached `complete` yet (state
+    // stays `pending` because libjami's M4-InvB stall blocks completion,
+    // OR because FileComplete simply hasn't fired yet) must NOT route
+    // through Image{path=…} (Image.file would surface a half-image
+    // error on a partially-written file). Per the brief's allowed
+    // options, M4-D chose the explicit "pending — preview unavailable"
+    // text placeholder over a partial-bytes hex dump — the streaming
+    // hex dump would race the libjami writer mid-transfer and the
+    // rendered output would lie about the final bytes.
+    //
+    // Test name keeps the brief's wording (`falls_back_to_hex_dump`)
+    // for cross-cut grep continuity but the assertion below documents
+    // the chosen placeholder path; either fallback satisfies the brief.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let conv_id = "conv-m4d-tier4-pending";
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:conversationId \"{conv_id}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+
+    let parent_mid = "mid-m4d-tier4-pending";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", parent_mid, "incoming"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    let file_id = "fid-m4d-tier4-pending";
+    dispatch::dispatch(
+        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "midflight.jpg", 250_000),
+        &store, &dag, None, "", &mut out,
+    );
+    // No FileComplete — state stays `pending`, savePath set but file
+    // is partial-on-disk (or absent if libjami hasn't started writing).
+    settle(&dag, &store, &mut out, 15);
+
+    let auri = attach_uri(file_id);
+    let widget = lod_widget_at(&store, &auri, ATTACH_TIER4_BELOW)
+        .expect("tier-4 LOD must carry a widget literal even pre-FileComplete");
+
+    // (1) Hard contract — pre-complete image MUST NOT route through
+    //     Image{path=…} regardless of which fallback shape we chose.
+    assert!(
+        !widget.contains("Image{path="),
+        "in-flight image must not point Image.file at a partially-written file — got: {widget}"
+    );
+
+    // (2) Pre-complete also must not stream HexDump from a
+    //     partially-written file (would race the writer and lie about
+    //     the final bytes). We chose the explicit placeholder path.
+    assert!(
+        !widget.contains("HexDump{bytes="),
+        "pre-complete file must not stream HexDump from a partial write — got: {widget}"
+    );
+
+    // (3) Explicit "pending" placeholder text — the chosen fallback per
+    //     the brief's "Decide what's least bad and document" clause.
+    //     ASCII em-dash surrogate "-" rather than U+2014 to match the
+    //     formatSha3Short pragma (Menlo / SF Mono fall back on U+2014
+    //     and break monospace column alignment).
+    assert!(
+        widget.contains("pending - preview unavailable"),
+        "pre-complete tier-4 must surface the explicit `pending - preview unavailable` placeholder — got: {widget}"
     );
 }
