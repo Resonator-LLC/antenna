@@ -5995,3 +5995,490 @@ fn m5c_demo_leaf_has_one_level_child() {
          got {got_widget:?}"
     );
 }
+
+// ── M5-D-α — Conversation tile Scene/Level/Object emit ──────────────────
+//
+// The pipeline's rebuildInbox() lifecycle (per
+// `control/plan/messenger-spatial-zoom/M5-D.md` § 5.M5-D-α) runs on every
+// rebuildChat call and authors:
+//
+//   * One antenna:Scene per messenger:Conversation row, URI
+//     <urn:msg:tile:scene:<convId>>, listing 4 antenna:Levels in
+//     antenna:children (chip / compact / card / tile).
+//   * Four antenna:Level URIs per Scene at
+//     <urn:msg:tile:level:<convId>:<tier>> with antenna:label,
+//     antenna:enterPinchProgress (0.0 / 0.25 / 0.5 / 0.75), and
+//     antenna:widget carrying the per-tier DSL string.
+//   * One placed antenna:Object per Scene at
+//     <urn:msg:tile:obj:<convId>> at deterministic (x, y) per the grid
+//     formula:
+//         col = i % 2 ;  row = i / 2
+//         x = col == 0 ? -112 : +112
+//         y = 120 + row * 144
+//     where `i` is the conversation's slot index after sorting by
+//     (lastMessageAt DESC, displayName ASC).
+//
+// Boot drives WhoAmI → ContactOnline → ConversationReady so the real
+// conversation lands a 4th messenger:Conversation triple alongside the 3
+// synthetic-seed ones, giving 4 expected tiles. The dispatch::dispatch +
+// settle pumps run the JS init block which calls rebuildChat → rebuildInbox
+// → emits Scene/Level/Object Turtle, which settle re-routes via dispatch
+// back into the store so the assertion path hits oxigraph live.
+
+const RDF_NS: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+const REAL_CONV_ID: &str = "conv-m5d-real";
+
+/// Boot the messenger pipeline, drive the WhoAmI / ContactOnline /
+/// ConversationReady handshake so 1 real + 3 synthetic conversations
+/// land in the store, and pump the rebuildInbox emits all the way back
+/// through dispatch::dispatch so tile Scene + Level + Object triples
+/// resolve in oxigraph. Returns (store, dag) for downstream queries.
+fn build_pipeline_with_inbox_settled() -> (RdfStore, Dag) {
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 20);
+    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 10);
+    dispatch::dispatch(
+        &contact_online_event("did:tox:peer"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:contactUri \"did:tox:peer\" ; \
+         carrier:conversationId \"{REAL_CONV_ID}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 30);
+    (store, dag)
+}
+
+#[test]
+fn m5d_inbox_emits_one_scene_per_conversation_with_four_levels() {
+    let (store, _dag) = build_pipeline_with_inbox_settled();
+
+    // (1) Count tile Scenes — must equal the messenger:Conversation count.
+    let scene_q = format!(
+        "SELECT ?s WHERE {{ ?s a <{ANTENNA_NS}Scene> . \
+         FILTER(STRSTARTS(STR(?s), \"urn:msg:tile:scene:\")) }}"
+    );
+    let mut tile_scenes: Vec<String> = Vec::new();
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&scene_q) {
+        for sol in sols.flatten() {
+            if let Some(t) = sol.get("s") {
+                tile_scenes.push(t.to_string());
+            }
+        }
+    }
+    assert_eq!(
+        tile_scenes.len(),
+        4,
+        "M5-D-α rebuildInbox must emit EXACTLY 4 tile Scenes (3 synthetic \
+         seed + 1 real ConversationReady) — got {tile_scenes:?}"
+    );
+
+    // (2) Each expected per-conversation Scene exists at the contracted URI.
+    for conv_id in ["synth:carol", "synth:dave", "synth:trio", REAL_CONV_ID] {
+        let uri = format!("urn:msg:tile:scene:{conv_id}");
+        let q = format!("ASK {{ <{uri}> a <{ANTENNA_NS}Scene> }}");
+        match store.query(&q) {
+            Ok(QueryResults::Boolean(true)) => {}
+            Ok(QueryResults::Boolean(false)) => panic!(
+                "M5-D-α rebuildInbox must declare <{uri}> a antenna:Scene"
+            ),
+            Ok(_) => panic!("M5-D-α scene ASK returned non-boolean"),
+            Err(e) => panic!("M5-D-α scene <{uri}> ASK errored: {e}"),
+        }
+    }
+
+    // (3) Per-Scene children list — exactly 4 Levels in (chip / compact /
+    //     card / tile) tier order. Sort by enterPinchProgress so the
+    //     check is robust against SPARQL's non-deterministic property-
+    //     path-walk solution order — the contract that matters is
+    //     "ascending enterPinchProgress maps to chip → compact → card →
+    //     tile", not the lexical order the rdf:List traversal returns.
+    for conv_id in ["synth:carol", "synth:dave", "synth:trio", REAL_CONV_ID] {
+        let scene_uri = format!("urn:msg:tile:scene:{conv_id}");
+        let q = format!(
+            "PREFIX antenna: <{ANTENNA_NS}> \
+             PREFIX rdf: <{RDF_NS}> \
+             SELECT ?level ?prog WHERE {{ \
+                 <{scene_uri}> antenna:children ?head . \
+                 ?head (rdf:rest)* ?cell . \
+                 ?cell rdf:first ?level . \
+                 ?level antenna:enterPinchProgress ?prog . \
+             }}"
+        );
+        let mut rows: Vec<(String, f64)> = Vec::new();
+        if let Ok(QueryResults::Solutions(sols)) = store.query(&q) {
+            for sol in sols.flatten() {
+                let level = sol.get("level").map(|t| t.to_string()).unwrap_or_default();
+                let prog = match sol.get("prog") {
+                    Some(oxigraph::model::Term::Literal(lit)) => {
+                        lit.value().parse::<f64>().unwrap_or(f64::NAN)
+                    }
+                    _ => f64::NAN,
+                };
+                rows.push((level, prog));
+            }
+        }
+        assert_eq!(
+            rows.len(), 4,
+            "M5-D-α Scene <{scene_uri}> must list EXACTLY 4 children — got {rows:?}"
+        );
+        rows.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        let expected: &[(&str, f64)] = &[
+            ("chip", 0.0),
+            ("compact", 0.25),
+            ("card", 0.5),
+            ("tile", 0.75),
+        ];
+        for (idx, (expected_tier, expected_prog)) in expected.iter().enumerate() {
+            let expected_suffix = format!("{conv_id}:{expected_tier}>");
+            assert!(
+                rows[idx].0.ends_with(&expected_suffix),
+                "M5-D-α Scene <{scene_uri}> tier-ordered child[{idx}] (prog={}) \
+                 must end with `:{expected_tier}>` — got {:?}",
+                rows[idx].1, rows[idx].0
+            );
+            assert!(
+                (rows[idx].1 - expected_prog).abs() < 1e-9,
+                "M5-D-α Scene <{scene_uri}> child[{idx}] enterPinchProgress \
+                 must equal {expected_prog} — got {}",
+                rows[idx].1
+            );
+        }
+    }
+
+    // (4) Total Level count: 4 per Scene × 4 Scenes = 16.
+    let level_q = format!(
+        "SELECT ?l WHERE {{ ?l a <{ANTENNA_NS}Level> . \
+         FILTER(STRSTARTS(STR(?l), \"urn:msg:tile:level:\")) }}"
+    );
+    let mut tile_levels = 0usize;
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&level_q) {
+        for _ in sols.flatten() {
+            tile_levels += 1;
+        }
+    }
+    assert_eq!(
+        tile_levels, 16,
+        "M5-D-α must emit EXACTLY 16 tile Levels (4 per Scene × 4 Scenes) — \
+         got {tile_levels}"
+    );
+}
+
+#[test]
+fn m5d_inbox_levels_carry_required_properties_per_tier() {
+    // Each Level must carry antenna:label + enterPinchProgress + widget.
+    // Pin enterPinchProgress per tier (0.0 / 0.25 / 0.5 / 0.75) — the M5-D
+    // sign-off mapping. Per-tier widget DSL spot-checks the structural
+    // markers (StatusDot for chip, Open conversation for tile, etc.) so a
+    // builder regression surfaces without forcing an exact-byte assertion
+    // (which would couple the test to incidental whitespace shifts).
+    let (store, _dag) = build_pipeline_with_inbox_settled();
+
+    let conv_id = "synth:dave";   // Dave: online=true, unread=2 — exercises both.
+    let cases: &[(&str, &str, &str)] = &[
+        ("chip",    "0.0",  "StatusDot"),
+        ("compact", "0.25", "(2)"),       // dave's unreadCount=2
+        ("card",    "0.5",  "borderRadius=8"),
+        ("tile",    "0.75", "[Open conversation]"),
+    ];
+    for (tier, expected_progress, marker) in cases.iter() {
+        let level_uri = format!("urn:msg:tile:level:{conv_id}:{tier}");
+        let q = format!(
+            "SELECT ?label ?prog ?widget WHERE {{ \
+                 <{level_uri}> a <{ANTENNA_NS}Level> ; \
+                 <{ANTENNA_NS}label> ?label ; \
+                 <{ANTENNA_NS}enterPinchProgress> ?prog ; \
+                 <{ANTENNA_NS}widget> ?widget \
+             }}"
+        );
+        let mut got_label: Option<String> = None;
+        let mut got_prog: Option<String> = None;
+        let mut got_widget: Option<String> = None;
+        if let Ok(QueryResults::Solutions(sols)) = store.query(&q) {
+            for sol in sols.flatten() {
+                got_label = sol.get("label").map(|t| match t {
+                    oxigraph::model::Term::Literal(l) => l.value().to_string(),
+                    _ => t.to_string(),
+                });
+                got_prog = sol.get("prog").map(|t| match t {
+                    oxigraph::model::Term::Literal(l) => l.value().to_string(),
+                    _ => t.to_string(),
+                });
+                got_widget = sol.get("widget").map(|t| match t {
+                    oxigraph::model::Term::Literal(l) => l.value().to_string(),
+                    _ => t.to_string(),
+                });
+            }
+        }
+        assert_eq!(
+            got_label.as_deref(),
+            Some(*tier),
+            "M5-D-α Level <{level_uri}> antenna:label must equal {tier:?} — \
+             got {got_label:?}"
+        );
+        let prog_val = got_prog.as_deref().unwrap_or("").parse::<f64>().unwrap_or(-1.0);
+        let expected_val: f64 = expected_progress.parse().unwrap();
+        assert!(
+            (prog_val - expected_val).abs() < 1e-9,
+            "M5-D-α Level <{level_uri}> antenna:enterPinchProgress must equal \
+             {expected_progress} — got {got_prog:?}"
+        );
+        let widget = got_widget.unwrap_or_default();
+        assert!(
+            widget.contains(marker),
+            "M5-D-α Level <{level_uri}> widget DSL must contain marker {marker:?} \
+             — got: {widget}"
+        );
+    }
+}
+
+#[test]
+fn m5d_inbox_objects_match_grid_formula() {
+    // Slot index by (lastMessageAt DESC, displayName ASC):
+    //   synth:dave   lastMessageAt=2026-05-05T09:42:00Z displayName="Dave"
+    //   synth:trio   lastMessageAt=2026-05-05T11:05:00Z displayName="Dock Crew"
+    //   synth:carol  lastMessageAt=2026-05-04T18:24:00Z displayName="Carol"
+    //   conv-m5d-real lastMessageAt=""                  displayName=fallback
+    //
+    // Sorted DESC: trio (11:05) > dave (09:42) > carol (18:24 prev day) >
+    // real (empty lastMessageAt → end-of-list).
+    //
+    // Slot → (col, row) → (x, y):
+    //   0: trio  → col=0 row=0 → (-112,  120)
+    //   1: dave  → col=1 row=0 → (+112,  120)
+    //   2: carol → col=0 row=1 → (-112,  264)
+    //   3: real  → col=1 row=1 → (+112,  264)
+    let (store, _dag) = build_pipeline_with_inbox_settled();
+
+    let expected: &[(&str, f64, f64)] = &[
+        ("synth:trio",   -112.0, 120.0),
+        ("synth:dave",   112.0,  120.0),
+        ("synth:carol",  -112.0, 264.0),
+        (REAL_CONV_ID,   112.0,  264.0),
+    ];
+    for (conv_id, expected_x, expected_y) in expected.iter() {
+        let obj_uri = format!("urn:msg:tile:obj:{conv_id}");
+        let geom = placed_geom(&store, &obj_uri).unwrap_or_else(|| panic!(
+            "M5-D-α rebuildInbox must emit a placed antenna:Object at \
+             <{obj_uri}> with x/y/worldWidth/worldHeight"
+        ));
+        assert!(
+            (geom.x - expected_x).abs() < 1e-9,
+            "M5-D-α tile <{obj_uri}> antenna:x must equal {expected_x} \
+             (deterministic grid formula) — got {}",
+            geom.x
+        );
+        assert!(
+            (geom.y - expected_y).abs() < 1e-9,
+            "M5-D-α tile <{obj_uri}> antenna:y must equal {expected_y} \
+             — got {}",
+            geom.y
+        );
+        // Tile rect is fixed 200×120 per § 3.3.
+        assert!(
+            (geom.w - 200.0).abs() < 1e-9,
+            "M5-D-α tile <{obj_uri}> antenna:worldWidth must equal 200 — \
+             got {}",
+            geom.w
+        );
+        assert!(
+            (geom.h - 120.0).abs() < 1e-9,
+            "M5-D-α tile <{obj_uri}> antenna:worldHeight must equal 120 — \
+             got {}",
+            geom.h
+        );
+    }
+}
+
+#[test]
+fn m5d_tile_object_lod_widget_carries_levelcontainer_dsl() {
+    // The placed Object's antenna:lod block carries the legacy LevelContainer
+    // wrap (M5-B-α coordinator-accepted shape). This test pins the wrap
+    // shape on at least one tile so a regression in _emitTile or the
+    // pragmatic-deviation scope (M5-D-γ retires the wrap) surfaces here.
+    let (store, _dag) = build_pipeline_with_inbox_settled();
+
+    let obj_uri = "urn:msg:tile:obj:synth:carol";
+    let q = format!(
+        "ASK {{ <{obj_uri}> a <{ANTENNA_NS}Object> ; \
+             <{ANTENNA_NS}lod> ?lod . \
+             ?lod <{ANTENNA_NS}widget> ?widget . \
+             FILTER(CONTAINS(STR(?widget), \"LevelContainer\")) \
+             FILTER(CONTAINS(STR(?widget), \"urn:msg:tile:scene:synth:carol\")) }}"
+    );
+    match store.query(&q) {
+        Ok(QueryResults::Boolean(true)) => {}
+        Ok(QueryResults::Boolean(false)) => panic!(
+            "M5-D-α tile <{obj_uri}> must carry an antenna:lod block whose \
+             widget DSL is `LevelContainer{{scene=<urn:msg:tile:scene:synth:carol>}}` \
+             (M5-B-α legacy wrap, retired in M5-D-γ)"
+        ),
+        Ok(_) => panic!("M5-D-α tile lod ASK returned non-boolean"),
+        Err(e) => panic!("M5-D-α tile lod ASK errored: {e}"),
+    }
+}
+
+#[test]
+fn m5d_inbox_re_emits_when_lastmessage_changes() {
+    // Drive a fresh TextMessage that updates the active conversation's
+    // last-message snippet (via the existing M3 logMsg path; M5-D doesn't
+    // wire messenger:lastMessage triple updates per se — but the tile
+    // re-emit IS triggered by every TextMessage rebuildChat → rebuildInbox
+    // call. The active-conversation tile's tier-2 / tier-3 / tier-4 DSL
+    // strings read globalThis.messages directly for the last-3-messages
+    // block, so the new message MUST appear in the tier-4 widget DSL.
+    //
+    // This isn't a "lastMessage change re-emits Levels" assertion in the
+    // strict messenger:lastMessage triple sense (M5-D-α leaves the
+    // per-message lastMessage update for post-α work), but it IS the
+    // brief-required "lastMessage change re-emits the affected tile's
+    // Levels (DSL string differs)" check at the level the script can
+    // express today: the user-visible widget DSL string changes when a
+    // new message arrives.
+    let (store, dag) = build_pipeline_with_inbox_settled();
+
+    // Snapshot the real conversation's tile-tier widget DSL before the
+    // new TextMessage. (maybeGreet's auto-emit already ran during the
+    // boot sequence in build_pipeline_with_inbox_settled, so the
+    // last-3-messages block may already carry the greet — that's fine.
+    // The contract being tested here is "rebuildInbox re-emits the
+    // affected tile's Levels with a different DSL string when a new
+    // TextMessage lands", not "the tile starts empty".)
+    let real_tile_widget_q = format!(
+        "SELECT ?w WHERE {{ \
+             <urn:msg:tile:level:{REAL_CONV_ID}:tile> \
+             <{ANTENNA_NS}widget> ?w \
+         }}"
+    );
+    let widget_before = first_string_solution(&store, &real_tile_widget_q)
+        .unwrap_or_default();
+    assert!(
+        !widget_before.is_empty(),
+        "Pre-condition: real-conversation tile-tier widget DSL must be \
+         present in the store after rebuildInbox runs"
+    );
+    let unique_marker = "ahoy-from-m5d-snippet";
+    assert!(
+        !widget_before.contains(unique_marker),
+        "Pre-condition: tile-tier widget must NOT yet contain the unique \
+         marker the new TextMessage will carry — got: {widget_before}"
+    );
+
+    // Drive a TextMessage on the real conversation. logMsg pushes the
+    // entry into globalThis.messages, then rebuildChat → rebuildInbox
+    // re-emits the real conv's tile Levels.
+    let mid = "9aa7c4e1f0bd8d3a2256713f4dffaa01";
+    let mut out = CaptureOut::new();
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", mid, unique_marker),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    let widget_after = first_string_solution(&store, &real_tile_widget_q)
+        .unwrap_or_default();
+    assert!(
+        widget_after.contains(unique_marker),
+        "M5-D-α rebuildInbox must re-emit the real conversation's tile-tier \
+         widget DSL with the new message snippet in the last-3 history \
+         block — got: {widget_after}"
+    );
+    assert_ne!(
+        widget_before, widget_after,
+        "M5-D-α tile widget DSL must DIFFER after a TextMessage event"
+    );
+}
+
+#[test]
+fn m5d_inbox_emits_no_carrier_send_traffic_for_synthetic_tiles() {
+    // Brief req 3: synthetic-conversation guard remains intact (no wire
+    // traffic side-effect) when rebuildInbox emits tile triples for a
+    // synth: conversation. Since rebuildInbox is invoked at boot from the
+    // first rebuildChat call, capture every emit during that window and
+    // assert ZERO carrier:SendMsg / SendReaction / SendFile lines slip out.
+    //
+    // Note: ConversationReady on the REAL conv lands a `[] a <urn:msg:
+    // SelfIdentity> ; <urn:msg:nick> "alice" .` and a maybeGreet `carrier:
+    // SendMsg` (greet). The test only asserts NO synth-keyed carrier:SendMsg
+    // — which is the M5-A guard contract (verified by
+    // synthetic_conversation_send_is_dropped_at_pipeline_guard for the
+    // TextSubmitted entry-point; this test is the rebuildInbox-driven
+    // companion).
+    //
+    // The greet path keys carrier:SendMsg by globalThis.peerUri (NOT
+    // synth: conv), so we filter `contains("synth:")` to scope the check.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+    let mut raw: Vec<String> = Vec::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle_capturing_emits(&dag, &store, &mut out, &mut raw, 20);
+    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    settle_capturing_emits(&dag, &store, &mut out, &mut raw, 10);
+
+    let synth_send_emits: Vec<&String> = raw
+        .iter()
+        .filter(|m| m.contains("carrier:SendMsg") && m.contains("synth:"))
+        .collect();
+    assert!(
+        synth_send_emits.is_empty(),
+        "M5-D-α rebuildInbox must NOT trigger any carrier:SendMsg keyed by \
+         a synth: conversationId. Synth-keyed sends found: {synth_send_emits:?}"
+    );
+    let synth_reaction_emits: Vec<&String> = raw
+        .iter()
+        .filter(|m| m.contains("carrier:SendReaction") && m.contains("synth:"))
+        .collect();
+    assert!(
+        synth_reaction_emits.is_empty(),
+        "M5-D-α rebuildInbox must NOT trigger any carrier:SendReaction \
+         keyed by a synth: conversationId. Found: {synth_reaction_emits:?}"
+    );
+
+    // Sanity: at least 4 tile-Scene emits should have made it into the
+    // raw stream — proves the rebuildInbox call actually ran during the
+    // settle window (otherwise the absence-of-synth-send check above would
+    // pass trivially).
+    // Emits go through pump_emits as expanded IRIs (not prefix:LocalName);
+    // match on the absolute Scene IRI so the count holds regardless of
+    // whether the emitter happens to compact `antenna:Scene` or expand
+    // it to the full URI.
+    let tile_scene_emits = raw
+        .iter()
+        .filter(|m| {
+            m.contains("urn:msg:tile:scene:") &&
+            (m.contains("antenna:Scene") ||
+             m.contains("http://resonator.network/v2/antenna#Scene"))
+        })
+        .count();
+    assert!(
+        tile_scene_emits >= 3,
+        "M5-D-α expected ≥3 tile-Scene emits during boot window (3 synthetic \
+         seed conversations) — got {tile_scene_emits}. Raw emits ({}): {raw:#?}",
+        raw.len()
+    );
+}
+
+/// Pull the first ?w solution from a SELECT query as a String literal value.
+/// Mirrors the existing lod_widget_at helper but takes a free-form SPARQL +
+/// ?w binding so tile-tier widget DSL queries don't have to fit the
+/// `<obj_uri> antenna:lod ?l . ?l antenna:below "X" ; antenna:widget ?w` shape
+/// (tile Level URIs aren't reached via lod / below).
+fn first_string_solution(store: &RdfStore, sparql: &str) -> Option<String> {
+    let results = store.query(sparql).ok()?;
+    if let QueryResults::Solutions(sols) = results {
+        for sol in sols.flatten() {
+            if let Some(oxigraph::model::Term::Literal(lit)) = sol.get("w") {
+                return Some(lit.value().to_string());
+            }
+        }
+    }
+    None
+}
