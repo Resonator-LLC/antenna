@@ -5666,11 +5666,16 @@ fn m5b_demo_levels_carry_required_properties() {
     // Smoke-tests the cargo-side correctness of the query Station fires
     // at WS connect; if this passes but live Station only receives 1 row,
     // the bug is on the wire (WS framing / completer race), not the SPARQL.
+    //
+    // M5-C-α update: scoped `?scene` to the specific M5-B demo URI so the
+    // test stays at "exactly 2 rows" even after additional Scenes (M5-C
+    // demo's outer + leaf) land in the store.
     let station_sparql = format!(
         "PREFIX antenna: <{ANTENNA_NS}> \
          PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \
          SELECT ?scene ?scenelabel ?padding ?level ?label \
          ?enterPinchProgress ?widget WHERE {{ \
+             BIND(<urn:msg:scene:m5b-demo> AS ?scene) \
              ?scene a antenna:Scene . \
              OPTIONAL {{ ?scene antenna:scenelabel ?scenelabel . }} \
              OPTIONAL {{ ?scene antenna:padding ?padding . }} \
@@ -5748,4 +5753,239 @@ fn m5b_demo_levels_carry_required_properties() {
              marker — got {got:?}"
         );
     }
+}
+
+// -- M5-C-α — Scene-typed children + ScenePortal demo authoring -------------
+//
+// `radios/messenger/seed.ttl` § # M5-C demo authors a 2-Scene hierarchy:
+//   <urn:m5c-demo:outer> a antenna:Scene ;
+//       antenna:children ( <urn:msg:scene:m5b-demo> <urn:m5c-demo:leaf> ) .
+//   <urn:m5c-demo:leaf>  a antenna:Scene ;
+//       antenna:children ( <urn:m5c-demo:leaf-only-level> ) .
+//
+// Both children are Scene-typed (NOT Level-typed); this is the M5-C-α
+// extension to antenna:children polymorphism. The leaf carries one
+// antenna:Level. These two tests pin the authoring shape so a future
+// seed.ttl refactor that flips a child's class (Scene → Level) or drops
+// the leaf surfaces here, not at Station-runtime via a ScenePortal blank
+// placeholder.
+
+#[test]
+fn m5c_station_scene_sparql_matches_polymorphic_children() {
+    // M5-C-α — exact byte-for-byte mirror of `WsAntennaBackend._buildSceneSparql`
+    // (modulo prefix syntax). MUST return rows for both M5-B (Level-typed
+    // children) AND M5-C demos (Scene-typed children). Validates the
+    // polymorphic OPTIONAL-with-BIND extension Oxigraph executes correctly.
+    let (store, _dag) = build_messenger_pipeline();
+
+    let sparql = format!(
+        "PREFIX antenna: <{ANTENNA_NS}> \
+         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \
+         SELECT ?scene ?scenelabel ?padding ?level ?label \
+         ?enterPinchProgress ?widget ?childSceneLabel ?childKind WHERE {{ \
+             ?scene a antenna:Scene . \
+             OPTIONAL {{ ?scene antenna:scenelabel ?scenelabel . }} \
+             OPTIONAL {{ ?scene antenna:padding ?padding . }} \
+             ?scene antenna:children ?head . \
+             ?head (rdf:rest)* ?cell . \
+             ?cell rdf:first ?level . \
+             OPTIONAL {{ \
+                 ?level a antenna:Level ; antenna:widget ?widget . \
+                 OPTIONAL {{ ?level antenna:label ?label . }} \
+                 OPTIONAL {{ ?level antenna:enterPinchProgress ?enterPinchProgress . }} \
+                 BIND(\"level\" AS ?childKind) \
+             }} \
+             OPTIONAL {{ \
+                 ?level a antenna:Scene . \
+                 OPTIONAL {{ ?level antenna:scenelabel ?childSceneLabel . }} \
+                 BIND(\"scene\" AS ?childKind) \
+             }} \
+         }}"
+    );
+    let mut total_rows = 0usize;
+    let mut level_typed = 0usize;
+    let mut scene_typed = 0usize;
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&sparql) {
+        for sol in sols.flatten() {
+            total_rows += 1;
+            match sol.get("childKind").map(|t| t.to_string()) {
+                Some(s) if s.contains("level") => level_typed += 1,
+                Some(s) if s.contains("scene") => scene_typed += 1,
+                _ => {}
+            }
+        }
+    }
+    assert!(
+        total_rows >= 5,
+        "M5-C-α Station SPARQL must return ≥5 rows across all Scenes \
+         (M5-B 2 Levels + M5-C-outer 2 Scenes + M5-C-leaf 1 Level) — \
+         got {total_rows}"
+    );
+    assert!(
+        level_typed >= 3,
+        "M5-C-α Station SPARQL must classify ≥3 rows as Level-typed \
+         (M5-B Compact + Detail + M5-C-leaf level) — got {level_typed}"
+    );
+    assert!(
+        scene_typed >= 2,
+        "M5-C-α Station SPARQL must classify ≥2 rows as Scene-typed \
+         (M5-C-outer's two portal children) — got {scene_typed}"
+    );
+}
+
+#[test]
+fn m5c_demo_outer_has_two_scene_typed_children() {
+    let (store, _dag) = build_messenger_pipeline();
+
+    // (1) Outer Scene exists with the expected URI + a:Scene type.
+    let outer_q = format!("ASK {{ <urn:m5c-demo:outer> a <{ANTENNA_NS}Scene> }}");
+    match store.query(&outer_q) {
+        Ok(QueryResults::Boolean(true)) => {}
+        Ok(QueryResults::Boolean(false)) => panic!(
+            "M5-C-α seed must declare <urn:m5c-demo:outer> a antenna:Scene — \
+             see radios/messenger/seed.ttl § # M5-C demo"
+        ),
+        Ok(_) => panic!("M5-C-α outer Scene ASK returned non-boolean"),
+        Err(e) => panic!("M5-C-α outer Scene ASK errored: {e}"),
+    }
+
+    // (2) Walk the rdf:List children. EXPECTED: exactly 2 children.
+    //     Both must be a:Scene-typed (the M5-C-α extension); neither
+    //     should be a:Level-typed.
+    const RDF_NS: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+    let children_q = format!(
+        "PREFIX antenna: <{ANTENNA_NS}> \
+         PREFIX rdf: <{RDF_NS}> \
+         SELECT ?child WHERE {{ \
+             <urn:m5c-demo:outer> antenna:children ?head . \
+             ?head (rdf:rest)* ?cell . \
+             ?cell rdf:first ?child . \
+         }}"
+    );
+    let mut children: Vec<String> = Vec::new();
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&children_q) {
+        for sol in sols.flatten() {
+            if let Some(t) = sol.get("child") {
+                children.push(t.to_string());
+            }
+        }
+    }
+    assert_eq!(
+        children.len(),
+        2,
+        "M5-C-α outer Scene must list EXACTLY 2 children — got {children:?}"
+    );
+    let joined = children.join(",");
+    assert!(
+        joined.contains("urn:msg:scene:m5b-demo"),
+        "M5-C-α outer must include the M5-B demo Scene as a portal child — \
+         got {children:?}"
+    );
+    assert!(
+        joined.contains("urn:m5c-demo:leaf"),
+        "M5-C-α outer must include the leaf Scene as a portal child — \
+         got {children:?}"
+    );
+
+    // (3) Both children must be a:Scene-typed (the polymorphism extension).
+    //     If either is a:Level-typed, the M5-C-α SPARQL discriminator
+    //     would route it through the Level-typed branch instead of the
+    //     Scene-typed portal branch — broken authoring contract.
+    //
+    //     Solutions return URIs in `<...>` form; strip the wrapper before
+    //     re-substituting into the ASK query.
+    for child in &children {
+        let bare = child.trim_start_matches('<').trim_end_matches('>');
+        let kind_q = format!("ASK {{ <{bare}> a <{ANTENNA_NS}Scene> }}");
+        match store.query(&kind_q) {
+            Ok(QueryResults::Boolean(true)) => {}
+            Ok(QueryResults::Boolean(false)) => panic!(
+                "M5-C-α outer's portal child <{bare}> must be \
+                 a:Scene-typed (not a:Level-typed). The M5-C-α \
+                 polymorphism extension routes Scene-typed children \
+                 through the portal branch; a Level-typed child would \
+                 break the demo's drill-in semantics."
+            ),
+            Ok(_) => panic!("M5-C-α child kind ASK returned non-boolean"),
+            Err(e) => panic!("M5-C-α child <{bare}> kind ASK errored: {e}"),
+        }
+    }
+
+    // (4) The placed Object that hosts the outer LevelContainer DSL must
+    //     be queryable by Station's viewport SPARQL. Without all of the
+    //     antenna:Object fields + lod block, the canvas won't paint the
+    //     M5-C demo at all.
+    let object_q = format!(
+        "ASK {{ <urn:m5c-demo> a <{ANTENNA_NS}Object> ; \
+             <{ANTENNA_NS}x> ?x ; <{ANTENNA_NS}y> ?y ; \
+             <{ANTENNA_NS}worldWidth> ?w ; <{ANTENNA_NS}worldHeight> ?h ; \
+             <{ANTENNA_NS}lod> ?lod . \
+             ?lod <{ANTENNA_NS}widget> ?widget . \
+             FILTER(STRSTARTS(STR(?widget), \"LevelContainer\")) }}"
+    );
+    match store.query(&object_q) {
+        Ok(QueryResults::Boolean(true)) => {}
+        Ok(QueryResults::Boolean(false)) => panic!(
+            "M5-C-α placed Object must carry x/y/worldWidth/worldHeight + \
+             a:lod block whose widget DSL starts with LevelContainer."
+        ),
+        Ok(_) => panic!("M5-C-α Object ASK returned non-boolean"),
+        Err(e) => panic!("M5-C-α Object ASK errored: {e}"),
+    }
+}
+
+#[test]
+fn m5c_demo_leaf_has_one_level_child() {
+    let (store, _dag) = build_messenger_pipeline();
+
+    // Leaf Scene exists.
+    let leaf_q = format!("ASK {{ <urn:m5c-demo:leaf> a <{ANTENNA_NS}Scene> }}");
+    match store.query(&leaf_q) {
+        Ok(QueryResults::Boolean(true)) => {}
+        Ok(QueryResults::Boolean(false)) => panic!(
+            "M5-C-α leaf Scene <urn:m5c-demo:leaf> must exist — see \
+             radios/messenger/seed.ttl § # M5-C demo"
+        ),
+        Ok(_) => panic!("M5-C-α leaf Scene ASK returned non-boolean"),
+        Err(e) => panic!("M5-C-α leaf Scene ASK errored: {e}"),
+    }
+
+    // Leaf has exactly 1 a:Level-typed child carrying label + progress + widget.
+    const RDF_NS: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+    let leaf_child_q = format!(
+        "PREFIX antenna: <{ANTENNA_NS}> \
+         PREFIX rdf: <{RDF_NS}> \
+         SELECT ?level ?label ?prog ?widget WHERE {{ \
+             <urn:m5c-demo:leaf> antenna:children ?head . \
+             ?head (rdf:rest)* ?cell . \
+             ?cell rdf:first ?level . \
+             ?level a antenna:Level ; \
+                    antenna:label ?label ; \
+                    antenna:enterPinchProgress ?prog ; \
+                    antenna:widget ?widget . \
+         }}"
+    );
+    let mut rows = 0usize;
+    let mut got_label: Option<String> = None;
+    let mut got_widget: Option<String> = None;
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&leaf_child_q) {
+        for sol in sols.flatten() {
+            rows += 1;
+            got_label = sol.get("label").map(|t| t.to_string());
+            got_widget = sol.get("widget").map(|t| t.to_string());
+        }
+    }
+    assert_eq!(
+        rows, 1,
+        "M5-C-α leaf Scene must have EXACTLY 1 a:Level child — got {rows}"
+    );
+    assert!(
+        got_label.as_deref().unwrap_or("").contains("Leaf"),
+        "M5-C-α leaf Level must carry antenna:label \"Leaf\" — got {got_label:?}"
+    );
+    assert!(
+        got_widget.as_deref().unwrap_or("").contains("LEAF VIEW"),
+        "M5-C-α leaf Level widget DSL must carry the \"LEAF VIEW\" marker — \
+         got {got_widget:?}"
+    );
 }
