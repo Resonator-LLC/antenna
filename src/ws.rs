@@ -67,6 +67,19 @@ pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(W
                 // Block waiting for outgoing messages (100ms timeout to check for new clients)
                 match out_rx.recv_timeout(Duration::from_millis(100)) {
                     Ok(msg) => {
+                        // Re-check the registration channel before forwarding.
+                        // The accept() side is on a separate thread: a client
+                        // can register AFTER the top-of-loop try_recv but
+                        // BEFORE recv_timeout returns, so without this second
+                        // check the first message destined for the new client
+                        // would be silently dropped (current_client still
+                        // None). This was the M5-B-α first-frame race that
+                        // Station's `sp:Ask` warmup probe was added to mask;
+                        // closing it here lets that workaround retire in a
+                        // follow-up Station cut.
+                        if let Ok(new_tx) = client_tx_receiver.try_recv() {
+                            current_client = Some(new_tx);
+                        }
                         if let Some(ref tx) = current_client {
                             if tx.send(msg).is_err() {
                                 current_client = None;
@@ -167,10 +180,56 @@ pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(W
                                         }
                                     }
 
-                                    // Write to WS — drain all pending outgoing messages
-                                    while let Ok(msg) = per_client_rx.try_recv() {
-                                        if ws.send(Message::Text(msg)).is_err() {
-                                            tracing::warn!(target: "WS", "write error, dropping client");
+                                    // Write to WS — drain all pending outgoing messages.
+                                    //
+                                    // The TCP socket is non-blocking (set above for
+                                    // poll-driven reads), so tungstenite's `send` may
+                                    // return Io(WouldBlock) when the OS send buffer
+                                    // fills mid-burst (e.g. the M5-C scene SPARQL
+                                    // response that emits ~30 Turtle messages in
+                                    // tight succession). WouldBlock is transient —
+                                    // tungstenite has internally buffered whatever
+                                    // wouldn't fit, and a follow-up flush() on the
+                                    // next poll iteration drains it once the kernel
+                                    // makes room. Treating WouldBlock as terminal
+                                    // (the pre-Task-#14 behaviour) caused live
+                                    // Station renders to flash "Scene not in store"
+                                    // when antenna prematurely tore down the client
+                                    // partway through a multi-row response.
+                                    'drain: while let Ok(msg) = per_client_rx.try_recv() {
+                                        match ws.send(Message::Text(msg)) {
+                                            Ok(()) => {}
+                                            Err(tungstenite::Error::Io(ref e))
+                                                if e.kind()
+                                                    == std::io::ErrorKind::WouldBlock =>
+                                            {
+                                                // Send buffer full — pause draining.
+                                                // The remaining per_client_rx items
+                                                // stay queued; tungstenite's internal
+                                                // out_buffer will be flushed below
+                                                // (and again next iteration if still
+                                                // WouldBlock).
+                                                break 'drain;
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!(target: "WS", %e, "write error, dropping client");
+                                                break 'client;
+                                            }
+                                        }
+                                    }
+
+                                    // Pump tungstenite's internal write buffer to
+                                    // the kernel. flush() returns WouldBlock when
+                                    // the buffer is partially drained; that's fine
+                                    // — we'll loop back here on the next poll pass.
+                                    // Only non-WouldBlock errors are terminal.
+                                    match ws.flush() {
+                                        Ok(()) => {}
+                                        Err(tungstenite::Error::Io(ref e))
+                                            if e.kind()
+                                                == std::io::ErrorKind::WouldBlock => {}
+                                        Err(e) => {
+                                            tracing::warn!(target: "WS", %e, "flush error, dropping client");
                                             break 'client;
                                         }
                                     }
