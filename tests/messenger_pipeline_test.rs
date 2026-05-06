@@ -5199,3 +5199,553 @@ fn attachment_tier4_pre_complete_image_falls_back_to_hex_dump() {
         "pre-complete tier-4 must surface the explicit `pending - preview unavailable` placeholder — got: {widget}"
     );
 }
+
+// ── M5-A — Synthetic multi-conversation seed + pipeline guard ───────────
+//
+// The spatial-zoom new model (M5+) lifts the conversation list out of
+// chrome and makes it a plane in the canvas. M5-A is the FOUNDATION cut:
+// vocab additions (antenna:Level + antenna:Scene) + 3 synthetic
+// messenger:Conversation fixtures in seed.ttl + a pipeline guard that
+// drops any wire-send keyed by a `synth:`-prefixed conversationId.
+//
+// These tests exercise the pipeline-side contract:
+//   1. Synthetic conversations parse cleanly out of seed.ttl into the
+//      store and are queryable as messenger:Conversation rows.
+//   2. Driving a TextSubmitted while globalThis.conversationId is a
+//      synthetic id MUST NOT emit carrier:SendMsg (the guard catches
+//      the wire-send attempt before it reaches the carrier dispatcher).
+//   3. Driving the same TextSubmitted shape against a REAL conversation
+//      MUST still emit carrier:SendMsg — companion check that the guard
+//      isn't a false-positive wrecking the live send path.
+//   4. The new antenna:Level + antenna:Scene vocab parses into the
+//      store and is queryable via SPARQL — proves the ontology
+//      additions in arch/ontology/antenna.ttl don't trip Oxigraph.
+
+#[test]
+fn synthetic_conversation_seed_loads() {
+    // Boot the messenger pipeline (which loads seed.ttl alongside) and
+    // assert the M5-A synthetic-conversation triples are queryable.
+    // Brief: "assert 3+ messenger:Conversation triples queryable; assert
+    // at least one carries messenger:conversationId starting with synth:".
+    let (store, _dag) = build_messenger_pipeline();
+
+    // (1) Count messenger:Conversation rows in the store. Iterate
+    //     solutions in Rust rather than SPARQL COUNT; oxigraph renders
+    //     integer literals as `"3"^^<…XMLSchema#integer>` and digit-
+    //     filtering on `to_string()` picks up the schema URL's "2001"
+    //     and falsely inflates the count.
+    let row_query = format!(
+        "SELECT ?c WHERE {{ ?c a <{MESSENGER_NS}Conversation> }}"
+    );
+    let mut total = 0usize;
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&row_query) {
+        for _ in sols.flatten() {
+            total += 1;
+        }
+    }
+    assert!(
+        total >= 3,
+        "M5-A seed must declare ≥3 messenger:Conversation rows (got {total}) — \
+         see radios/messenger/seed.ttl"
+    );
+
+    // (2) At least one row's messenger:conversationId starts with `synth:`.
+    let synth_query = format!(
+        "SELECT ?id WHERE {{ ?c a <{MESSENGER_NS}Conversation> ; \
+         <{MESSENGER_NS}conversationId> ?id . \
+         FILTER(STRSTARTS(STR(?id), \"synth:\")) }}"
+    );
+    let mut synth_ids: Vec<String> = Vec::new();
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&synth_query) {
+        for sol in sols.flatten() {
+            if let Some(term) = sol.get("id") {
+                synth_ids.push(term.to_string());
+            }
+        }
+    }
+    assert!(
+        !synth_ids.is_empty(),
+        "M5-A seed must carry ≥1 synthetic conversationId prefixed `synth:` — \
+         got synth_ids={synth_ids:?}, total messenger:Conversation rows={total}"
+    );
+
+    // (3) The brief's three named fixtures (synth-carol / synth-dave /
+    //     synth-trio) — pin the URN scheme so a future seed refactor that
+    //     renames them surfaces here, not in M5-B's tile rendering.
+    for expected_id in ["synth:carol", "synth:dave", "synth:trio"] {
+        let q = format!(
+            "ASK {{ ?c a <{MESSENGER_NS}Conversation> ; \
+             <{MESSENGER_NS}conversationId> \"{expected_id}\" }}"
+        );
+        match store.query(&q) {
+            Ok(QueryResults::Boolean(true)) => {}
+            Ok(QueryResults::Boolean(false)) => panic!(
+                "M5-A seed must declare a messenger:Conversation with \
+                 conversationId `{expected_id}` — ASK returned false"
+            ),
+            Ok(_) => panic!(
+                "M5-A seed query for `{expected_id}` returned a non-boolean \
+                 result; ASK should always be Boolean"
+            ),
+            Err(e) => panic!(
+                "M5-A seed ASK query for `{expected_id}` errored: {e}"
+            ),
+        }
+    }
+}
+
+#[test]
+fn synthetic_conversation_send_is_dropped_at_pipeline_guard() {
+    // Drive ConversationReady with a synthetic conversationId, then send a
+    // TextSubmitted carrying a non-empty value on the chatinput target.
+    // The pipeline's M5-A guard (`isSyntheticConversation` → drop +
+    // breadcrumb log) MUST swallow the send: the captured raw emits must
+    // contain ZERO carrier:SendMsg lines.
+    //
+    // Mirrors the shape of `tap_on_send_button_routes_through_pipeline_
+    // without_duplicate_send` (which asserts the same absence-of-SendMsg
+    // contract for the duplicate-tap path), so a regression in either
+    // guard surfaces with the same fixture pattern.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    // Boot the script + seed peerUri via ContactOnline (TextSubmitted
+    // gates on `globalThis.peerUri && globalThis.conversationId`; without
+    // peerUri the branch never reaches the would-be send line and the
+    // test's absence-of-SendMsg assertion would pass trivially — defeats
+    // the contract).
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 20);
+    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 10);
+    dispatch::dispatch(
+        &contact_online_event("did:tox:peer"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    // ConversationReady with a SYNTHETIC conv id — flips
+    // globalThis.conversationId to "synth:carol".
+    dispatch::dispatch(
+        "[] a antenna:Test ; carrier:ConversationReady \"_\" ; \
+         carrier:contactUri \"did:tox:peer\" ; \
+         carrier:conversationId \"synth:carol\" .",
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 20);
+
+    // Drain anything captured during boot — only what arrives AFTER the
+    // TextSubmitted matters for the assertion.
+    let mut raw: Vec<String> = Vec::new();
+
+    // Synthesize the TextSubmitted line the live HudTextField emits —
+    // antenna:TextSubmitted with target=urn:msg:chatinput + a non-empty
+    // value. Mirrors the existing `composer_tier3_emits_multiline_…`
+    // test family's TextSubmitted fixture shape.
+    dispatch::dispatch(
+        "[] a <http://resonator.network/v2/antenna#TextSubmitted> ; \
+         <http://resonator.network/v2/antenna#target> <urn:msg:chatinput> ; \
+         <http://resonator.network/v2/antenna#value> \"hi carol\" .",
+        &store, &dag, None, "", &mut out,
+    );
+    settle_capturing_emits(&dag, &store, &mut out, &mut raw, 10);
+
+    let send_msg_emits: Vec<&String> = raw
+        .iter()
+        .filter(|m| m.contains("carrier:SendMsg") || m.contains("a carrier:SendMsg"))
+        .collect();
+    assert!(
+        send_msg_emits.is_empty(),
+        "M5-A pipeline guard must drop carrier:SendMsg for a synth: conversationId \
+         (got globalThis.conversationId=`synth:carol`). Raw emits containing \
+         `carrier:SendMsg`: {send_msg_emits:?}\n\nAll raw emits:\n{raw:#?}"
+    );
+}
+
+#[test]
+fn real_conversation_send_still_emits() {
+    // Companion to `synthetic_conversation_send_is_dropped_at_pipeline_guard`
+    // — verify the M5-A guard isn't a false-positive that wrecks the live
+    // send path. Drive a real (non-`synth:`) conversationId via the
+    // standard handshake and assert TextSubmitted DOES emit carrier:SendMsg.
+    let (store, dag) = build_messenger_pipeline();
+
+    // Standard input-enabled handshake — ContactOnline + ConversationReady
+    // with a non-synthetic conv id. settle_input_enabled uses
+    // "conv-m2b-test" which doesn't start with `synth:`.
+    settle_input_enabled(&store, &dag);
+
+    let mut out = CaptureOut::new();
+    let mut raw: Vec<String> = Vec::new();
+
+    dispatch::dispatch(
+        "[] a <http://resonator.network/v2/antenna#TextSubmitted> ; \
+         <http://resonator.network/v2/antenna#target> <urn:msg:chatinput> ; \
+         <http://resonator.network/v2/antenna#value> \"hello real conv\" .",
+        &store, &dag, None, "", &mut out,
+    );
+    settle_capturing_emits(&dag, &store, &mut out, &mut raw, 10);
+
+    let send_msg_count = raw
+        .iter()
+        .filter(|m| m.contains("a carrier:SendMsg"))
+        .count();
+    assert_eq!(
+        send_msg_count, 1,
+        "M5-A guard must NOT drop carrier:SendMsg for a real (non-synth) \
+         conversationId — exactly one emit expected, got {send_msg_count}. \
+         Raw emits:\n{raw:#?}"
+    );
+    // Pin the text payload too — sanitize replaces commas with spaces, but
+    // the literal we sent has no commas, so the round-trip is verbatim.
+    let send_line = raw
+        .iter()
+        .find(|m| m.contains("a carrier:SendMsg"))
+        .expect("the count assertion above guarantees at least one emit");
+    assert!(
+        send_line.contains("hello real conv"),
+        "real-conversation send must carry the user's text verbatim — got: {send_line}"
+    );
+}
+
+#[test]
+fn level_and_scene_vocab_parse_in_store() {
+    // M5-A vocab additions: antenna:Level (with antenna:label,
+    // antenna:enterPinchProgress, antenna:widget) + antenna:Scene (with
+    // antenna:scenelabel, antenna:padding, antenna:children). Validate
+    // the new ontology additions don't trip Oxigraph's Turtle parser
+    // and round-trip through a SPARQL select. Pre-approved by user as
+    // part of the spatial-zoom paradigm shift; this test is the cargo
+    // gate that keeps the new vocab queryable across future store
+    // refactors.
+    let store = RdfStore::open(None).expect("in-memory store");
+
+    // Minimal author-shape: a Scene with two child Levels — exercises both
+    // classes + every new property in one parse pass.
+    let turtle = r#"
+        <urn:test:scene:inbox> a antenna:Scene ;
+            antenna:scenelabel "Inbox" ;
+            antenna:padding "24.0"^^xsd:double ;
+            antenna:children ( <urn:test:level:tile:carol> <urn:test:level:tile:dave> ) .
+
+        <urn:test:level:tile:carol> a antenna:Level ;
+            antenna:label "Carol tile" ;
+            antenna:enterPinchProgress "0.4"^^xsd:double ;
+            antenna:widget "Container{width=200,height=100}[Text{value=Carol}]" .
+
+        <urn:test:level:tile:dave> a antenna:Level ;
+            antenna:label "Dave tile" ;
+            antenna:enterPinchProgress "0.4"^^xsd:double ;
+            antenna:widget "Container{width=200,height=100}[Text{value=Dave}]" .
+    "#;
+    store
+        .insert_turtle(turtle)
+        .expect("M5-A Level + Scene vocab must parse — \
+                 see arch/ontology/antenna.ttl");
+
+    // (1) Scene round-trip: select label + padding by URI.
+    let scene_q = format!(
+        "SELECT ?l ?p WHERE {{ <urn:test:scene:inbox> a <{ANTENNA_NS}Scene> ; \
+         <{ANTENNA_NS}scenelabel> ?l ; <{ANTENNA_NS}padding> ?p }}"
+    );
+    let mut scene_label: Option<String> = None;
+    let mut scene_padding: Option<String> = None;
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&scene_q) {
+        for sol in sols.flatten() {
+            scene_label = sol.get("l").map(|t| t.to_string());
+            scene_padding = sol.get("p").map(|t| t.to_string());
+        }
+    }
+    assert!(
+        scene_label.as_deref().unwrap_or("").contains("Inbox"),
+        "antenna:Scene must round-trip antenna:scenelabel — got {scene_label:?}"
+    );
+    assert!(
+        scene_padding.as_deref().unwrap_or("").contains("24"),
+        "antenna:Scene must round-trip antenna:padding — got {scene_padding:?}"
+    );
+
+    // (2) Count Level rows — must be exactly 2. Iterate solutions in
+    //     Rust rather than COUNT-as-?n; oxigraph renders integer literals
+    //     as `"2"^^<…XMLSchema#integer>` and `to_string()`-then-filter-
+    //     digits picks up the schema URL's digits ("2001") and falsely
+    //     inflates the count.
+    let level_q_all = format!(
+        "SELECT ?l WHERE {{ ?l a <{ANTENNA_NS}Level> }}"
+    );
+    let mut level_total = 0usize;
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&level_q_all) {
+        for _ in sols.flatten() {
+            level_total += 1;
+        }
+    }
+    assert_eq!(
+        level_total, 2,
+        "M5-A vocab parse must surface both authored antenna:Level rows"
+    );
+
+    // (3) Per-Level property round-trip — label + enterPinchProgress +
+    //     widget DSL. Pin the widget literal so a future Turtle escaping
+    //     change in the store layer surfaces here.
+    let level_q = format!(
+        "SELECT ?label ?prog ?w WHERE {{ \
+         <urn:test:level:tile:carol> a <{ANTENNA_NS}Level> ; \
+         <{ANTENNA_NS}label> ?label ; \
+         <{ANTENNA_NS}enterPinchProgress> ?prog ; \
+         <{ANTENNA_NS}widget> ?w }}"
+    );
+    let mut got_label: Option<String> = None;
+    let mut got_prog: Option<String> = None;
+    let mut got_widget: Option<String> = None;
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&level_q) {
+        for sol in sols.flatten() {
+            got_label = sol.get("label").map(|t| t.to_string());
+            got_prog = sol.get("prog").map(|t| t.to_string());
+            got_widget = sol.get("w").map(|t| t.to_string());
+        }
+    }
+    assert!(
+        got_label.as_deref().unwrap_or("").contains("Carol tile"),
+        "antenna:Level must round-trip antenna:label — got {got_label:?}"
+    );
+    assert!(
+        got_prog.as_deref().unwrap_or("").contains("0.4"),
+        "antenna:Level must round-trip antenna:enterPinchProgress — got {got_prog:?}"
+    );
+    assert!(
+        got_widget.as_deref().unwrap_or("").contains("Text{value=Carol}"),
+        "antenna:Level must round-trip antenna:widget DSL string verbatim — got {got_widget:?}"
+    );
+}
+
+// ── M5-B-α — LevelContainer demo Scene authoring in seed.ttl ────────────
+//
+// M5-B-α lands the Station-side `LevelContainer{scene=<urn>}` widget DSL
+// primitive — a fixed-pixel, no-morph render of the FIRST `antenna:Level`
+// in a Scene's children list. To validate the M5-B demo Scene + 2 Levels
+// authored in `radios/messenger/seed.ttl § # M5-B demo`, two cargo tests:
+//
+//   1. The Scene parses into the antenna store and is queryable as
+//      `?s a antenna:Scene` with exactly 2 named children.
+//   2. Each Level carries the three required properties (label,
+//      enterPinchProgress, widget). Verifies the demo will render: the
+//      Station-side Scene SPARQL pull (WsAntennaBackend.querySceneRows())
+//      JOINs on these three properties; missing any of them would drop
+//      the Level row silently.
+//
+// Both tests assert against the LIVE seed (build_messenger_pipeline ->
+// loads radios/messenger/seed.ttl into the store) so a future seed
+// refactor that renames or removes the demo surfaces here, not at
+// Station-runtime via a blank LevelContainer placeholder.
+
+#[test]
+fn m5b_demo_scene_authored_in_seed() {
+    // The seed.ttl additions land an `antenna:Scene` named
+    // `<urn:msg:scene:m5b-demo>` with `antenna:children` resolving to a
+    // 2-element rdf:List of named Levels. This test pins both the URI
+    // scheme and the children count + ordering.
+    let (store, _dag) = build_messenger_pipeline();
+
+    // (1) Scene exists with the expected URI + a:Scene type.
+    let scene_q = format!(
+        "ASK {{ <urn:msg:scene:m5b-demo> a <{ANTENNA_NS}Scene> }}"
+    );
+    match store.query(&scene_q) {
+        Ok(QueryResults::Boolean(true)) => {}
+        Ok(QueryResults::Boolean(false)) => panic!(
+            "M5-B-α seed must declare <urn:msg:scene:m5b-demo> a antenna:Scene — \
+             see radios/messenger/seed.ttl § # M5-B demo"
+        ),
+        Ok(_) => panic!("M5-B-α seed ASK returned non-boolean"),
+        Err(e) => panic!("M5-B-α seed Scene ASK errored: {e}"),
+    }
+
+    // (2) Walk the rdf:List via property-path so the test mirrors the
+    //     Station-side query shape (WsAntennaBackend._buildSceneSparql).
+    //     Expect exactly 2 children: m5b-compact (first), m5b-detail
+    //     (second). Ordering by enterPinchProgress puts compact first.
+    const RDF_NS: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+    let children_q = format!(
+        "PREFIX antenna: <{ANTENNA_NS}> \
+         PREFIX rdf: <{RDF_NS}> \
+         SELECT ?level WHERE {{ \
+             <urn:msg:scene:m5b-demo> antenna:children ?head . \
+             ?head (rdf:rest)* ?cell . \
+             ?cell rdf:first ?level . \
+         }}"
+    );
+    let mut levels: Vec<String> = Vec::new();
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&children_q) {
+        for sol in sols.flatten() {
+            if let Some(t) = sol.get("level") {
+                levels.push(t.to_string());
+            }
+        }
+    }
+    assert_eq!(
+        levels.len(),
+        2,
+        "M5-B-α Scene must list EXACTLY 2 children — got {levels:?}"
+    );
+    // The named-Level URIs are pinned so the demo is self-contained.
+    let joined = levels.join(",");
+    assert!(
+        joined.contains("urn:msg:level:m5b-compact"),
+        "M5-B-α children must include the Compact Level — got {levels:?}"
+    );
+    assert!(
+        joined.contains("urn:msg:level:m5b-detail"),
+        "M5-B-α children must include the Detail Level — got {levels:?}"
+    );
+
+    // (3) The placed Object that hosts the LevelContainer DSL must be
+    //     queryable by the Station's viewport SPARQL — `?uri a a:Object`
+    //     with antenna:x/y/worldWidth/worldHeight + an a:lod block whose
+    //     widget literal carries the LevelContainer DSL referencing the
+    //     Scene URI. Without all of these, the viewport query won't
+    //     surface the Object and the canvas won't paint anything at all.
+    let object_q = format!(
+        "ASK {{ <urn:msg:m5b-demo> a <{ANTENNA_NS}Object> ; \
+             <{ANTENNA_NS}x> ?x ; <{ANTENNA_NS}y> ?y ; \
+             <{ANTENNA_NS}worldWidth> ?w ; <{ANTENNA_NS}worldHeight> ?h ; \
+             <{ANTENNA_NS}lod> ?lod . \
+             ?lod <{ANTENNA_NS}widget> ?widget . \
+             FILTER(STRSTARTS(STR(?widget), \"LevelContainer\")) }}"
+    );
+    match store.query(&object_q) {
+        Ok(QueryResults::Boolean(true)) => {}
+        Ok(QueryResults::Boolean(false)) => panic!(
+            "M5-B-α placed Object must carry x/y/worldWidth/worldHeight + a:lod \
+             block whose widget DSL starts with LevelContainer — without all of \
+             these, Station's viewport SPARQL won't surface it. ASK returned false."
+        ),
+        Ok(_) => panic!("M5-B-α Object ASK returned non-boolean"),
+        Err(e) => panic!("M5-B-α Object ASK errored: {e}"),
+    }
+}
+
+#[test]
+fn m5b_demo_levels_carry_required_properties() {
+    // The Station-side Scene SPARQL pull JOINs each Level on three
+    // required properties: antenna:label, antenna:enterPinchProgress,
+    // antenna:widget. A missing property silently drops the row from
+    // the resolved SceneStore — the LevelContainer would then fall back
+    // to a "0 levels" placeholder. Pin all three on both demo Levels
+    // so a seed.ttl refactor that drops one surfaces here.
+    let (store, _dag) = build_messenger_pipeline();
+
+    for level_uri in [
+        "urn:msg:level:m5b-compact",
+        "urn:msg:level:m5b-detail",
+    ] {
+        // Required: a:Level + a:label + a:enterPinchProgress + a:widget
+        let q = format!(
+            "ASK {{ \
+                 <{level_uri}> a <{ANTENNA_NS}Level> ; \
+                     <{ANTENNA_NS}label> ?lbl ; \
+                     <{ANTENNA_NS}enterPinchProgress> ?p ; \
+                     <{ANTENNA_NS}widget> ?w \
+             }}"
+        );
+        match store.query(&q) {
+            Ok(QueryResults::Boolean(true)) => {}
+            Ok(QueryResults::Boolean(false)) => panic!(
+                "M5-B-α Level <{level_uri}> must carry a:label + \
+                 a:enterPinchProgress + a:widget — ASK returned false. \
+                 Station's Scene SPARQL pull JOINs on all three; missing \
+                 any drops the Level from the resolved store."
+            ),
+            Ok(_) => panic!("M5-B-α Level ASK returned non-boolean"),
+            Err(e) => panic!("M5-B-α Level <{level_uri}> ASK errored: {e}"),
+        }
+    }
+
+    // M5-B-α — exact-shape gate for Station's WS scene pull. Mirrors
+    // `WsAntennaBackend._buildSceneSparql` byte-for-byte (modulo prefix
+    // syntax). Must return EXACTLY 2 rows for the 2-Level demo Scene.
+    // Smoke-tests the cargo-side correctness of the query Station fires
+    // at WS connect; if this passes but live Station only receives 1 row,
+    // the bug is on the wire (WS framing / completer race), not the SPARQL.
+    let station_sparql = format!(
+        "PREFIX antenna: <{ANTENNA_NS}> \
+         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \
+         SELECT ?scene ?scenelabel ?padding ?level ?label \
+         ?enterPinchProgress ?widget WHERE {{ \
+             ?scene a antenna:Scene . \
+             OPTIONAL {{ ?scene antenna:scenelabel ?scenelabel . }} \
+             OPTIONAL {{ ?scene antenna:padding ?padding . }} \
+             ?scene antenna:children ?head . \
+             ?head (rdf:rest)* ?cell . \
+             ?cell rdf:first ?level . \
+             ?level a antenna:Level ; antenna:widget ?widget . \
+             OPTIONAL {{ ?level antenna:label ?label . }} \
+             OPTIONAL {{ ?level antenna:enterPinchProgress ?enterPinchProgress . }} \
+         }}"
+    );
+    let mut station_rows = 0usize;
+    let mut levels_seen = std::collections::HashSet::new();
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&station_sparql) {
+        for sol in sols.flatten() {
+            station_rows += 1;
+            if let Some(t) = sol.get("level") {
+                levels_seen.insert(t.to_string());
+            }
+        }
+    }
+    assert_eq!(
+        station_rows, 2,
+        "Station's Scene SPARQL must return EXACTLY 2 rows for the M5-B \
+         demo Scene — got {station_rows}. Levels seen: {levels_seen:?}"
+    );
+    assert_eq!(
+        levels_seen.len(),
+        2,
+        "Both Levels must be distinct rows — got {levels_seen:?}"
+    );
+
+    // Pin the per-Level enterPinchProgress so the canvas's first paint
+    // (β picks the active level by largest progress ≤ pinchProgress)
+    // doesn't silently flip if the seed is re-ordered.
+    let prog_q = format!(
+        "SELECT ?prog WHERE {{ \
+             <urn:msg:level:m5b-compact> a <{ANTENNA_NS}Level> ; \
+                 <{ANTENNA_NS}enterPinchProgress> ?prog \
+         }}"
+    );
+    let mut got_prog: Option<String> = None;
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&prog_q) {
+        for sol in sols.flatten() {
+            got_prog = sol.get("prog").map(|t| t.to_string());
+        }
+    }
+    // Compact is the FIRST level — enterPinchProgress = 0.0.
+    assert!(
+        got_prog.as_deref().unwrap_or("").contains("0"),
+        "M5-B-α Compact Level must carry enterPinchProgress=0.0 — got {got_prog:?}"
+    );
+
+    // Pin the widget DSL prefix on each so the LevelContainer renders
+    // the right primitive (Container) and not, say, an Image.
+    for (level_uri, expected_marker) in [
+        ("urn:msg:level:m5b-compact", "COMPACT VIEW"),
+        ("urn:msg:level:m5b-detail", "DETAIL VIEW"),
+    ] {
+        let q = format!(
+            "SELECT ?w WHERE {{ \
+                 <{level_uri}> a <{ANTENNA_NS}Level> ; \
+                     <{ANTENNA_NS}widget> ?w \
+             }}"
+        );
+        let mut got: Option<String> = None;
+        if let Ok(QueryResults::Solutions(sols)) = store.query(&q) {
+            for sol in sols.flatten() {
+                got = sol.get("w").map(|t| t.to_string());
+            }
+        }
+        assert!(
+            got.as_deref().unwrap_or("").contains(expected_marker),
+            "M5-B-α Level <{level_uri}> widget DSL must carry the {expected_marker:?} \
+             marker — got {got:?}"
+        );
+    }
+}
