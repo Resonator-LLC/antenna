@@ -5778,6 +5778,12 @@ fn m5c_station_scene_sparql_matches_polymorphic_children() {
     // polymorphic OPTIONAL-with-BIND extension Oxigraph executes correctly.
     let (store, _dag) = build_messenger_pipeline();
 
+    // Single-quoted BIND values (SPARQL 1.1 STRING_LITERAL form) — matches
+    // Station's `_buildSceneSparql` after its Turtle-wrapping fix. Double-
+    // quoted BIND values would close the outer Turtle `sp:text "..."`
+    // literal early on the wire, surfacing as an antenna parse error
+    // around column 613. Oxigraph accepts both forms; we use single quotes
+    // here so this test stays a byte-for-byte mirror of what Station ships.
     let sparql = format!(
         "PREFIX antenna: <{ANTENNA_NS}> \
          PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \
@@ -5793,12 +5799,12 @@ fn m5c_station_scene_sparql_matches_polymorphic_children() {
                  ?level a antenna:Level ; antenna:widget ?widget . \
                  OPTIONAL {{ ?level antenna:label ?label . }} \
                  OPTIONAL {{ ?level antenna:enterPinchProgress ?enterPinchProgress . }} \
-                 BIND(\"level\" AS ?childKind) \
+                 BIND('level' AS ?childKind) \
              }} \
              OPTIONAL {{ \
                  ?level a antenna:Scene . \
                  OPTIONAL {{ ?level antenna:scenelabel ?childSceneLabel . }} \
-                 BIND(\"scene\" AS ?childKind) \
+                 BIND('scene' AS ?childKind) \
              }} \
          }}"
     );
