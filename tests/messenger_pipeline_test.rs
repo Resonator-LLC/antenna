@@ -1234,6 +1234,15 @@ fn composer_tier1_is_real_textfield_when_input_enabled() {
         !tier1.contains("(swarm not ready)"),
         "M2-A tier 1 must NOT show the muted guard once swarm is ready — got: {tier1}"
     );
+    // ISSUE-089 cut 3 — composer tier-1 wraps the TextField in a chrome
+    // card (surface-standard + border-faint + r=4 + p=6) so it reads as
+    // a sibling card flush with the chat panel. The chrome must appear
+    // regardless of whether the TextField or the muted guard renders
+    // (covered in the input-disabled test below).
+    assert!(
+        tier1.contains("Container{color=surface-standard,borderColor=border-faint,borderRadius=4,padding=6}"),
+        "ISSUE-089 cut 3: composer tier 1 must wrap the TextField in the new chrome card — got: {tier1}"
+    );
 }
 
 #[test]
@@ -1259,6 +1268,17 @@ fn composer_tier1_shows_swarm_not_ready_guard_before_ready() {
     assert!(
         !tier1.contains("TextField{"),
         "M2-A tier 1 must NOT mount the TextField until inputEnabled flips true — got: {tier1}"
+    );
+    // ISSUE-089 cut 3 — muted-state branch upgrades from surface-muted to
+    // the same chrome shape the inputEnabled branch uses, so the boot
+    // screenshot reads as a designed card whether or not swarm is ready.
+    assert!(
+        tier1.contains("Container{color=surface-standard,borderColor=border-faint,borderRadius=4,padding=6}"),
+        "ISSUE-089 cut 3: composer tier 1 muted-state must wrap in the chrome card — got: {tier1}"
+    );
+    assert!(
+        !tier1.contains("surface-muted"),
+        "ISSUE-089 cut 3: composer tier 1 must NOT carry the legacy surface-muted token — got: {tier1}"
     );
 }
 
@@ -2432,14 +2452,25 @@ fn chat_panel_tier1_preserves_existing_chatbody() {
     let tier1 = lod_widget_at(&store, CHAT_URI, CHAT_TIER1_BELOW)
         .expect("chat panel tier 1 (bubbles) must exist after rebuild");
 
-    // Chrome contract.
+    // Chrome contract — ISSUE-089 cut 3: outer is surface-standard +
+    // border-faint; the prior surface-elevated lives on the inner body
+    // sub-Container; CHAT header is in a surface-header strip with
+    // live-data title at fontSize=11.
     assert!(
-        tier1.contains("Container{color=surface-elevated,padding=8,borderRadius=6}"),
-        "tier 1 must wrap in the existing surface-elevated chrome — got: {tier1}"
+        tier1.contains("Container{color=surface-standard,borderColor=border-faint,borderRadius=6}"),
+        "tier 1 must wrap in the new surface-standard + border-faint chrome — got: {tier1}"
     );
     assert!(
-        tier1.contains("Text{value=CHAT,fontSize=10,color=text-code"),
-        "tier 1 must carry the CHAT header — got: {tier1}"
+        tier1.contains("Container{color=surface-header,padding=8}"),
+        "tier 1 must carry the surface-header strip around the CHAT title — got: {tier1}"
+    );
+    assert!(
+        tier1.contains("Container{color=surface-elevated,padding=8}"),
+        "tier 1 must carry the surface-elevated body sub-Container — got: {tier1}"
+    );
+    assert!(
+        tier1.contains("Text{value=CHAT,fontSize=11,color=live-data"),
+        "tier 1 must carry the CHAT header in live-data cyan at fontSize 11 — got: {tier1}"
     );
     assert!(
         tier1.contains("Container{color=border-active,height=1}"),
@@ -2508,13 +2539,25 @@ fn chat_panel_tiers_2_3_carry_chrome_around_inner_area() {
         let widget = lod_widget_at(&store, CHAT_URI, below).unwrap_or_else(|| {
             panic!("chat panel tier at below={below} must emit a widget literal")
         });
+        // ISSUE-089 cut 3: tier 2/3 chrome contract — same shape as tier 1
+        // (surface-standard outer, surface-header strip, surface-elevated
+        // body) but the outer Column carries the fillMode mainAxisSize=max
+        // / mainAxisAlignment=center pair (asserted below).
         assert!(
-            widget.contains("Container{color=surface-elevated,padding=8,borderRadius=6}"),
-            "tier at below={below} must carry the chat-panel chrome (surface-elevated) — got: {widget}"
+            widget.contains("Container{color=surface-standard,borderColor=border-faint,borderRadius=6}"),
+            "tier at below={below} must wrap in the new surface-standard + border-faint chrome — got: {widget}"
         );
         assert!(
-            widget.contains("Text{value=CHAT,fontSize=10,color=text-code"),
-            "tier at below={below} must carry the CHAT header — got: {widget}"
+            widget.contains("Container{color=surface-header,padding=8}"),
+            "tier at below={below} must carry the surface-header strip — got: {widget}"
+        );
+        assert!(
+            widget.contains("Container{color=surface-elevated,padding=8}"),
+            "tier at below={below} must carry the surface-elevated body sub-Container — got: {widget}"
+        );
+        assert!(
+            widget.contains("Text{value=CHAT,fontSize=11,color=live-data"),
+            "tier at below={below} must carry the CHAT header in live-data — got: {widget}"
         );
         assert!(
             widget.contains("Container{color=border-active,height=1}"),
@@ -2576,12 +2619,20 @@ fn chat_panel_tier4_carries_real_sparkline_with_chrome() {
         .expect("chat panel tier 4 (week-sparkline) must emit a widget literal");
 
     assert!(
-        widget.contains("Container{color=surface-elevated,padding=8,borderRadius=6}"),
-        "tier 4 must carry the chat-panel chrome — got: {widget}"
+        widget.contains("Container{color=surface-standard,borderColor=border-faint,borderRadius=6}"),
+        "tier 4 must wrap in the new surface-standard + border-faint chrome — got: {widget}"
     );
     assert!(
-        widget.contains("Text{value=CHAT,fontSize=10,color=text-code"),
-        "tier 4 must carry the CHAT header — got: {widget}"
+        widget.contains("Container{color=surface-header,padding=8}"),
+        "tier 4 must carry the surface-header strip — got: {widget}"
+    );
+    assert!(
+        widget.contains("Container{color=surface-elevated,padding=8}"),
+        "tier 4 must carry the surface-elevated body sub-Container — got: {widget}"
+    );
+    assert!(
+        widget.contains("Text{value=CHAT,fontSize=11,color=live-data"),
+        "tier 4 must carry the CHAT header in live-data — got: {widget}"
     );
     assert!(
         widget.contains("StatusDot{"),
@@ -3291,10 +3342,14 @@ fn tier2_renders_inline_bubbles_with_chrome() {
             "tier 2 must render bubble text \"{needle}\" — got: {widget}"
         );
     }
-    // Chrome continuity holds.
+    // Chrome continuity holds (ISSUE-089 cut 3 shape).
     assert!(
-        widget.contains("Container{color=surface-elevated,padding=8,borderRadius=6}"),
-        "tier 2 must keep chat-panel chrome — got: {widget}"
+        widget.contains("Container{color=surface-standard,borderColor=border-faint,borderRadius=6}"),
+        "tier 2 must keep the chat-panel chrome (surface-standard outer) — got: {widget}"
+    );
+    assert!(
+        widget.contains("Container{color=surface-elevated,padding=8}"),
+        "tier 2 must keep the surface-elevated body sub-Container — got: {widget}"
     );
     assert!(
         !widget.contains("DAY-GROUPED HERE"),
