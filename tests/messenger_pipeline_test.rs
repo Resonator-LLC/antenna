@@ -6171,6 +6171,120 @@ fn m5d_late_contactname_re_emits_real_conversation_displayname() {
     );
 }
 
+// ── M5-E-β — emitRealConversation populates lastMessage / lastMessageAt ───
+//
+// Pre-fix the real-conv messenger:Conversation triple emitted by
+// emitRealConversation never set messenger:lastMessage / lastMessageAt, so
+// the inbox tile compact / card snippet rows rendered the (no messages
+// yet) placeholder even when globalThis.messages had live content.
+// post-M5-D wires emitRealConversation to read globalThis.messages[length-1]
+// (the rolling-history tail) and emits the snippet + xsd:dateTime ts.
+// Triggers added at carrier:TextMessage and carrier:MessageSent so
+// inbound + ack-of-outbound both refresh the tile snippet.
+
+#[test]
+fn m5e_real_conversation_populates_last_message_after_text_message() {
+    // Boot a real conversation, then drive an inbound TextMessage. The tile
+    // snippet predicates must update so queryConversationRows picks up the
+    // live content instead of empty-string fallbacks.
+    let (store, dag) = build_pipeline_with_inbox_settled();
+    let mut out = CaptureOut::new();
+
+    let conv_uri = format!("urn:msg:conv:{REAL_CONV_ID}");
+
+    // Pre-condition: no messages yet from the build_pipeline_with_inbox_settled
+    // boot path — emitRealConversation fired at ConversationReady with
+    // globalThis.messages empty, so neither lastMessage nor lastMessageAt
+    // landed on the triple.
+    let pre_msg_q = format!(
+        "ASK {{ <{conv_uri}> <{MSG_NS}lastMessage> ?w }}"
+    );
+    assert!(
+        matches!(store.query(&pre_msg_q), Ok(QueryResults::Boolean(false))),
+        "Sanity: pre-TextMessage, messenger:lastMessage triple MUST NOT exist \
+         on the real conversation (build path emits at boot with empty \
+         globalThis.messages)"
+    );
+
+    // Drive an inbound TextMessage — the carrier:TextMessage handler logs
+    // the entry into globalThis.messages, then calls emitRealConversation()
+    // which re-emits the Conversation triple with the new tail's snippet.
+    let snippet = "hey alice from bob";
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", "mid-m5e-1", snippet),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    // Post-condition (a): messenger:lastMessage matches the inbound text
+    // verbatim (no truncation at emit-site — the renderer-side
+    // _formatTileSnippet does the 60-char clamp).
+    let last_q = format!(
+        "SELECT ?w WHERE {{ <{conv_uri}> <{MSG_NS}lastMessage> ?w }}"
+    );
+    let last_msg = first_string_solution(&store, &last_q);
+    assert_eq!(
+        last_msg.as_deref(),
+        Some(snippet),
+        "M5-E-β: TextMessage must populate messenger:lastMessage on the \
+         real-conv triple — got {last_msg:?}"
+    );
+
+    // Post-condition (b): messenger:lastMessageAt is a non-empty
+    // xsd:dateTime literal. Don't pin the exact value (Date.now() is
+    // wall-clock); just assert the predicate exists with a literal value
+    // shaped like an ISO-8601 timestamp.
+    let ts_q = format!(
+        "SELECT ?w WHERE {{ <{conv_uri}> <{MSG_NS}lastMessageAt> ?w }}"
+    );
+    let last_ts = first_string_solution(&store, &ts_q);
+    let ts_str = last_ts.expect(
+        "M5-E-β: TextMessage must populate messenger:lastMessageAt on the \
+         real-conv triple",
+    );
+    // ISO-8601 shape: starts with 4-digit year + dash, ends with 'Z'.
+    assert!(
+        ts_str.len() >= 20 && ts_str.ends_with('Z') && ts_str.contains('T'),
+        "lastMessageAt must be an ISO-8601 xsd:dateTime literal \
+         (YYYY-MM-DDTHH:MM:SS.sssZ shape) — got {ts_str:?}"
+    );
+}
+
+#[test]
+fn m5e_real_conversation_no_last_message_when_history_is_empty() {
+    // Companion to the populate test: at boot, before any TextMessage /
+    // MessageSent has fired, globalThis.messages is empty and the
+    // Conversation triple must NOT carry messenger:lastMessage /
+    // lastMessageAt — the absence is what queryConversationRows's OPTIONAL
+    // clauses fall back to empty-string defaults on, so the tile snippet
+    // renderer treats it as "(no messages yet)" rather than rendering a
+    // stale literal.
+    let (store, _dag) = build_pipeline_with_inbox_settled();
+
+    let conv_uri = format!("urn:msg:conv:{REAL_CONV_ID}");
+    let last_msg_q = format!(
+        "ASK {{ <{conv_uri}> <{MSG_NS}lastMessage> ?w }}"
+    );
+    let last_ts_q = format!(
+        "ASK {{ <{conv_uri}> <{MSG_NS}lastMessageAt> ?w }}"
+    );
+    assert!(
+        matches!(store.query(&last_msg_q), Ok(QueryResults::Boolean(false))),
+        "M5-E-β: empty globalThis.messages must leave messenger:lastMessage \
+         OFF the real-conv triple — emitting an empty literal would surface \
+         as a stale empty-string snippet on the tile"
+    );
+    assert!(
+        matches!(store.query(&last_ts_q), Ok(QueryResults::Boolean(false))),
+        "M5-E-β: empty globalThis.messages must leave messenger:lastMessageAt \
+         OFF the real-conv triple — same rationale as the lastMessage absence"
+    );
+}
+
 // ── M5-D-βfix — emitRealConversation wraps scheme-less peerUris ────────────
 //
 // Real Jami contactUris are 40-hex fingerprints with NO scheme. emitRealConversation
