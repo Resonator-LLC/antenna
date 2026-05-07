@@ -6171,6 +6171,133 @@ fn m5d_late_contactname_re_emits_real_conversation_displayname() {
     );
 }
 
+// ── M5-D-βfix — emitRealConversation wraps scheme-less peerUris ────────────
+//
+// Real Jami contactUris are 40-hex fingerprints with NO scheme. emitRealConversation
+// splices `globalThis.peerUri` into a `messenger:peerUris ( <PEER_URI> )` Turtle
+// list literally — without the scheme guard, oxigraph rejects the INSERT with
+// "No scheme found in an absolute IRI", bouncing the entire messenger:Conversation
+// triple. The fix mirrors flushDayBuckets's M3-B guard at pipeline.ttl:632:
+// scheme-less peers get the `urn:msg:participant:` synthetic prefix so the IRI
+// parses cleanly. Mirrors `day_bucket_wraps_bare_hex_participant_uri_in_synthetic_scheme`
+// (line 4527) but pinned at the emitRealConversation site.
+
+#[test]
+fn m5d_real_conversation_wraps_bare_hex_peer_uri_in_synthetic_scheme() {
+    // Drive ConversationReady with a 40-hex bare-fingerprint contactUri (the
+    // real Jami shape). emitRealConversation runs on the ConversationReady
+    // handler at pipeline.ttl:4794; assert:
+    //   (a) a messenger:Conversation triple exists for the conv URI,
+    //       proving the SPARQL INSERT parsed cleanly (pre-fix it bounced
+    //       on "No scheme found in an absolute IRI" so NO triple landed).
+    //   (b) the messenger:peerUris rdf:List head IRI starts with
+    //       `urn:msg:participant:` — the wrapped form proves the fix
+    //       wraps scheme-less values.
+    //   (c) the wrapped IRI's tail is the original 40-hex fingerprint,
+    //       proving the wrap preserves identity (no data loss).
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    let bare_hex = "4748d985a10c8e84990f592a0ec0232efb733293"; // 40 hex chars, no scheme
+    let conv_id = "conv-m5d-real-bare-hex";
+    drive_to_ready(&store, &dag, &mut out, "did:tox:self", bare_hex, conv_id);
+
+    let conv_uri = format!("urn:msg:conv:{conv_id}");
+
+    // (a) The messenger:Conversation triple landed at all. If
+    // emitRealConversation's INSERT had bounced on the parser, no triple
+    // of this type would exist for `conv_uri` — store-level presence is
+    // the cleanest "no parser warn" proof we can pin without a tracing
+    // capture.
+    let conv_ask = format!("ASK {{ <{conv_uri}> a <{MSG_NS}Conversation> }}");
+    assert!(
+        matches!(store.query(&conv_ask), Ok(QueryResults::Boolean(true))),
+        "emitRealConversation must land a messenger:Conversation triple for \
+         a bare-hex peerUri — missing triple means the INSERT bounced on \
+         \"No scheme found in an absolute IRI\" (the M5-D-βfix regression)"
+    );
+
+    // (b)+(c) Walk the messenger:peerUris rdf:List and pin the head IRI
+    // shape: must start with `urn:msg:participant:` AND end with the
+    // original 40-hex.
+    let peers_q = format!(
+        "PREFIX rdf: <{RDF_NS}> \
+         SELECT ?p WHERE {{ \
+             <{conv_uri}> <{MSG_NS}peerUris> ?head . \
+             ?head (rdf:rest)* ?cell . \
+             ?cell rdf:first ?p \
+         }}"
+    );
+    let mut found_peer: Option<String> = None;
+    if let QueryResults::Solutions(sols) =
+        store.query(&peers_q).expect("peerUris query")
+    {
+        for sol in sols.flatten() {
+            if let Some(oxigraph::model::Term::NamedNode(n)) = sol.get("p") {
+                found_peer = Some(n.as_str().to_string());
+                break;
+            }
+        }
+    }
+    let peer = found_peer.expect(
+        "messenger:peerUris must carry at least one rdf:List entry — missing \
+         entry means emitRealConversation failed parsing",
+    );
+    assert!(
+        peer.starts_with("urn:msg:participant:"),
+        "scheme-less peerUri must be wrapped in the urn:msg:participant: \
+         synthetic — got: {peer}"
+    );
+    assert!(
+        peer.ends_with(bare_hex),
+        "wrapped peerUri must preserve the original fingerprint as the URN \
+         tail — got: {peer} (expected tail: {bare_hex})"
+    );
+}
+
+#[test]
+fn m5d_real_conversation_preserves_existing_scheme_on_peer_uri() {
+    // Companion to the bare-hex test: peerUris that already carry a scheme
+    // (did:tox:peer, etc.) must pass through unchanged — the
+    // `peerUri.indexOf(':') < 0` guard only wraps when the value has no
+    // colon. Pin that behavior so synthetic test fixtures and any future
+    // scheme-bearing transport keep their identity.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    let scheme_uri = "did:tox:peerWithScheme";
+    let conv_id = "conv-m5d-real-scheme";
+    drive_to_ready(&store, &dag, &mut out, "did:tox:self", scheme_uri, conv_id);
+
+    let conv_uri = format!("urn:msg:conv:{conv_id}");
+    let peers_q = format!(
+        "PREFIX rdf: <{RDF_NS}> \
+         SELECT ?p WHERE {{ \
+             <{conv_uri}> <{MSG_NS}peerUris> ?head . \
+             ?head (rdf:rest)* ?cell . \
+             ?cell rdf:first ?p \
+         }}"
+    );
+    let mut found_scheme = false;
+    if let QueryResults::Solutions(sols) =
+        store.query(&peers_q).expect("peerUris query")
+    {
+        for sol in sols.flatten() {
+            if let Some(oxigraph::model::Term::NamedNode(n)) = sol.get("p") {
+                if n.as_str() == scheme_uri {
+                    found_scheme = true;
+                    break;
+                }
+            }
+        }
+    }
+    assert!(
+        found_scheme,
+        "scheme-bearing peerUri ({scheme_uri}) must be emitted verbatim — \
+         the M5-D-βfix wrap must only fire on scheme-less values"
+    );
+}
+
 #[test]
 fn m5d_inbox_no_emit_when_zero_conversations() {
     // rebuildInbox runs at boot (after init's `skipNextInbox = true`
