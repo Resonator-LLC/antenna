@@ -6607,3 +6607,100 @@ fn m5e_real_conv_displayname_falls_back_to_shorturi_when_seed_empty() {
          \"peer\". Got {name:?}"
     );
 }
+
+// ── M5-E-β-3 — "Open conversation" tile button → camera teleport ───────────
+//
+// buildTileWidget renders Button{onTap=urn:msg:open-conv:<convId>} on the
+// tier-4 tile. Pre-M5-E-β-3 the tap had no dispatcher (the brief flagged
+// it). The new TapEvent branch routes to `teleportToChatPanel(convId)`,
+// which emits an antenna:Teleport at the chat panel's center (CHAT_X,
+// CHAT_Y) at scale 1.5 — same tier-1 landing scale M3-D's day-tap uses.
+// Synth-tile taps no-op because messenger v1 only renders ONE chat panel
+// (globalThis.conversationId).
+
+#[test]
+fn m5e_open_conv_tap_emits_teleport_to_chat_panel() {
+    // Boot with a real conversation; tap the tier-4 tile's
+    // `urn:msg:open-conv:<REAL_CONV_ID>` button. The pipeline must emit
+    // an antenna:Teleport with x=CHAT_X (-150), y=CHAT_Y (-140), scale=1.5.
+    let (store, dag) = build_pipeline_with_inbox_settled();
+    let mut out = CaptureOut::new();
+
+    // Snapshot baseline emit count so we only inspect post-tap traffic.
+    let baseline = out.messages.len();
+
+    let tap_event = format!(
+        "[] a <{ANTENNA_NS}TapEvent> ; \
+         <{ANTENNA_NS}target> <urn:msg:open-conv:{REAL_CONV_ID}> ."
+    );
+    dispatch::dispatch(&tap_event, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 20);
+
+    let post_tap: Vec<&String> = out.messages.iter().skip(baseline).collect();
+    let teleport = post_tap.iter().find(|m| {
+        m.contains("a antenna:Teleport") || m.contains("a <http://resonator.network/v2/antenna#Teleport>")
+    });
+    let teleport = teleport.unwrap_or_else(|| {
+        panic!(
+            "M5-E-β-3: tap on urn:msg:open-conv:{REAL_CONV_ID} must emit \
+             antenna:Teleport — got post-tap messages: {post_tap:?}"
+        )
+    });
+
+    // Match prefix-form OR full-IRI form for each predicate (the script's
+    // emit() concatenates full IRIs from ANT_NS, but the dispatch echo may
+    // re-serialize with the antenna: prefix).
+    let x_ok = teleport.contains("antenna:x \"-150\"")
+        || teleport.contains("antenna:x \"-150.0\"")
+        || teleport.contains("#x> \"-150\"")
+        || teleport.contains("#x> \"-150.0\"");
+    assert!(
+        x_ok,
+        "M5-E-β-3 antenna:x must be CHAT_X (-150) — got: {teleport}"
+    );
+    let y_ok = teleport.contains("antenna:y \"-140\"")
+        || teleport.contains("antenna:y \"-140.0\"")
+        || teleport.contains("#y> \"-140\"")
+        || teleport.contains("#y> \"-140.0\"");
+    assert!(
+        y_ok,
+        "M5-E-β-3 antenna:y must be CHAT_Y (-140) — got: {teleport}"
+    );
+    let scale_ok =
+        teleport.contains("antenna:scale \"1.5\"") || teleport.contains("#scale> \"1.5\"");
+    assert!(
+        scale_ok,
+        "M5-E-β-3 antenna:scale must be 1.5 (tier-1 landing) — got: {teleport}"
+    );
+}
+
+#[test]
+fn m5e_open_conv_tap_synth_conv_no_op() {
+    // Tap on a synth-tile's open-conv button (`synth:carol`). Messenger v1
+    // only renders ONE chat panel (the real conv), so the tap has nowhere
+    // meaningful to land. Pin the no-op: NO antenna:Teleport emit must
+    // hit the wire. A breadcrumb print fires in the script for live
+    // debugging, but emit traffic must stay clean.
+    let (store, dag) = build_pipeline_with_inbox_settled();
+    let mut out = CaptureOut::new();
+
+    let baseline = out.messages.len();
+
+    let tap_event = format!(
+        "[] a <{ANTENNA_NS}TapEvent> ; \
+         <{ANTENNA_NS}target> <urn:msg:open-conv:synth:carol> ."
+    );
+    dispatch::dispatch(&tap_event, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 20);
+
+    let post_tap: Vec<&String> = out.messages.iter().skip(baseline).collect();
+    let stray_teleport = post_tap.iter().find(|m| {
+        m.contains("a antenna:Teleport") || m.contains("a <http://resonator.network/v2/antenna#Teleport>")
+    });
+    assert!(
+        stray_teleport.is_none(),
+        "M5-E-β-3: synth-tile open-conv tap MUST NOT emit antenna:Teleport \
+         — messenger v1 has no chat panel for synthetic conversations. \
+         Stray emit: {stray_teleport:?}"
+    );
+}
