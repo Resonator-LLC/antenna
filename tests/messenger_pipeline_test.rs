@@ -87,6 +87,27 @@ fn build_messenger_pipeline() -> (RdfStore, Dag) {
     (store, dag)
 }
 
+// M5-D-β — pipeline boot WITHOUT the seed.ttl synthetic
+// messenger:Conversation triples. Used by tests that need to verify
+// rebuildInbox's behaviour when zero conversations exist (e.g. the
+// "no phantom inbox emit when rows.length=0" guard).
+fn empty_messenger_pipeline() -> (RdfStore, Dag) {
+    let store = RdfStore::open(None).expect("in-memory store");
+
+    let pipeline_raw = std::fs::read_to_string(rel("radios/messenger/pipeline.ttl"))
+        .expect("read messenger pipeline");
+    let pipeline_ttl = pipeline_raw
+        .replace("__NICK__", "alice")
+        .replace("__META_DIR__", "/tmp/messenger-test/")
+        .replace("__PEER_URI__", "");
+    store
+        .insert_turtle(&pipeline_ttl)
+        .expect("insert messenger pipeline");
+
+    let dag = Dag::load(&store).expect("load dag");
+    (store, dag)
+}
+
 /// Iterate the tick loop until the script falls quiet. Same shape as
 /// theme_authoring_pipeline_test::settle — pumps query results back into
 /// the script, drains emits, re-dispatches each line so the placed-object
@@ -6481,4 +6502,158 @@ fn first_string_solution(store: &RdfStore, sparql: &str) -> Option<String> {
         }
     }
     None
+}
+
+// ── M5-D-β — Inbox parent Scene + late ContactName re-emit ───────────────
+//
+// rebuildInbox emits an `<urn:msg:scene:inbox>` parent Scene listing every
+// tile-Scene URI in `antenna:children`. SceneStore.commit reverse-walks
+// the list to populate each tile-Scene's `parentSceneUri` so the
+// SceneNavigator's implicit-ancestor push (Station-side) can put `Inbox`
+// between `Messenger` and the tapped tile in the breadcrumb path without
+// the user manually drilling into the inbox first.
+//
+// Late ContactName arrival (alice's ContactReady fires before peer's
+// ContactName lands): the M5-A emit captured displayName="unknown" or
+// shortUri(peerUri); when ContactName lands later, the pipeline must
+// re-emit the messenger:Conversation triple so the inbox tile DSL stops
+// rendering the stale fallback.
+
+#[test]
+fn m5d_inbox_parent_scene_lists_every_tile_as_children() {
+    let (store, _dag) = build_pipeline_with_inbox_settled();
+
+    // The inbox Scene exists with the expected predicates.
+    let inbox_q = format!(
+        "SELECT ?label ?padding WHERE {{ \
+         <urn:msg:scene:inbox> a <{ANTENNA_NS}Scene> ; \
+            <{ANTENNA_NS}scenelabel> ?label ; \
+            <{ANTENNA_NS}padding> ?padding }}"
+    );
+    let mut found_label: Option<String> = None;
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&inbox_q) {
+        for sol in sols.flatten() {
+            if let Some(oxigraph::model::Term::Literal(lit)) = sol.get("label") {
+                found_label = Some(lit.value().to_string());
+            }
+        }
+    }
+    assert_eq!(
+        found_label.as_deref(),
+        Some("Inbox"),
+        "M5-D-β inbox parent Scene must carry antenna:scenelabel \"Inbox\""
+    );
+
+    // Walk antenna:children rdf:List via SPARQL property path (same shape
+    // as M5-B/M5-C scene-children tests use). Collect every child URI;
+    // order is asserted via membership rather than position because
+    // oxigraph's blank-node-cell SELECT order isn't a contract.
+    let mut children: Vec<String> = Vec::new();
+    let walk_q = format!(
+        "PREFIX rdf: <{RDF_NS}> \
+         SELECT ?child WHERE {{ \
+             <urn:msg:scene:inbox> <{ANTENNA_NS}children> ?head . \
+             ?head (rdf:rest)* ?cell . \
+             ?cell rdf:first ?child \
+         }}"
+    );
+    if let Ok(QueryResults::Solutions(sols)) = store.query(&walk_q) {
+        for sol in sols.flatten() {
+            if let Some(t) = sol.get("child") {
+                children.push(t.to_string());
+            }
+        }
+    }
+
+    assert_eq!(
+        children.len(),
+        4,
+        "M5-D-β inbox parent must list 4 tile Scenes (3 synth + 1 real) — \
+         got {children:?}"
+    );
+    for conv_id in ["synth:carol", "synth:dave", "synth:trio", REAL_CONV_ID] {
+        let want = format!("<urn:msg:tile:scene:{conv_id}>");
+        assert!(
+            children.contains(&want),
+            "M5-D-β inbox children must contain {want} — got {children:?}"
+        );
+    }
+}
+
+#[test]
+fn m5d_late_contactname_re_emits_real_conversation_displayname() {
+    // Boot pipeline. ConversationReady has already fired with peerUri set
+    // but no friendName, so the messenger:Conversation displayName falls
+    // back to shortUri(peerUri). When a later ContactName lands, the
+    // displayName must update IN THE STORE (not just JS-side
+    // globalThis.friendName) so the inbox tile widget DSL renders the
+    // real name.
+    let (store, dag) = build_pipeline_with_inbox_settled();
+    let mut out = CaptureOut::new();
+
+    // Pre-condition: displayName is the shortUri(peerUri) fallback (NOT a
+    // real name like "Bob"). shortUri trims to 8 chars; "did:tox:peer"
+    // becomes "peer" since the helper strips the leading scheme prefix.
+    let conv_uri = format!("urn:msg:conv:{REAL_CONV_ID}");
+    let pre_q = format!(
+        "SELECT ?w WHERE {{ <{conv_uri}> <{}displayName> ?w }}",
+        "http://resonator.network/v2/messenger#"
+    );
+    let pre_name = first_string_solution(&store, &pre_q);
+    assert_eq!(
+        pre_name.as_deref(),
+        Some("peer"),
+        "Sanity: pre-ContactName, displayName is the shortUri fallback — \
+         got {pre_name:?}"
+    );
+
+    // Drive a late ContactName for the peer.
+    dispatch::dispatch(
+        &contact_name_event("did:tox:peer", "Bob"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    let post_name = first_string_solution(&store, &pre_q);
+    assert_eq!(
+        post_name.as_deref(),
+        Some("Bob"),
+        "M5-D-β: ContactName must re-emit messenger:Conversation with the \
+         updated displayName — got {post_name:?}"
+    );
+}
+
+#[test]
+fn m5d_inbox_no_emit_when_zero_conversations() {
+    // rebuildInbox runs at boot (after init's `skipNextInbox = true`
+    // clears on the first carrier event). With NO conversations in the
+    // store yet (no synth seed loaded into THIS test, no ConversationReady
+    // fired), the inbox parent Scene must NOT emit — emitting an empty-
+    // children Scene would surface a "phantom" inbox in the breadcrumb
+    // even though there are no tiles to drill into.
+    //
+    // Implementation hook: rebuildInbox skips the inbox Scene emit when
+    // `rows.length === 0`. This test verifies that contract by booting a
+    // pipeline WITHOUT seed.ttl's synthetic conversations.
+    let (store, dag) = empty_messenger_pipeline();
+    let mut out = CaptureOut::new();
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 20);
+    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 30);
+
+    let q = format!(
+        "ASK WHERE {{ <urn:msg:scene:inbox> a <{ANTENNA_NS}Scene> }}"
+    );
+    let exists = matches!(store.query(&q), Ok(QueryResults::Boolean(true)));
+    assert!(
+        !exists,
+        "M5-D-β: with zero messenger:Conversation rows, the inbox parent \
+         Scene MUST NOT exist — empty inbox would phantom-render in the \
+         breadcrumb"
+    );
 }
