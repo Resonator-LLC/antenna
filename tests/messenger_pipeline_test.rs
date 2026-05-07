@@ -63,10 +63,19 @@ impl AntennaOut for CaptureOut {
 
 /// Boot a store + DAG running the messenger pipeline. Mirrors what
 /// `radios/messenger/run.sh` does at launch — sed-replaces the
-/// `__NICK__` / `__META_DIR__` / `__PEER_URI__` placeholders with test
-/// values, loads the seed (favorites + menu items), then snapshots the
-/// dag from the resulting store.
+/// `__NICK__` / `__META_DIR__` / `__PEER_URI__` / `__PEER_NICK__`
+/// placeholders with test values, loads the seed (favorites + menu items),
+/// then snapshots the dag from the resulting store.
 fn build_messenger_pipeline() -> (RdfStore, Dag) {
+    build_messenger_pipeline_with_seeds("", "")
+}
+
+/// Variant of `build_messenger_pipeline` that lets a test pin the boot
+/// values for `globalThis.peerUri` / `globalThis.friendName` (sed-injected
+/// from `$META_DIR/peer.uri` and `$META_DIR/peer.nick` in production).
+/// `peer_nick` is the raw nick from `add-friend.sh`'s argv — pipeline.ttl
+/// capitalizes the first letter at init.
+fn build_messenger_pipeline_with_seeds(peer_uri: &str, peer_nick: &str) -> (RdfStore, Dag) {
     let store = RdfStore::open(None).expect("in-memory store");
 
     let pipeline_raw = std::fs::read_to_string(rel("radios/messenger/pipeline.ttl"))
@@ -74,7 +83,8 @@ fn build_messenger_pipeline() -> (RdfStore, Dag) {
     let pipeline_ttl = pipeline_raw
         .replace("__NICK__", "alice")
         .replace("__META_DIR__", "/tmp/messenger-test/")
-        .replace("__PEER_URI__", "");
+        .replace("__PEER_URI__", peer_uri)
+        .replace("__PEER_NICK__", peer_nick);
     store
         .insert_turtle(&pipeline_ttl)
         .expect("insert messenger pipeline");
@@ -99,7 +109,8 @@ fn empty_messenger_pipeline() -> (RdfStore, Dag) {
     let pipeline_ttl = pipeline_raw
         .replace("__NICK__", "alice")
         .replace("__META_DIR__", "/tmp/messenger-test/")
-        .replace("__PEER_URI__", "");
+        .replace("__PEER_URI__", "")
+        .replace("__PEER_NICK__", "");
     store
         .insert_turtle(&pipeline_ttl)
         .expect("insert messenger pipeline");
@@ -6510,5 +6521,89 @@ fn m5d_empty_placeholder_clears_when_conversation_lands() {
         matches!(store.query(&tile_ask), Ok(QueryResults::Boolean(true))),
         "M5-D-γ: real-conversation tile Object MUST exist after \
          ConversationReady"
+    );
+}
+
+// ── M5-E-β-2 — Real-conv displayName seed from $META_DIR/peer.nick ────────
+//
+// add-friend.sh writes `peer.nick` alongside `peer.uri`; run.sh seds
+// `__PEER_NICK__` from that file; pipeline.ttl reads it into
+// `globalThis.friendName` (first-letter capitalized) at init. Without the
+// seed, the inbox tile + chat-panel header read `shortUri(peerUri)` (e.g.
+// "4748D985…") until a real `carrier:ContactName` event arrives — which
+// never happens if the peer is offline. The seed closes that visual gap
+// for the demo + cold-boot path; ContactName overrides the seed at line
+// 4783 if/when libjami delivers a friendly name.
+
+fn boot_inbox_with_seed(peer_nick: &str) -> (RdfStore, Dag) {
+    let (store, dag) = build_messenger_pipeline_with_seeds("", peer_nick);
+    let mut out = CaptureOut::new();
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 20);
+    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 10);
+    dispatch::dispatch(
+        &contact_online_event("did:tox:peer"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+    let conv_ready = format!(
+        "[] a antenna:Test ; \
+         carrier:ConversationReady \"_\" ; \
+         carrier:contactUri \"did:tox:peer\" ; \
+         carrier:conversationId \"{REAL_CONV_ID}\" ."
+    );
+    dispatch::dispatch(&conv_ready, &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 30);
+    (store, dag)
+}
+
+#[test]
+fn m5e_real_conv_seeded_displayname_renders_capitalized_friend_nick() {
+    // With `peer.nick = "bob"` (canonical lowercase from
+    // `./add-friend.sh alice bob`), pipeline.ttl init capitalizes the first
+    // letter and seeds `globalThis.friendName = "Bob"`. emitRealConversation
+    // fired at ConversationReady must pick up that seed and write
+    // `messenger:displayName "Bob"` on the real-conv triple — NOT the
+    // `shortUri(peerUri)` fallback (which would be "peer" for the test
+    // peer URI "did:tox:peer").
+    let (store, _dag) = boot_inbox_with_seed("bob");
+
+    let conv_uri = format!("urn:msg:conv:{REAL_CONV_ID}");
+    let q = format!(
+        "SELECT ?w WHERE {{ <{conv_uri}> <{MSG_NS}displayName> ?w }}"
+    );
+    let name = first_string_solution(&store, &q);
+    assert_eq!(
+        name.as_deref(),
+        Some("Bob"),
+        "M5-E-β-2: peer.nick=\"bob\" seed must render as \"Bob\" on the \
+         messenger:displayName triple (first-letter capitalized at init) — \
+         got {name:?}"
+    );
+}
+
+#[test]
+fn m5e_real_conv_displayname_falls_back_to_shorturi_when_seed_empty() {
+    // With no `peer.nick` file (run.sh seds an empty string into
+    // `__PEER_NICK__`), pipeline.ttl init leaves `globalThis.friendName = ""`.
+    // emitRealConversation must fall back to `shortUri(peerUri)` — pinning
+    // the existing behavior so users who haven't re-run add-friend.sh
+    // post-M5-E-β-2 don't regress, AND so a leaked `__PEER_NICK__` literal
+    // (e.g. test harness forgot to replace) surfaces as a visible diff
+    // instead of silently rendering "_peer_nick_".
+    let (store, _dag) = boot_inbox_with_seed("");
+
+    let conv_uri = format!("urn:msg:conv:{REAL_CONV_ID}");
+    let q = format!(
+        "SELECT ?w WHERE {{ <{conv_uri}> <{MSG_NS}displayName> ?w }}"
+    );
+    let name = first_string_solution(&store, &q);
+    assert_eq!(
+        name.as_deref(),
+        Some("peer"),
+        "M5-E-β-2: empty peer.nick seed must fall through to \
+         shortUri(peerUri) — for peerUri=\"did:tox:peer\", shortUri yields \
+         \"peer\". Got {name:?}"
     );
 }
