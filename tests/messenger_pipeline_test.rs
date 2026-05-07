@@ -5737,9 +5737,13 @@ fn m5d_inbox_levels_carry_required_properties_per_tier() {
     let (store, _dag) = build_pipeline_with_inbox_settled();
 
     let conv_id = "synth:dave";   // Dave: online=true, unread=2 — exercises both.
+    // ISSUE-089 cut 2 — the compact and chip tiers now wrap their unread
+    // count in a `msg-unread` pill badge (Container{color=msg-unread,
+    // borderRadius=r-pill,padding=3}[Text{value=N}]) instead of bare
+    // "(N)" error-coloured text. The marker tracks that swap.
     let cases: &[(&str, &str, &str)] = &[
         ("chip",    "0.0",  "StatusDot"),
-        ("compact", "0.25", "(2)"),       // dave's unreadCount=2
+        ("compact", "0.25", "color=msg-unread"),  // pill badge for dave's unread=2
         ("card",    "0.5",  "borderRadius=8"),
         ("tile",    "0.75", "[Open conversation]"),
     ];
@@ -5790,6 +5794,82 @@ fn m5d_inbox_levels_carry_required_properties_per_tier() {
             widget.contains(marker),
             "M5-D-α Level <{level_uri}> widget DSL must contain marker {marker:?} \
              — got: {widget}"
+        );
+    }
+}
+
+// ISSUE-089 cut 2 — chip + compact tiers must emit `border-faint` chrome
+// (surface-standard fill, borderRadius=4, padding=6) so each contact
+// reads as a card, and the unread count must render as a `msg-unread`
+// pill badge (`borderRadius=r-pill`, padding=3) instead of bare "(N)"
+// error-coloured text. The dispatch path that breaks if pipeline.ttl's
+// `buildChipWidget` / `buildCompactWidget` lose the chrome wrap, or if
+// `_buildUnreadBadge` regresses to error-coloured parens, is here.
+#[test]
+fn m5d_inbox_chip_and_compact_widgets_wrap_in_border_faint_chrome() {
+    let (store, _dag) = build_pipeline_with_inbox_settled();
+
+    // synth:dave is the canonical row with unread=2 — exercises both the
+    // outer chrome envelope AND the pill badge. synth:carol (unread=0)
+    // exercises the no-badge branch.
+    fn level_widget(store: &RdfStore, conv_id: &str, tier: &str) -> String {
+        let level_uri = format!("urn:msg:tile:level:{conv_id}:{tier}");
+        let q = format!(
+            "SELECT ?w WHERE {{ <{level_uri}> <{ANTENNA_NS}widget> ?w }}"
+        );
+        first_string_solution(store, &q).unwrap_or_else(|| panic!(
+            "ISSUE-089 cut 2: Level <{level_uri}> must carry antenna:widget"
+        ))
+    }
+
+    // Outer chrome envelope — borderColor=border-faint, borderRadius=4,
+    // surface-standard fill — present on chip and compact for every
+    // conversation regardless of unread state.
+    for conv_id in ["synth:dave", "synth:carol"] {
+        for tier in ["chip", "compact"] {
+            let widget = level_widget(&store, conv_id, tier);
+            for marker in [
+                "color=surface-standard",
+                "borderColor=border-faint",
+                "borderRadius=4",
+                "padding=6",
+            ] {
+                assert!(
+                    widget.contains(marker),
+                    "ISSUE-089 cut 2: <{conv_id}> {tier} widget must carry chrome \
+                     marker {marker:?} — got: {widget}"
+                );
+            }
+        }
+    }
+
+    // Pill unread badge — only on rows with unread > 0. Dave (unread=2)
+    // must carry the pill markers; Carol (unread=0) must NOT contain
+    // any `color=msg-unread` substring (the badge subtree is omitted).
+    for tier in ["chip", "compact"] {
+        let dave_widget = level_widget(&store, "synth:dave", tier);
+        for marker in [
+            "color=msg-unread",
+            "borderRadius=r-pill",
+        ] {
+            assert!(
+                dave_widget.contains(marker),
+                "ISSUE-089 cut 2: synth:dave (unread=2) {tier} widget must carry \
+                 pill badge marker {marker:?} — got: {dave_widget}"
+            );
+        }
+        // No legacy parenthesised "(N)" error-coloured fragment.
+        assert!(
+            !dave_widget.contains("color=error"),
+            "ISSUE-089 cut 2: synth:dave {tier} must not carry the legacy \
+             color=error parens fragment — got: {dave_widget}"
+        );
+
+        let carol_widget = level_widget(&store, "synth:carol", tier);
+        assert!(
+            !carol_widget.contains("color=msg-unread"),
+            "ISSUE-089 cut 2: synth:carol (unread=0) {tier} must NOT emit a \
+             pill badge — got: {carol_widget}"
         );
     }
 }
