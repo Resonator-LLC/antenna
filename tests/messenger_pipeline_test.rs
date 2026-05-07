@@ -887,9 +887,11 @@ fn bubbles_emit_as_per_message_placed_objects() {
         geom.x
     );
     // Bubble Y must fall within the chat panel's body window.
+    // ISSUE-089 cut 6: shifted +40 (was [-250, -60]) when the chat
+    // assembly translated down to clear the HUD header strip.
     assert!(
-        geom.y > -250.0 && geom.y < -60.0,
-        "bubble center y must be within the chat panel body area [-250, -60] — got: {}",
+        geom.y > -210.0 && geom.y < -20.0,
+        "bubble center y must be within the chat panel body area [-210, -20] — got: {}",
         geom.y
     );
 
@@ -1141,8 +1143,9 @@ fn composer_emits_as_sibling_placed_object_with_four_lod_tiers() {
         geom.x
     );
     assert!(
-        (geom.y - 0.0).abs() < 0.5,
-        "composer y must sit at chat panel bottom edge (y=0 after CHAT_H shrink) — got: {}",
+        (geom.y - 40.0).abs() < 0.5,
+        "composer y must sit at chat panel bottom edge (y=40 after \
+         ISSUE-089 cut 6 +40 shift; was y=0) — got: {}",
         geom.y
     );
     assert!(
@@ -6793,13 +6796,15 @@ fn m5e_open_conv_tap_emits_teleport_to_chat_panel() {
         x_ok,
         "M5-E-β-3 antenna:x must be CHAT_X (-150) — got: {teleport}"
     );
-    let y_ok = teleport.contains("antenna:y \"-140\"")
-        || teleport.contains("antenna:y \"-140.0\"")
-        || teleport.contains("#y> \"-140\"")
-        || teleport.contains("#y> \"-140.0\"");
+    // ISSUE-089 cut 6: CHAT_Y shifted -140 → -100 to clear the HUD
+    // header strip at viewport (0,0,1.0).
+    let y_ok = teleport.contains("antenna:y \"-100\"")
+        || teleport.contains("antenna:y \"-100.0\"")
+        || teleport.contains("#y> \"-100\"")
+        || teleport.contains("#y> \"-100.0\"");
     assert!(
         y_ok,
-        "M5-E-β-3 antenna:y must be CHAT_Y (-140) — got: {teleport}"
+        "M5-E-β-3 antenna:y must be CHAT_Y (-100, post-cut-6) — got: {teleport}"
     );
     let scale_ok =
         teleport.contains("antenna:scale \"1.5\"") || teleport.contains("#scale> \"1.5\"");
