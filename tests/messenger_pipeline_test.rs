@@ -6263,9 +6263,9 @@ fn first_string_solution(store: &RdfStore, sparql: &str) -> Option<String> {
 //
 // Late ContactName arrival (alice's ContactReady fires before peer's
 // ContactName lands): the M5-A emit captured displayName="unknown" or
-// shortUri(peerUri); when ContactName lands later, the pipeline must
-// re-emit the messenger:Conversation triple so the inbox tile DSL stops
-// rendering the stale fallback.
+// the "Pending peer" placeholder; when ContactName lands later, the
+// pipeline must re-emit the messenger:Conversation triple so the inbox
+// tile DSL stops rendering the stale fallback.
 
 #[test]
 fn m5d_inbox_parent_scene_lists_every_tile_as_children() {
@@ -6339,9 +6339,10 @@ fn m5d_late_contactname_re_emits_real_conversation_displayname() {
     let (store, dag) = build_pipeline_with_inbox_settled();
     let mut out = CaptureOut::new();
 
-    // Pre-condition: displayName is the shortUri(peerUri) fallback (NOT a
-    // real name like "Bob"). shortUri trims to 8 chars; "did:tox:peer"
-    // becomes "peer" since the helper strips the leading scheme prefix.
+    // Pre-condition: displayName is the ISSUE-096 "Pending peer" placeholder
+    // (peerUri is set, but no friendName has resolved yet) — NOT a real name
+    // like "Bob" and NOT the raw FID-shaped shortUri output that pre-fix
+    // chrome leaked into the chat header / inbox chip.
     let conv_uri = format!("urn:msg:conv:{REAL_CONV_ID}");
     let pre_q = format!(
         "SELECT ?w WHERE {{ <{conv_uri}> <{}displayName> ?w }}",
@@ -6350,9 +6351,9 @@ fn m5d_late_contactname_re_emits_real_conversation_displayname() {
     let pre_name = first_string_solution(&store, &pre_q);
     assert_eq!(
         pre_name.as_deref(),
-        Some("peer"),
-        "Sanity: pre-ContactName, displayName is the shortUri fallback — \
-         got {pre_name:?}"
+        Some("Pending peer"),
+        "Sanity: pre-ContactName, displayName is the \"Pending peer\" \
+         placeholder — got {pre_name:?}"
     );
 
     // Drive a late ContactName for the peer.
@@ -6722,11 +6723,12 @@ fn m5d_empty_placeholder_clears_when_conversation_lands() {
 // add-friend.sh writes `peer.nick` alongside `peer.uri`; run.sh seds
 // `__PEER_NICK__` from that file; pipeline.ttl reads it into
 // `globalThis.friendName` (first-letter capitalized) at init. Without the
-// seed, the inbox tile + chat-panel header read `shortUri(peerUri)` (e.g.
-// "4748D985…") until a real `carrier:ContactName` event arrives — which
-// never happens if the peer is offline. The seed closes that visual gap
-// for the demo + cold-boot path; ContactName overrides the seed at line
-// 4783 if/when libjami delivers a friendly name.
+// seed AND without a live `carrier:ContactName`, the inbox tile +
+// chat-panel header render the ISSUE-096 "Pending peer" placeholder
+// (pre-fix this leaked the raw FID-shaped `shortUri(peerUri)` —
+// e.g. "4748D985…" — into chrome). The seed closes that visual gap
+// for the demo + cold-boot path; ContactName overrides the seed at
+// line 4783 if/when libjami delivers a friendly name.
 
 fn boot_inbox_with_seed(peer_nick: &str) -> (RdfStore, Dag) {
     let (store, dag) = build_messenger_pipeline_with_seeds("", peer_nick);
@@ -6777,14 +6779,13 @@ fn m5e_real_conv_seeded_displayname_renders_capitalized_friend_nick() {
 }
 
 #[test]
-fn m5e_real_conv_displayname_falls_back_to_shorturi_when_seed_empty() {
-    // With no `peer.nick` file (run.sh seds an empty string into
-    // `__PEER_NICK__`), pipeline.ttl init leaves `globalThis.friendName = ""`.
-    // emitRealConversation must fall back to `shortUri(peerUri)` — pinning
-    // the existing behavior so users who haven't re-run add-friend.sh
-    // post-M5-E-β-2 don't regress, AND so a leaked `__PEER_NICK__` literal
-    // (e.g. test harness forgot to replace) surfaces as a visible diff
-    // instead of silently rendering "_peer_nick_".
+fn m5e_real_conv_displayname_falls_back_to_pending_peer_when_seed_empty() {
+    // ISSUE-096 — with no `peer.nick` file (run.sh seds an empty string
+    // into `__PEER_NICK__`), pipeline.ttl init leaves
+    // `globalThis.friendName = ""`. emitRealConversation must fall back to
+    // the literal "Pending peer" placeholder so the inbox chip + chat
+    // header don't leak the raw FID-shaped `shortUri(peerUri)` into chrome
+    // before a `carrier:ContactName` arrives.
     let (store, _dag) = boot_inbox_with_seed("");
 
     let conv_uri = format!("urn:msg:conv:{REAL_CONV_ID}");
@@ -6794,11 +6795,109 @@ fn m5e_real_conv_displayname_falls_back_to_shorturi_when_seed_empty() {
     let name = first_string_solution(&store, &q);
     assert_eq!(
         name.as_deref(),
-        Some("peer"),
-        "M5-E-β-2: empty peer.nick seed must fall through to \
-         shortUri(peerUri) — for peerUri=\"did:tox:peer\", shortUri yields \
-         \"peer\". Got {name:?}"
+        Some("Pending peer"),
+        "ISSUE-096: empty peer.nick seed must fall through to the literal \
+         \"Pending peer\" placeholder (NOT shortUri(peerUri)) so the chrome \
+         doesn't leak the raw FID. Got {name:?}"
     );
+}
+
+// ── ISSUE-096 — Pending-peer chrome surfaces (chip / compact / chat) ──────
+//
+// Pinned tier-by-tier so a regression that re-introduces the FID-shaped
+// shortUri fallback in any of the three places the audit screenshot
+// flagged is caught:
+//   1. Inbox chip (tier 1)            → name reads "Pending peer".
+//   2. Inbox compact tier (tier 2)    → name "Pending peer" + snippet
+//                                       "Connecting…" (replaces the
+//                                       generic "(no messages yet)" so
+//                                       the row reads as a transient
+//                                       handshake state).
+//   3. Chat-panel header recipient    → friendLabel reads "Pending peer".
+
+#[test]
+fn issue_096_inbox_chip_renders_pending_peer_when_seed_empty() {
+    let (store, _dag) = boot_inbox_with_seed("");
+    let chip_uri = format!("urn:msg:tile:level:{REAL_CONV_ID}:chip");
+    let q = format!("SELECT ?w WHERE {{ <{chip_uri}> <{ANTENNA_NS}widget> ?w }}");
+    let widget = first_string_solution(&store, &q).unwrap_or_else(|| {
+        panic!("ISSUE-096: real-conv chip Level <{chip_uri}> must carry antenna:widget")
+    });
+    assert!(
+        widget.contains(
+            "Text{value=Pending peer,fontSize=11,color=text-code,fontFamily=monospace,maxLines=1}"
+        ),
+        "ISSUE-096: real-conv chip must render the literal \"Pending peer\" \
+         placeholder when no peer.nick seed is configured — got: {widget}"
+    );
+    // Defense-in-depth — the FID-shaped shortUri output ("peer" for the
+    // test peerUri "did:tox:peer", "4748D9..." for a real Jami fingerprint)
+    // must NOT appear in the chip widget when the placeholder is active.
+    assert!(
+        !widget.contains("Text{value=peer,"),
+        "ISSUE-096: real-conv chip must NOT render the shortUri FID \
+         fallback when no seed is configured — got: {widget}"
+    );
+}
+
+#[test]
+fn issue_096_inbox_compact_renders_connecting_snippet_when_pending() {
+    let (store, _dag) = boot_inbox_with_seed("");
+    let compact_uri = format!("urn:msg:tile:level:{REAL_CONV_ID}:compact");
+    let q = format!("SELECT ?w WHERE {{ <{compact_uri}> <{ANTENNA_NS}widget> ?w }}");
+    let widget = first_string_solution(&store, &q).unwrap_or_else(|| {
+        panic!("ISSUE-096: real-conv compact Level <{compact_uri}> must carry antenna:widget")
+    });
+    assert!(
+        widget.contains(
+            "Text{value=Pending peer,fontSize=11,color=text-code,fontFamily=monospace,maxLines=1}"
+        ),
+        "ISSUE-096: real-conv compact tier must render \"Pending peer\" as \
+         the name — got: {widget}"
+    );
+    assert!(
+        widget.contains("Text{value=Connecting…,"),
+        "ISSUE-096: real-conv compact tier must render \"Connecting…\" as \
+         the snippet (replaces the generic \"(no messages yet)\" placeholder \
+         while the peer name is unresolved) — got: {widget}"
+    );
+    assert!(
+        !widget.contains("(no messages yet)"),
+        "ISSUE-096: with the placeholder name active, the compact tier \
+         must NOT render the generic empty-conversation copy — got: {widget}"
+    );
+}
+
+#[test]
+fn issue_096_chat_panel_header_recipient_reads_pending_peer() {
+    // Boot the empty-seed path AND drive the chat panel widget through
+    // rebuildChat so each LOD on <urn:msg:chat> carries the post-fix
+    // friendLabel. boot_inbox_with_seed already lands a ConversationReady
+    // which calls rebuildChat at the end of the settle window.
+    //
+    // The chat panel emits four LODs (tiers 1..4) at
+    // <urn:msg:chat:lod:N>; the friendLabel statusRow appears in every
+    // tier (mirrored body shape, see buildChatBodyChromeFill +
+    // rebuildChat), so all four must carry the placeholder.
+    let (store, _dag) = boot_inbox_with_seed("");
+    for tier in 1..=4 {
+        let lod_uri = format!("urn:msg:chat:lod:{tier}");
+        let q = format!(
+            "SELECT ?w WHERE {{ <{lod_uri}> <{ANTENNA_NS}widget> ?w }}"
+        );
+        let widget = first_string_solution(&store, &q).unwrap_or_else(|| {
+            panic!("ISSUE-096: chat panel <{lod_uri}> must carry antenna:widget")
+        });
+        assert!(
+            widget.contains(
+                "Text{value=Pending peer,fontSize=9,color=text-code,fontFamily=monospace,maxLines=1}"
+            ),
+            "ISSUE-096: chat-panel header recipient (tier {tier}) must read \
+             \"Pending peer\" when no peer.nick seed is configured (replaces \
+             the FID-shaped shortUri fallback that pre-fix chrome leaked) — \
+             got: {widget}"
+        );
+    }
 }
 
 // ── M5-E-β-3 — "Open conversation" tile button → camera teleport ───────────
