@@ -1285,6 +1285,103 @@ fn composer_tier1_shows_swarm_not_ready_guard_before_ready() {
     );
 }
 
+// ── ISSUE-098 — Composer tier-1 carries an inline send glyph ──────────────
+//
+// Pre-fix the tier-1 composer was a bare TextField with only an italic
+// "Press Enter to send" hint — no visible send affordance. Post-fix the
+// TextField is wrapped in a Row alongside a Button whose `submitKey=input`
+// routes through HudTextField.triggerSubmit (same _handleSubmit closure
+// as Enter), and a ➤ glyph in text-tertiary marks the right edge of the
+// composer card. Mirrors the tier-3 buildEditorBlock sendBtn pattern.
+
+#[test]
+fn issue_098_composer_tier1_carries_inline_send_glyph_when_input_enabled() {
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 20);
+    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 10);
+    dispatch::dispatch(
+        &contact_online_event("did:tox:peer"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+    dispatch::dispatch(
+        "[] a antenna:Test ; carrier:ConversationReady \"_\" ; \
+         carrier:contactUri \"did:tox:peer\" ; \
+         carrier:conversationId \"conv-098-test\" .",
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 20);
+
+    let tier1 = lod_widget_at(&store, COMPOSER_URI, COMPOSER_TIER1_BELOW)
+        .expect("composer tier 1 must exist after rebuild");
+
+    assert!(
+        tier1.contains(
+            "Button{onTap=urn:msg:send:conv-098-test,submitKey=input,padding=4,borderRadius=4}"
+        ),
+        "ISSUE-098: tier-1 composer must carry an inline send Button with \
+         submitKey=input routed at urn:msg:send:<convId> — got: {tier1}"
+    );
+    assert!(
+        tier1.contains("Text{value=\u{27a4},fontSize=14,color=text-tertiary}"),
+        "ISSUE-098: tier-1 send glyph must render as \u{27a4} at fontSize=14 \
+         in text-tertiary — got: {tier1}"
+    );
+    // The send button sits inside a Row alongside the TextField — without
+    // the Row wrapper, the HudTextField → Expanded special case in
+    // widget_renderer can't fire (it only triggers inside a Row), and the
+    // TextField collapses to zero intrinsic width. Pin the wrapper
+    // presence so a regression that drops the Row trips this test.
+    assert!(
+        tier1.contains("Row["),
+        "ISSUE-098: tier-1 composer must wrap TextField + send glyph in a \
+         Row so the TextField gets Expanded and the glyph packs at the \
+         right edge — got: {tier1}"
+    );
+    // Defense-in-depth — the TextSubmitted wire (Enter path) must remain
+    // identical to the pre-fix shape so existing send-on-Enter behavior
+    // is preserved verbatim.
+    assert!(
+        tier1.contains(
+            "TextField{hint=Press Enter to send,target=urn:msg:chatinput,key=input}"
+        ),
+        "ISSUE-098: tier-1 TextField wire (target/key/hint) must remain \
+         intact — got: {tier1}"
+    );
+}
+
+#[test]
+fn issue_098_composer_tier1_omits_send_glyph_when_swarm_not_ready() {
+    // Default boot — peerUri + conversationId both empty, so inputEnabled
+    // is false and the muted "(swarm not ready)" branch fires. The send
+    // glyph must NOT appear, since pressing it would hit a no-op
+    // urn:msg:send:<empty-convId> tap target. The muted branch's chrome
+    // card shape is unchanged.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 20);
+
+    let tier1 = lod_widget_at(&store, COMPOSER_URI, COMPOSER_TIER1_BELOW)
+        .expect("composer tier 1 must exist on default boot");
+    assert!(
+        !tier1.contains("urn:msg:send:"),
+        "ISSUE-098: tier-1 muted-state branch must NOT carry the send \
+         button — pressing it pre-handshake would hit a no-op send URN. \
+         Got: {tier1}"
+    );
+    assert!(
+        !tier1.contains("Text{value=\u{27a4}"),
+        "ISSUE-098: tier-1 muted-state branch must NOT carry the \u{27a4} \
+         glyph — got: {tier1}"
+    );
+}
+
 // M2-B helper — drive the script into inputEnabled=true (peerUri +
 // conversationId both set) so the real tier-2/3 widgets emit instead of
 // the muted "(swarm not ready)" guards. Mirrors the setup in
@@ -2290,17 +2387,14 @@ fn send_button_carries_tap_urn_alongside_submit_key() {
          widget DSL: {tier3}"
     );
 
-    // Defensive: tier 1 has no send button (just a single-line TextField),
-    // and tier 2's send is via Enter on the single-line field — so neither
-    // tier should carry the send URN. Catches a refactor that lifts the
-    // breadcrumb into the lower tiers.
-    let tier1 = lod_widget_at(&store, COMPOSER_URI, COMPOSER_TIER1_BELOW)
-        .expect("composer tier 1 must exist");
-    assert!(
-        !tier1.contains("urn:msg:send:"),
-        "tier 1 must NOT carry the send-tap URN (no send button at this \
-         tier) — got: {tier1}"
-    );
+    // Defensive: post-ISSUE-098 tier 1 carries its own inline send glyph
+    // (Button{onTap=urn:msg:send:<convId>,submitKey=input,padding=4,
+    // borderRadius=4}[Text{value=➤,fontSize=14,color=text-tertiary}]) — the
+    // smaller mirror of the tier-3 sendBtn. Same urn:msg:send:<convId>
+    // breadcrumb URN, so tier 1's TapEvent path is the same one this
+    // test exercises. Tier 2 stays bare (Enter on the single-line field
+    // is the send path); pin its absence so a refactor that lifts the
+    // tier-3 send button into the format-toolbar tier trips.
     let tier2 = lod_widget_at(&store, COMPOSER_URI, COMPOSER_TIER2_BELOW)
         .expect("composer tier 2 must exist");
     assert!(
@@ -6898,6 +6992,110 @@ fn issue_096_chat_panel_header_recipient_reads_pending_peer() {
              got: {widget}"
         );
     }
+}
+
+// ── ISSUE-097 — Bubble timestamp uses formatRelativeTime ──────────────────
+//
+// Pre-fix the bubble's timestamp Text rendered via formatTime (24-hour
+// HH:MM), which at the literal "00:10" / "00:00" boundary parses as a
+// debug MM:SS counter rather than a chat timestamp — and carries no
+// AM/PM, no date, no zone. Post-fix the bubble + tile-history rows
+// route through formatRelativeTime, which returns "now" / "Nm" / "Nh"
+// / "MMM DD". For a message logged moments before the assertion,
+// formatRelativeTime returns the literal "now".
+
+#[test]
+fn issue_097_bubble_timestamp_renders_relative_now_for_recent_message() {
+    // No-reactions bubble emits a single LOD at antenna:below=99999
+    // (BUBBLE_TIER3_BELOW) per the M1-D shape contract. The timestamp Text
+    // is built by bubbleWidgetForTier and is identical across tiers, so
+    // querying the single LOD pins the post-fix shape.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", MID, "hello"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    let burl = bubble_uri(MID);
+    let lod = lod_widget_at(&store, &burl, BUBBLE_TIER3_BELOW)
+        .expect("ISSUE-097: no-reactions bubble must carry single LOD at below=99999");
+    assert!(
+        lod.contains("Text{value=now,fontSize=11,color=text-muted}"),
+        "ISSUE-097: a recent bubble must render the relative \"now\" \
+         timestamp produced by formatRelativeTime — got: {lod}"
+    );
+}
+
+#[test]
+fn issue_097_bubble_does_not_emit_legacy_24_hour_timestamp() {
+    // Defense-in-depth — pin the absence of the formatTime() shape so a
+    // regression that re-introduces the 24-hour HH:MM literal trips. The
+    // legacy Text always carried a colon between two pairs of digits at
+    // (fontSize=11,color=text-muted); scan for that exact pattern across
+    // every plausible HH:MM literal.
+    let (store, dag) = build_messenger_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 5);
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", MID, "hello"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 10);
+
+    let burl = bubble_uri(MID);
+    let lod = lod_widget_at(&store, &burl, BUBBLE_TIER3_BELOW)
+        .expect("ISSUE-097: no-reactions bubble must carry single LOD at below=99999");
+    for hh in 0u8..=23 {
+        for mm in 0u8..=59 {
+            let legacy = format!(
+                "Text{{value={hh:02}:{mm:02},fontSize=11,color=text-muted}}"
+            );
+            assert!(
+                !lod.contains(&legacy),
+                "ISSUE-097: bubble must NOT carry the legacy formatTime \
+                 24-hour HH:MM Text (matched {legacy:?}) — got: {lod}"
+            );
+        }
+    }
+}
+
+#[test]
+fn issue_097_tile_history_row_renders_relative_now_for_recent_message() {
+    // The tile (tier 4) widget renders the last-3-messages preview block;
+    // each row carries its own timestamp Text. ISSUE-097 routes that
+    // formatter through formatRelativeTime too so the in-tile preview
+    // matches the bubble shape.
+    let (store, dag) = build_pipeline_with_inbox_settled();
+    let mut out = CaptureOut::new();
+
+    // Drive an inbound TextMessage so the active conversation has at least
+    // one entry in globalThis.messages — the history block's
+    // `convId === globalThis.conversationId` gate fires only when the
+    // active conv carries content.
+    dispatch::dispatch(
+        &text_message_event("did:tox:peer", "mid-097-tile", "tile-history-recent"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    let tile_uri = format!("urn:msg:tile:level:{REAL_CONV_ID}:tile");
+    let q = format!("SELECT ?w WHERE {{ <{tile_uri}> <{ANTENNA_NS}widget> ?w }}");
+    let widget = first_string_solution(&store, &q).unwrap_or_else(|| {
+        panic!("ISSUE-097: real-conv tile Level <{tile_uri}> must carry antenna:widget")
+    });
+    assert!(
+        widget.contains("Text{value=now,fontSize=10,color=text-tertiary}"),
+        "ISSUE-097: tile-tier history row for a recent message must \
+         render relative \"now\" timestamp (was formatTime HH:MM) — \
+         got: {widget}"
+    );
 }
 
 // ── M5-E-β-3 — "Open conversation" tile button → camera teleport ───────────
