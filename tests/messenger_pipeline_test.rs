@@ -2483,6 +2483,19 @@ fn chat_panel_tier1_preserves_existing_chatbody() {
         tier1.contains("StatusDot{"),
         "tier 1 must carry the connStatus / friendStatus dots in the statusRow — got: {tier1}"
     );
+    // ISSUE-091: nick + recipient identifier Texts in the statusRow must
+    // pin maxLines=1 so a long FID (or display name) ellipsises on a
+    // single line instead of soft-wrapping mid-string when the chat panel
+    // width can't fit the full row. Both monospace name slots carry it —
+    // count the joint suffix to assert both ends.
+    let maxlines_count = tier1
+        .matches(",fontFamily=monospace,maxLines=1}")
+        .count();
+    assert!(
+        maxlines_count >= 2,
+        "tier 1 statusRow must apply maxLines=1 to both the nick and the recipient \
+         identifier Texts (got {maxlines_count} occurrences) — {tier1}"
+    );
     assert!(
         tier1.contains("Container{height=190"),
         "tier 1 must carry the 190-px bubble-area spacer (Path A spacer that bubbles \
@@ -5930,6 +5943,48 @@ fn m5d_inbox_chip_and_compact_widgets_wrap_in_border_faint_chrome() {
              pill badge — got: {carol_widget}"
         );
     }
+
+    // ISSUE-092: identifier Texts (the conv.name slot) must pin maxLines=1
+    // so a long FID-fallback (e.g. shortUri output `4748d985...`) ellipsizes
+    // on a single line under bounded chip/compact width — same overflow
+    // contract the chat-header recipient uses post-ISSUE-091. Without this
+    // pin, a multi-word name like "Dock Crew" or a long FID soft-wraps and
+    // the chip row register breaks across siblings.
+    //
+    // ISSUE-093: synth:trio's "Dock Crew" multi-word displayName is the
+    // canonical fixture — without maxLines=1 the label wraps mid-row,
+    // pushing the unread pill onto a second line and breaking sibling-chip
+    // height parity. Asserting trio explicitly so a regression that strips
+    // the cap from multi-word fixtures alone is caught.
+    for (conv_id, tier) in [
+        ("synth:dave", "chip"),
+        ("synth:carol", "chip"),
+        ("synth:trio", "chip"),
+        ("synth:dave", "compact"),
+        ("synth:carol", "compact"),
+        ("synth:trio", "compact"),
+        ("synth:dave", "tile"),
+        ("synth:carol", "tile"),
+        ("synth:trio", "tile"),
+    ] {
+        let widget = level_widget(&store, conv_id, tier);
+        assert!(
+            widget.contains(",fontFamily=monospace,maxLines=1}"),
+            "ISSUE-092 / ISSUE-093: <{conv_id}> {tier} widget must pin \
+             maxLines=1 on the monospace identifier Text so the FID/name \
+             ellipsizes on one line — got: {widget}"
+        );
+    }
+
+    // ISSUE-093 — defense-in-depth: synth:trio's chip widget must contain
+    // the literal "Dock Crew" name string AND maxLines=1 in a single
+    // monospace Text (not split across two Texts via a wrap workaround).
+    let trio_chip = level_widget(&store, "synth:trio", "chip");
+    assert!(
+        trio_chip.contains("Text{value=Dock Crew,fontSize=11,color=text-code,fontFamily=monospace,maxLines=1}"),
+        "ISSUE-093: synth:trio chip must render \"Dock Crew\" in a single \
+         monospace Text with maxLines=1 — got: {trio_chip}"
+    );
 }
 
 #[test]
