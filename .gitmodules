@@ -1,3 +1,6 @@
 [submodule "third_party/carrier"]
 	path = third_party/carrier
 	url = https://github.com/Resonator-LLC/carrier.git
+[submodule "third_party/quickjs"]
+	path = third_party/quickjs
+	url = https://github.com/bellard/quickjs.git

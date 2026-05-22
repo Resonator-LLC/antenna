@@ -20,7 +20,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::channel::{
-    AntennaIn, ChannelIn, ChannelOut, ChannelReader, ChannelWriter, InternalChannel,
+    AntennaIn, AntennaOut, ChannelIn, ChannelOut, ChannelReader, ChannelWriter, InternalChannel,
 };
 use crate::AntennaContext;
 
@@ -39,6 +39,13 @@ pub struct AntennaHandle {
     out_reader: ChannelReader,
     out_clock_fd: RawFd,
     done: Arc<AtomicBool>,
+    /// Set by the worker thread after a panic in `tick()`. Once true, the
+    /// worker has exited; `antenna_send` rejects further input and
+    /// `antenna_drain` still delivers any queued docs (including the
+    /// `antenna:Error` Turtle blob the worker pushed before exiting).
+    /// Self-healing is left to the caller via `antenna_destroy` +
+    /// `antenna_create`.
+    poisoned: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
 
@@ -102,17 +109,21 @@ pub unsafe extern "C" fn antenna_create(
         let out_reader = pair_out.reader();
         let out_clock_fd = out_reader.clock_fd();
 
-        let mut ant_in = ChannelIn::new(pair_in.reader());
-        let mut ant_out = ChannelOut::new(pair_out.writer());
+        let ant_in = ChannelIn::new(pair_in.reader());
+        let ant_out = ChannelOut::new(pair_out.writer());
 
         let done = Arc::new(AtomicBool::new(false));
         let done_w = done.clone();
+        let poisoned = Arc::new(AtomicBool::new(false));
+        let poisoned_w = poisoned.clone();
         let account_for_caller = ctx.account_id.clone();
 
         let worker = thread::Builder::new()
             .name("antenna-ffi-worker".to_string())
             .spawn(move || {
                 let mut ctx = ctx;
+                let mut ant_in = DebugPanicIn { inner: ant_in };
+                let mut ant_out = ant_out;
                 while !done_w.load(Ordering::Acquire) {
                     let interval_ms = ctx.interval().as_millis() as i32;
                     let timeout_ms = interval_ms.clamp(1, FFI_MAX_SLEEP_MS);
@@ -133,8 +144,31 @@ pub unsafe extern "C" fn antenna_create(
                         thread::sleep(Duration::from_millis(timeout_ms as u64));
                     }
 
-                    if let Err(e) = ctx.tick(&mut ant_in, &mut ant_out) {
-                        tracing::error!(target: "FFI", %e, "tick failed");
+                    // Catch panics in tick() so a single misbehaving script
+                    // node or libjami callback doesn't take down Station.
+                    // The error blob lets the embedding app surface a
+                    // crash banner; the worker exits and the handle stays
+                    // poisoned until the caller recycles it.
+                    let tick_result = catch_unwind(AssertUnwindSafe(|| {
+                        ctx.tick(&mut ant_in, &mut ant_out)
+                    }));
+                    match tick_result {
+                        Ok(Ok(())) => {}
+                        Ok(Err(e)) => {
+                            tracing::error!(target: "FFI", %e, "tick failed");
+                        }
+                        Err(payload) => {
+                            let msg = panic_payload_message(&payload);
+                            let turtle = format!(
+                                "[] a <http://resonator.network/v2/antenna#Error> ; \
+                                 <http://resonator.network/v2/antenna#message> \"{}\" .",
+                                escape_turtle_string(&msg)
+                            );
+                            ant_out.send(&turtle);
+                            poisoned_w.store(true, Ordering::Release);
+                            tracing::error!(target: "FFI", message = %msg, "worker panicked; handle poisoned");
+                            break;
+                        }
                     }
                 }
             })
@@ -157,6 +191,7 @@ pub unsafe extern "C" fn antenna_create(
             out_reader,
             out_clock_fd,
             done,
+            poisoned,
             worker: Some(worker),
         })
     }));
@@ -178,6 +213,8 @@ pub unsafe extern "C" fn antenna_create(
 /// * `-1` — invalid arguments (null handle, or null pointer with non-zero len)
 /// * `-2` — bytes are not valid UTF-8
 /// * `-3` — ring buffer full after bounded retry
+/// * `-4` — handle poisoned (worker panicked; caller must recycle via
+///   `antenna_destroy` + `antenna_create`)
 ///
 /// # Safety
 /// * `handle` must have been returned by [`antenna_create`] and not yet
@@ -196,6 +233,9 @@ pub unsafe extern "C" fn antenna_send(
         // SAFETY: caller contract — handle is live; turtle/len describe a
         // readable buffer (or len == 0 when turtle is null).
         let h = unsafe { &*handle };
+        if h.poisoned.load(Ordering::Acquire) {
+            return -4;
+        }
         let slice: &[u8] = if len == 0 {
             &[]
         } else {
@@ -328,5 +368,61 @@ unsafe fn opt_cstr<'a>(p: *const c_char) -> Result<Option<&'a str>, ()> {
     match unsafe { CStr::from_ptr(p) }.to_str() {
         Ok(s) => Ok(Some(s)),
         Err(_) => Err(()),
+    }
+}
+
+/// Pull a readable string out of a `Box<dyn Any>` panic payload. Matches the
+/// two payload shapes the standard library produces from `panic!(...)`.
+fn panic_payload_message(payload: &Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<&'static str>() {
+        return (*s).to_string();
+    }
+    if let Some(s) = payload.downcast_ref::<String>() {
+        return s.clone();
+    }
+    "(non-string panic payload)".to_string()
+}
+
+/// Escape a string for use inside a Turtle short (single-quoted) literal.
+/// Covers the four characters Turtle 1.1 § 7 requires escaping in
+/// STRING_LITERAL_QUOTE: backslash, quote, newline, carriage return.
+fn escape_turtle_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// `AntennaIn` decorator that watches for the debug panic-injection blob.
+///
+/// The matching test blob is `[] a antenna:DebugPanic .` — sending it on
+/// the IN ring triggers a panic in the worker thread on the next `recv()`,
+/// which exercises the catch_unwind + poison path used in production for
+/// real panics. The check is feature-gated so Station's embedded staticlib
+/// (`--no-default-features --features ffi-embed`) compiles it out entirely;
+/// debug builds and default release builds keep it for testability.
+struct DebugPanicIn<I: AntennaIn> {
+    inner: I,
+}
+
+impl<I: AntennaIn> AntennaIn for DebugPanicIn<I> {
+    fn recv(&mut self) -> Option<String> {
+        let line = self.inner.recv()?;
+        #[cfg(feature = "debug-panic")]
+        if line.contains("antenna:DebugPanic") {
+            panic!("antenna:DebugPanic injected via FFI input");
+        }
+        Some(line)
+    }
+
+    fn clock_fd(&self) -> Option<RawFd> {
+        self.inner.clock_fd()
     }
 }

@@ -14,14 +14,35 @@ crate-type = ["cdylib", "rlib"]
 [[bin]]
 name = "antenna"
 path = "src/main.rs"
+required-features = ["cli", "ws"]
+
+[features]
+default = ["cli", "ws", "llm-http", "debug-panic"]
+# CLI binary (clap arg parsing). Off → no `antenna` binary, library only.
+cli = ["dep:clap"]
+# WebSocket server transport. Off → `antenna::ws` module is excluded.
+ws = ["dep:tungstenite"]
+# HTTP-based LLM backends (Ollama, OpenAI-compatible). Off → SemanticRouter
+# nodes with `ollama`/`http` backend types fail to construct; `platform`
+# (host-app channel bridge) still works for on-device LLMs.
+llm-http = ["dep:ureq"]
+# Wire the `[] a antenna:DebugPanic .` Turtle blob to panic the FFI worker.
+# Enabled by default in dev / cargo test (release or debug) via the default
+# set; Station's plugin omits it via `--no-default-features --features
+# ffi-embed`. The check is one substring match per FFI input line, only
+# present in the FFI worker code path — CLI/WS callers never touch it.
+debug-panic = []
+# Marker for the embedded-staticlib build. Combined with
+# `--no-default-features`, this is what Station's plugin selects.
+ffi-embed = []
 
 [dependencies]
 oxigraph = "0.5"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive"], optional = true }
 anyhow = "1"
 libc = "0.2"
-tungstenite = "0.24"
-ureq = "2"
+tungstenite = { version = "0.24", optional = true }
+ureq = { version = "2", optional = true }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

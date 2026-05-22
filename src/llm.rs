@@ -3,9 +3,13 @@
 //! LLM backend abstraction for SemanticRouter.
 //!
 //! Trait + implementations:
-//!   - OllamaBackend:   POST /api/generate (local Ollama)
-//!   - HttpBackend:     POST /v1/chat/completions (OpenAI-compatible)
+//!   - OllamaBackend:   POST /api/generate (local Ollama)        — `llm-http` feature
+//!   - HttpBackend:     POST /v1/chat/completions (OpenAI-compat) — `llm-http` feature
 //!   - PlatformBackend: channel bridge to host app (iOS/Android on-device LLM)
+//!
+//! The HTTP backends pull in `ureq`. Embedded builds that target Station's
+//! plugin disable the `llm-http` feature so the staticlib has no HTTP client.
+//! `create_backend("ollama"|"http", …)` returns `Err` in that configuration.
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
@@ -24,11 +28,13 @@ pub trait LlmBackend: Send {
 // Ollama — POST /api/generate
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "llm-http")]
 pub struct OllamaBackend {
     endpoint: String, // e.g. "http://localhost:11434"
     model: String,
 }
 
+#[cfg(feature = "llm-http")]
 impl OllamaBackend {
     pub fn new(endpoint: &str, model: &str) -> Self {
         Self {
@@ -38,6 +44,7 @@ impl OllamaBackend {
     }
 }
 
+#[cfg(feature = "llm-http")]
 impl LlmBackend for OllamaBackend {
     fn complete(&self, system: &str, user: &str, max_tokens: u32) -> Result<String> {
         let url = format!("{}/api/generate", self.endpoint);
@@ -63,11 +70,13 @@ impl LlmBackend for OllamaBackend {
 // Http — POST /v1/chat/completions (OpenAI-compatible)
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "llm-http")]
 pub struct HttpBackend {
     endpoint: String, // e.g. "http://localhost:8080/v1"
     model: String,
 }
 
+#[cfg(feature = "llm-http")]
 impl HttpBackend {
     pub fn new(endpoint: &str, model: &str) -> Self {
         Self {
@@ -77,6 +86,7 @@ impl HttpBackend {
     }
 }
 
+#[cfg(feature = "llm-http")]
 impl LlmBackend for HttpBackend {
     fn complete(&self, system: &str, user: &str, max_tokens: u32) -> Result<String> {
         let url = format!("{}/chat/completions", self.endpoint);
@@ -193,9 +203,20 @@ pub fn create_backend(
     model: &str,
     platform_channels: Option<BackendChannels>,
 ) -> Result<Box<dyn LlmBackend>> {
+    // `_endpoint` silences the warning in builds where neither HTTP backend
+    // is compiled in. The argument stays in the public signature because
+    // callers (dag.rs) pass it unconditionally from the router config.
+    let _endpoint = endpoint;
     match backend_type {
+        #[cfg(feature = "llm-http")]
         "ollama" => Ok(Box::new(OllamaBackend::new(endpoint, model))),
+        #[cfg(feature = "llm-http")]
         "http" => Ok(Box::new(HttpBackend::new(endpoint, model))),
+        #[cfg(not(feature = "llm-http"))]
+        "ollama" | "http" => Err(anyhow!(
+            "LLM backend '{}' requires the `llm-http` feature (disabled in this build)",
+            backend_type
+        )),
         "platform" => {
             let ch = platform_channels.ok_or_else(|| {
                 anyhow!("platform backend requires llmRequest/llmResponse channels")
@@ -228,6 +249,7 @@ pub fn build_prompt(turtle_a: &str, turtle_b: &str, prefixes: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /// Escape a string as a JSON string literal (with quotes).
+#[cfg(feature = "llm-http")]
 fn json_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
@@ -256,6 +278,7 @@ fn turtle_escape(s: &str) -> String {
 }
 
 /// Extract a top-level string field from JSON (minimal parser, no serde).
+#[cfg(feature = "llm-http")]
 fn extract_json_field(json: &str, field: &str) -> Result<String> {
     let pattern = format!("\"{}\"", field);
     let pos = json
@@ -277,12 +300,14 @@ fn extract_json_field(json: &str, field: &str) -> Result<String> {
 }
 
 /// Extract content from OpenAI-compatible response.
+#[cfg(feature = "llm-http")]
 fn extract_nested_content(json: &str) -> Result<String> {
     // Find "content" field value
     extract_json_field(json, "content")
 }
 
 /// Parse a JSON string literal starting at the opening quote.
+#[cfg(feature = "llm-http")]
 fn parse_json_string(s: &str) -> Result<String> {
     if !s.starts_with('"') {
         return Err(anyhow!("expected '\"'"));
@@ -522,16 +547,25 @@ mod tests {
         assert!(create_backend("platform", "", "", None).is_err());
     }
 
+    #[cfg(feature = "llm-http")]
     #[test]
     fn create_backend_ollama() {
         let backend = create_backend("ollama", "http://localhost:11434", "test", None);
         assert!(backend.is_ok());
     }
 
+    #[cfg(feature = "llm-http")]
     #[test]
     fn create_backend_http() {
         let backend = create_backend("http", "http://localhost:8080/v1", "test", None);
         assert!(backend.is_ok());
+    }
+
+    #[cfg(not(feature = "llm-http"))]
+    #[test]
+    fn create_backend_http_disabled_without_feature() {
+        assert!(create_backend("ollama", "http://localhost:11434", "test", None).is_err());
+        assert!(create_backend("http", "http://localhost:8080/v1", "test", None).is_err());
     }
 
     // -- simple_id --

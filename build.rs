@@ -2,38 +2,49 @@
 
 use std::path::{Path, PathBuf};
 
-fn find_quickjs() -> PathBuf {
-    if let Ok(val) = std::env::var("QUICKJS_DIR") {
-        return PathBuf::from(val);
-    }
-
-    if let Ok(output) = std::process::Command::new("brew")
-        .args(["--prefix", "quickjs"])
-        .output()
-    {
-        if output.status.success() {
-            let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            let p = PathBuf::from(&prefix);
-            if p.join("include/quickjs/quickjs.h").exists() {
-                return p;
-            }
-        }
-    }
-
-    for base in &["/usr/local", "/usr"] {
-        let p = PathBuf::from(base);
-        if p.join("include/quickjs/quickjs.h").exists() {
-            return p;
-        }
-    }
-
-    panic!(
-        "Could not find QuickJS. Install it (e.g. `brew install quickjs`) \
-         or set QUICKJS_DIR to its prefix."
-    );
+fn target_os() -> String {
+    std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default()
 }
 
+fn target_arch() -> String {
+    std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default()
+}
+
+fn target_abi() -> String {
+    std::env::var("CARGO_CFG_TARGET_ABI").unwrap_or_default()
+}
+
+/// True for iOS simulator targets.
+///
+/// Rust ships two simulator target tuples and they disagree on how to
+/// advertise sim-ness through cfg:
+///
+/// * `aarch64-apple-ios-sim` reports `target_abi = "sim"`.
+/// * `x86_64-apple-ios` reports `target_abi = ""` — the tuple only exists
+///   for the Intel-Mac simulator; there is no on-device x86_64-apple-ios.
+///
+/// Detect both by ORing target_abi == "sim" with target_arch == "x86_64".
+fn is_ios_simulator() -> bool {
+    target_os() == "ios" && (target_abi() == "sim" || target_arch() == "x86_64")
+}
+
+fn is_ios_device() -> bool {
+    target_os() == "ios" && !is_ios_simulator()
+}
+
+/// Returns `(host_triple_dir, pj_lib_suffix)` for the libjami contrib layout.
+///
+/// On host targets, contribs are staged under `contrib/<host>/lib/` and
+/// pjsip libraries carry a `-<gnu-arch>-apple-darwin` (macOS) /
+/// `-<gnu-arch>-linux-gnu` (Linux) suffix. On iOS, build-libjami.sh's
+/// staging step strips the triple suffix entirely, so the iOS prefix lists
+/// libraries flat (libpj.a, libpjsip.a, …); return empty strings to drive
+/// the contrib name list below to emit unsuffixed lib names.
 fn host_triple() -> (String, String) {
+    if target_os() == "ios" {
+        return (String::new(), String::new());
+    }
+
     let uname_s = std::process::Command::new("uname")
         .arg("-s")
         .output()
@@ -67,17 +78,51 @@ fn main() {
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let manifest_dir = Path::new(&manifest);
 
-    let quickjs_prefix = find_quickjs();
-    let quickjs_inc = quickjs_prefix.join("include").join("quickjs");
-    let quickjs_lib = quickjs_prefix.join("lib").join("quickjs");
-
-    println!("cargo:rustc-link-search=native={}", quickjs_lib.display());
-    println!("cargo:rustc-link-lib=static=quickjs");
-
     let src_dir = manifest_dir.join("src");
+
+    // ------------------------------------------------------------------
+    // QuickJS (vendored at third_party/quickjs, pinned via submodule).
+    // Mirror of upstream Makefile's QJS_LIB_OBJS minus quickjs-libc.o —
+    // antenna's script_vm.rs only touches the core engine.
+    // ------------------------------------------------------------------
+    let qjs_dir = manifest_dir.join("third_party").join("quickjs");
+    if !qjs_dir.join("quickjs.h").exists() {
+        panic!(
+            "QuickJS sources missing at {}.\n\
+             Run: git submodule update --init third_party/quickjs",
+            qjs_dir.display(),
+        );
+    }
+    let qjs_version = std::fs::read_to_string(qjs_dir.join("VERSION"))
+        .unwrap_or_else(|e| panic!("could not read {}/VERSION: {}", qjs_dir.display(), e))
+        .trim()
+        .to_string();
+
+    let mut qjs_build = cc::Build::new();
+    qjs_build
+        .files([
+            qjs_dir.join("quickjs.c"),
+            qjs_dir.join("dtoa.c"),
+            qjs_dir.join("libregexp.c"),
+            qjs_dir.join("libunicode.c"),
+            qjs_dir.join("cutils.c"),
+        ])
+        .include(&qjs_dir)
+        .define("_GNU_SOURCE", None)
+        .define("CONFIG_VERSION", format!("\"{qjs_version}\"").as_str())
+        .flag_if_supported("-fwrapv")
+        .flag_if_supported("-Wno-sign-compare")
+        .flag_if_supported("-Wno-implicit-fallthrough")
+        .flag_if_supported("-Wno-unused-parameter")
+        .flag_if_supported("-Wno-unused-but-set-variable")
+        .flag_if_supported("-Wno-array-bounds")
+        .flag_if_supported("-Wno-format-truncation")
+        .warnings(false);
+    qjs_build.compile("quickjs");
+
     cc::Build::new()
         .file(src_dir.join("quickjs_shim.c"))
-        .include(&quickjs_inc)
+        .include(&qjs_dir)
         .warnings(false)
         .compile("quickjs_shim");
 
@@ -121,10 +166,17 @@ fn main() {
     // libjami + contrib (mirror of carrier/Makefile §Link flags)
     //
     // Resolved to a pre-built static prefix at $JAMI_PREFIX, defaulting to
-    // ${XDG_CACHE_HOME:-$HOME/.cache}/resonator/libjami/<sha>/ where <sha>
-    // is the line from carrier/JAMI_VERSION. All archives (libjami-core.a +
-    // ~39 contrib libs) live flat under $JAMI_PREFIX/lib/. See
-    // arch/jami-migration.md D21.
+    // ${XDG_CACHE_HOME:-$HOME/.cache}/resonator/libjami/<key>/ where <key>
+    // selects host vs iOS slice, matching carrier/tools/build-libjami.sh:
+    //
+    //   host targets:             <sha>/
+    //   aarch64-apple-ios:        <sha>-ios-device-arm64/
+    //   aarch64-apple-ios-sim:    <sha>-ios-sim-fat/
+    //   x86_64-apple-ios:         <sha>-ios-sim-fat/   (Intel-Mac simulator)
+    //
+    // <sha> is the line from carrier/JAMI_VERSION. All archives
+    // (libjami-core.a + ~39 contrib libs) live flat under
+    // $JAMI_PREFIX/lib/. See arch/jami-migration.md D21.
     // ------------------------------------------------------------------
     let jami_prefix = if let Ok(val) = std::env::var("JAMI_PREFIX") {
         PathBuf::from(val)
@@ -142,7 +194,17 @@ fn main() {
             .unwrap_or_else(|_| {
                 PathBuf::from(std::env::var("HOME").expect("HOME unset")).join(".cache")
             });
-        cache_root.join("resonator").join("libjami").join(sha)
+        let suffix = if is_ios_device() {
+            "-ios-device-arm64"
+        } else if is_ios_simulator() {
+            "-ios-sim-fat"
+        } else {
+            ""
+        };
+        cache_root
+            .join("resonator")
+            .join("libjami")
+            .join(format!("{sha}{suffix}"))
     };
     let jami_lib_dir = jami_prefix.join("lib");
     let jami_lib = jami_lib_dir.join("libjami-core.a");
@@ -159,24 +221,33 @@ fn main() {
     println!("cargo:rustc-link-lib=static=jami-core");
 
     let (_host, pj) = host_triple();
+    // pj is empty on iOS — build-libjami.sh's iOS staging step strips the
+    // pjsip per-arch triple suffix so iOS archives are flat-named (libpj.a,
+    // libpjsip.a, …). Render the suffix conditionally so iOS gets the bare
+    // name and host targets keep their `-<arch>-apple-darwin` discriminator.
+    let pj_suffix = if pj.is_empty() {
+        String::new()
+    } else {
+        format!("-{pj}")
+    };
 
     let contrib_static = [
         "dhtnet",
         "opendht",
-        &format!("pjsua2-{pj}"),
-        &format!("pjsua-{pj}"),
-        &format!("pjsip-ua-{pj}"),
-        &format!("pjsip-simple-{pj}"),
-        &format!("pjsip-{pj}"),
-        &format!("pjmedia-codec-{pj}"),
-        &format!("pjmedia-audiodev-{pj}"),
-        &format!("pjmedia-videodev-{pj}"),
-        &format!("pjmedia-{pj}"),
-        &format!("pjnath-{pj}"),
-        &format!("pjlib-util-{pj}"),
-        &format!("pj-{pj}"),
-        &format!("srtp-{pj}"),
-        &format!("yuv-{pj}"),
+        &format!("pjsua2{pj_suffix}"),
+        &format!("pjsua{pj_suffix}"),
+        &format!("pjsip-ua{pj_suffix}"),
+        &format!("pjsip-simple{pj_suffix}"),
+        &format!("pjsip{pj_suffix}"),
+        &format!("pjmedia-codec{pj_suffix}"),
+        &format!("pjmedia-audiodev{pj_suffix}"),
+        &format!("pjmedia-videodev{pj_suffix}"),
+        &format!("pjmedia{pj_suffix}"),
+        &format!("pjnath{pj_suffix}"),
+        &format!("pjlib-util{pj_suffix}"),
+        &format!("pj{pj_suffix}"),
+        &format!("srtp{pj_suffix}"),
+        &format!("yuv{pj_suffix}"),
         "avformat",
         "avcodec",
         "avfilter",
@@ -220,8 +291,19 @@ fn main() {
     // ------------------------------------------------------------------
     // All third-party C/C++ deps come from contrib (hermetic, D21). Only
     // system frameworks + the C runtime are pulled from outside the prefix.
+    //
+    // Use CARGO_CFG_TARGET_OS rather than `cfg!(target_os = …)` here:
+    // `cfg!()` in build.rs evaluates against the HOST, but the link flags
+    // we emit are read by the TARGET linker. The two diverge for iOS
+    // cross-compilation from a macOS host.
     // ------------------------------------------------------------------
-    if cfg!(target_os = "macos") {
+    let target_os_str = target_os();
+    if target_os_str == "macos" || target_os_str == "ios" {
+        // Same Mach-O system frameworks apply on macOS and iOS. The daemon
+        // has no UI surface so we never reach into AppKit / UIKit; the
+        // existing list (audio + video + Foundation + Security) is iOS-
+        // compatible verbatim. libcompression / libresolv / libc++ /
+        // libiconv all ship in the iOS SDK at the same paths.
         for fw in &[
             "AVFoundation",
             "CoreAudio",
@@ -258,6 +340,8 @@ fn main() {
         "cargo:rerun-if-changed={}",
         src_dir.join("quickjs_shim.c").display()
     );
+    println!("cargo:rerun-if-changed={}", qjs_dir.join("VERSION").display());
+    println!("cargo:rerun-if-changed={}", qjs_dir.join("quickjs.h").display());
     println!("cargo:rerun-if-env-changed=CARRIER_DIR");
     println!("cargo:rerun-if-env-changed=JAMI_PREFIX");
 }

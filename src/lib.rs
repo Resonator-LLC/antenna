@@ -20,6 +20,7 @@ pub mod logging;
 pub mod script_vm;
 pub mod store;
 pub mod theme;
+#[cfg(feature = "ws")]
 pub mod ws;
 
 use anyhow::Result;

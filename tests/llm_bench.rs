@@ -1,3 +1,5 @@
+#![cfg(feature = "llm-http")]
+
 ///! Benchmark: SemanticRouter LLM backend with local Ollama (qwen2.5-coder:7b).
 ///!
 ///! Measures:
