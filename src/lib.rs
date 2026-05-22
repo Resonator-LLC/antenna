@@ -14,6 +14,7 @@ pub mod carrier;
 pub mod channel;
 pub mod dag;
 pub mod dispatch;
+pub mod ffi;
 pub mod llm;
 pub mod logging;
 pub mod script_vm;
@@ -109,6 +110,27 @@ impl AntennaContext {
         pipeline_path: Option<&str>,
         seed_path: Option<&str>,
     ) -> Result<Self> {
+        let pipeline_ttl = pipeline_path.map(std::fs::read_to_string).transpose()?;
+        let seed_ttl = seed_path.map(std::fs::read_to_string).transpose()?;
+        Self::new_with_ttl(
+            data_dir,
+            account_id,
+            store_path,
+            pipeline_ttl.as_deref(),
+            seed_ttl.as_deref(),
+        )
+    }
+
+    /// Like [`new`] but accepts pipeline and seed Turtle as in-memory content
+    /// strings rather than filesystem paths. Used by the FFI shim, which
+    /// loads radio assets from the embedding app's bundle.
+    pub fn new_with_ttl(
+        data_dir: &str,
+        account_id: Option<&str>,
+        store_path: Option<&str>,
+        pipeline_ttl: Option<&str>,
+        seed_ttl: Option<&str>,
+    ) -> Result<Self> {
         let store = RdfStore::open(store_path)?;
         tracing::info!(target: "PIPELINE", "store opened");
 
@@ -124,16 +146,14 @@ impl AntennaContext {
         store.insert_turtle(EMOJI_CATALOG_TTL)?;
         tracing::info!(target: "DESIGN", "loaded design ontology + voidline themes + resolver + emoji catalog");
 
-        if let Some(path) = pipeline_path {
-            let ttl = std::fs::read_to_string(path)?;
-            replace_pipeline(&store, &ttl)?;
-            tracing::info!(target: "PIPELINE", path, "loaded pipeline");
+        if let Some(ttl) = pipeline_ttl {
+            replace_pipeline(&store, ttl)?;
+            tracing::info!(target: "PIPELINE", bytes = ttl.len(), "loaded pipeline");
         }
 
-        if let Some(path) = seed_path {
-            let ttl = std::fs::read_to_string(path)?;
-            store.insert_turtle(&ttl)?;
-            tracing::info!(target: "PIPELINE", path, "loaded seed data");
+        if let Some(ttl) = seed_ttl {
+            store.insert_turtle(ttl)?;
+            tracing::info!(target: "PIPELINE", bytes = ttl.len(), "loaded seed data");
         }
 
         let dag = Dag::load(&store)?;
