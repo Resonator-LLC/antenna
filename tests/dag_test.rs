@@ -610,6 +610,66 @@ fn test_vm_drop_no_leak() {
 }
 
 #[test]
+fn test_script_vm_caches_compiled_body() {
+    // Regression: each exec() used to re-eval the full source (Cut 8.8 traced
+    // 5–15s per event on messenger's 275KB pipeline to this). With the
+    // installed_source_hash cache, subsequent execs of the same source should
+    // be dominated by the tiny `__scriptBody();` invocation, not the parse.
+    use std::time::Instant;
+
+    let (tx, rx) = mpsc::channel();
+    let (qtx, _qrx) = mpsc::channel();
+    let vm = antenna::script_vm::ScriptVm::new(tx, qtx, 0).unwrap();
+
+    // Build a ~120KB body with one emit per call so we can verify behavior.
+    let mut body = String::new();
+    body.push_str("var ctr = (globalThis.__ctr = (globalThis.__ctr || 0) + 1);\n");
+    body.push_str("emit('tick:' + ctr);\n");
+    // Bulk: many no-op function definitions to make parsing expensive.
+    for i in 0..4000 {
+        body.push_str(&format!(
+            "function __pad{i}(a, b) {{ return a * {i} + b - {i}; }}\n"
+        ));
+    }
+    assert!(body.len() > 100_000, "body should be >100KB to expose parse cost");
+
+    let t0 = Instant::now();
+    vm.exec(&body, "first", "urn:ch:x").unwrap();
+    let first = t0.elapsed();
+    assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), "tick:1");
+
+    // Subsequent execs should be far cheaper than the first.
+    let t1 = Instant::now();
+    for _ in 0..20 {
+        vm.exec(&body, "rest", "urn:ch:x").unwrap();
+    }
+    let rest = t1.elapsed();
+    for i in 2..=21 {
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            format!("tick:{i}")
+        );
+    }
+
+    // 20 cached calls should take far less than the first uncached call.
+    // The factor depends on hardware; 5x is a conservative floor (in practice
+    // the cached path is 100x+ faster).
+    assert!(
+        rest * 5 < first * 20,
+        "cached execs not faster than first: first={first:?}, 20 cached={rest:?}"
+    );
+
+    // When the source changes, the cache reinstalls.
+    let other = "emit('other:' + input);";
+    vm.exec(other, "X", "urn:ch:x").unwrap();
+    assert_eq!(rx.recv_timeout(Duration::from_secs(1)).unwrap(), "other:X");
+
+    // And switching back to the original source still works.
+    vm.exec(&body, "back", "urn:ch:x").unwrap();
+    assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), "tick:22");
+}
+
+#[test]
 fn test_channel_full_graceful() {
     // Create a tiny ring buffer (64 bytes) and fill it
     let ch = antenna::channel::InternalChannel::new(64).unwrap();

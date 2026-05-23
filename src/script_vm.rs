@@ -9,6 +9,13 @@ use std::time::Duration;
 /// Type for store query requests: (SPARQL, response channel)
 pub type QueryRequest = (String, Sender<Vec<Vec<(String, String)>>>);
 
+fn hash_source(source: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    source.hash(&mut hasher);
+    hasher.finish()
+}
+
 // ---------------------------------------------------------------------------
 // QuickJS FFI types — JSValue is a 16-byte struct (union + tag)
 // ---------------------------------------------------------------------------
@@ -320,6 +327,12 @@ pub struct ScriptVm {
     rt: *mut JSRuntime,
     ctx: *mut JSContext,
     _opaque: Box<VmOpaque>,
+    /// Hash of the source body currently installed as `globalThis.__scriptBody`.
+    /// `None` until the first `exec`; updated when a new source replaces it.
+    /// Re-parsing the body on every event was a 5–15s perf hit for the 275KB
+    /// messenger pipeline; caching keeps the bytecode in the function object
+    /// and reduces per-event eval to a tiny `__scriptBody();` call.
+    installed_source_hash: std::cell::Cell<Option<u64>>,
 }
 
 // SAFETY: ScriptVm is only used from one thread at a time (each DAG node
@@ -416,6 +429,7 @@ impl ScriptVm {
             rt,
             ctx,
             _opaque: opaque,
+            installed_source_hash: std::cell::Cell::new(None),
         })
     }
 
@@ -438,8 +452,19 @@ impl ScriptVm {
             JS_SetPropertyStr(self.ctx, global, prop.as_ptr(), channel_val);
         }
 
-        // Wrap in IIFE so const/let don't pollute the global scope across repeated calls
-        let wrapped = format!("(function(){{\n{}\n}})();", source);
+        // Install the body as `globalThis.__scriptBody` on first call (or when
+        // source changes). Subsequent execs only need to invoke the cached
+        // function — QuickJS keeps the compiled bytecode in the function value.
+        let source_hash = hash_source(source);
+        let wrapped = if self.installed_source_hash.get() == Some(source_hash) {
+            String::from("globalThis.__scriptBody();")
+        } else {
+            self.installed_source_hash.set(Some(source_hash));
+            format!(
+                "globalThis.__scriptBody = function() {{\n{}\n}};\nglobalThis.__scriptBody();",
+                source
+            )
+        };
         let source_c =
             CString::new(wrapped.as_str()).map_err(|_| anyhow!("script contains null byte"))?;
         let filename_c = CString::new("<script>").unwrap();
