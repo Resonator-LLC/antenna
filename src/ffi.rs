@@ -77,7 +77,15 @@ pub unsafe extern "C" fn antenna_create(
     seed_ttl_or_null: *const c_char,
     out_account_id: *mut *mut c_char,
 ) -> *mut AntennaHandle {
+    // Install the canonical tracing subscriber on first antenna_create in this
+    // process. Without it every tracing::* call in the embedded path is a
+    // silent no-op (Cut 8.10 — diagnosis gap surfaced by ISSUE-107). init()
+    // swallows double-init via try_init().ok(), so reusing the same process
+    // for a destroy/recreate cycle is safe.
+    let _ = crate::logging::init("debug", "");
+
     let result = catch_unwind(AssertUnwindSafe(|| {
+        tracing::info!(target: "FFI", "antenna_create: entered");
         // SAFETY: caller contract — each non-null pointer is a NUL-terminated
         // UTF-8 buffer valid for this call.
         let data_dir = unsafe { opt_cstr(data_dir) }?;
