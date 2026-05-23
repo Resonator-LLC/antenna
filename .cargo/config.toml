@@ -1,0 +1,20 @@
+# Per-target build env for iOS-simulator cross-compile.
+#
+# oxrocksdb-sys (transitive dep via oxigraph → oxrocksdb-sys) runs bindgen
+# against the C++ rocksdb headers. bindgen invokes clang under the hood,
+# and Cargo's `arm64-apple-ios-sim` / `x86_64-apple-ios` target triples are
+# interpreted by older clangs as having `sim` for the OS-version component
+# rather than the ABI suffix:
+#   error: version 'sim' in target triple 'arm64-apple-ios-sim' is invalid
+# Overriding with the explicit `-simulator` form (and an explicit deploy
+# target) bypasses the parser. Cargo's `[env]` table propagates this to
+# every build script invoked during the build, including bindgen's clang
+# probes inside oxrocksdb-sys.
+#
+# Mirror this file in any workspace that builds antenna for iOS-sim
+# (currently: this repo, and station/antenna/ for the Cargokit-driven
+# plugin build).
+
+[env]
+BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim = { value = "--target=arm64-apple-ios14.5-simulator", force = true }
+BINDGEN_EXTRA_CLANG_ARGS_x86_64_apple_ios = { value = "--target=x86_64-apple-ios14.5-simulator", force = true }
