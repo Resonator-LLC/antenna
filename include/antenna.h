@@ -38,13 +38,29 @@ typedef void (*antenna_emit_cb)(void *user, const char *turtle, size_t len);
  *
  * Arguments:
  *   data_dir            — required; libjami account/conversation directory.
- *   account_id_or_null  — Jami account ID to load, or NULL to mint a fresh one.
+ *   account_id_or_null  — Tri-state:
+ *                           NULL  → mint a fresh account synchronously
+ *                                   (today's default; *out_account_id is
+ *                                   populated before this call returns).
+ *                           ""    → onboarding-wait: skip the synchronous
+ *                                   mint and emit
+ *                                   `[] a antenna:OnboardingRequired ;
+ *                                       antenna:reason "no-account" .`
+ *                                   on the OUT ring. The active account id
+ *                                   is empty on return; the caller polls
+ *                                   antenna_account_id() after pushing a
+ *                                   carrier:CreateAccount or
+ *                                   carrier:ImportAccount event and
+ *                                   observing carrier:AccountReady on the
+ *                                   drain stream.
+ *                           "<id>"→ attach an existing account on disk.
  *   store_dir_or_null   — Oxigraph store directory, or NULL for in-memory.
  *   pipeline_ttl_or_null — pipeline DAG Turtle CONTENT (not a path), or NULL.
  *   seed_ttl_or_null    — seed Turtle CONTENT (not a path), or NULL.
  *   out_account_id      — if non-NULL on success, *out_account_id is set to a
  *                         heap-allocated NUL-terminated UTF-8 string holding
- *                         the active account ID. Caller releases with
+ *                         the active account ID (empty string on the
+ *                         onboarding-wait path). Caller releases with
  *                         antenna_free(). Unchanged on failure.
  *
  * Returns the new handle on success, or NULL on failure (bad arguments, FFI
@@ -56,6 +72,21 @@ AntennaHandle *antenna_create(const char *data_dir,
                               const char *pipeline_ttl_or_null,
                               const char *seed_ttl_or_null,
                               char **out_account_id);
+
+/*
+ * Copy the current Jami account id (NUL-terminated, UTF-8) into out_buf.
+ * Returns the number of id bytes written, excluding the trailing NUL. A
+ * return value of 0 means either:
+ *   * the handle is null / out_buf is null / out_buf_len is 0, OR
+ *   * the active id is still empty (onboarding-wait path before
+ *     carrier:AccountReady fired). The buffer is set to a single NUL byte
+ *     in the latter case so reading it as a C string yields "".
+ *
+ * Sizing: pass at least 65 bytes (libjami caps account ids at 64). If the
+ * id exceeds the buffer, this writes (out_buf_len - 1) id bytes plus the
+ * NUL and still returns the number of id bytes actually written.
+ */
+size_t antenna_account_id(AntennaHandle *handle, char *out_buf, size_t out_buf_len);
 
 /*
  * Push one Turtle document onto the worker's IN ring. `len` bytes from

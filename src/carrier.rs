@@ -6,6 +6,7 @@
 use anyhow::{bail, Result};
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::sync::mpsc::Sender;
+use std::sync::Mutex;
 use std::time::Duration;
 
 const CARRIER_URI_LEN: usize = 128;
@@ -16,6 +17,7 @@ const CARRIER_NAME_LEN: usize = 128;
 const CARRIER_REACTION_LEN: usize = 32;
 const CARRIER_STATUS_LEN: usize = 16;
 const CARRIER_FILE_ID_LEN: usize = 96;
+const CARRIER_PATH_LEN: usize = 1024;
 const CARRIER_DEVICE_ID_LEN: usize = 96;
 const CARRIER_PIN_LEN: usize = 128;
 const CARRIER_LOG_TAG_LEN: usize = 16;
@@ -30,6 +32,7 @@ pub enum CarrierEventType {
     Disconnected,
     AccountReady,
     AccountError,
+    AccountArchiveReady,
     SelfId,
     TrustRequest,
     ContactOnline,
@@ -67,6 +70,12 @@ pub struct AccountReadyData {
 #[derive(Copy, Clone)]
 pub struct AccountErrorData {
     pub cause: *const c_char,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct AccountArchiveReadyData {
+    pub path: [u8; CARRIER_PATH_LEN],
 }
 
 #[repr(C)]
@@ -253,6 +262,7 @@ pub struct SystemData {
 pub union CarrierEventData {
     pub account_ready: AccountReadyData,
     pub account_error: AccountErrorData,
+    pub account_archive_ready: AccountArchiveReadyData,
     pub self_id: SelfIdData,
     pub trust_request: TrustRequestData,
     pub contact_online: ContactOnlineData,
@@ -336,9 +346,18 @@ extern "C" {
     fn carrier_create_account(
         c: *mut Carrier,
         display_name: *const c_char,
+        archive_path_or_null: *const c_char,
+        archive_password_or_null: *const c_char,
         out_account_id: *mut c_char,
     ) -> c_int;
     fn carrier_load_account(c: *mut Carrier, account_id: *const c_char) -> c_int;
+    fn carrier_export_account(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        destination_path: *const c_char,
+        password: *const c_char,
+    ) -> c_int;
+    fn carrier_remove_account(c: *mut Carrier, account_id: *const c_char) -> c_int;
     fn carrier_get_id(c: *mut Carrier, account_id: *const c_char) -> c_int;
     fn carrier_set_nick(
         c: *mut Carrier,
@@ -665,6 +684,15 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                     ts
                 )
             }
+            CarrierEventType::AccountArchiveReady => {
+                let d = ev.data.account_archive_ready;
+                format!(
+                    "{} ; carrier:path \"{}\"{} .",
+                    header("AccountArchiveReady", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.path)),
+                    ts
+                )
+            }
             CarrierEventType::SelfId => {
                 let d = ev.data.self_id;
                 format!(
@@ -980,6 +1008,11 @@ pub struct CarrierClient {
     ptr: *mut Carrier,
     _sender: Box<Sender<String>>,
     iterate_thread: std::sync::OnceLock<std::thread::ThreadId>,
+    /// Stash for the onboarding auto-export-after-create flow: dispatch
+    /// records the requested archive path when a `carrier:CreateAccount`
+    /// event carries `carrier:autoExportPath`; the worker's AccountReady
+    /// handler consumes it and synthesises a `carrier_export_account` call.
+    pending_auto_export: Mutex<Option<String>>,
 }
 
 // SAFETY: Carrier is single-threaded for iterate(). Send is needed to move
@@ -1014,7 +1047,27 @@ impl CarrierClient {
             ptr,
             _sender: sender_box,
             iterate_thread: std::sync::OnceLock::new(),
+            pending_auto_export: Mutex::new(None),
         })
+    }
+
+    /// Record a destination path the next `carrier:AccountReady` should
+    /// auto-export to. Used to wire the silent "back up the archive right
+    /// after Create" flow without coupling dispatch and the worker.
+    pub fn set_pending_auto_export(&self, path: String) {
+        *self
+            .pending_auto_export
+            .lock()
+            .expect("pending_auto_export poisoned") = Some(path);
+    }
+
+    /// Atomically take the pending auto-export path, clearing it. Called by
+    /// the worker after an `AccountReady` event arrives.
+    pub fn take_pending_auto_export(&self) -> Option<String> {
+        self.pending_auto_export
+            .lock()
+            .expect("pending_auto_export poisoned")
+            .take()
     }
 
     pub fn iterate(&self) -> Result<()> {
@@ -1043,12 +1096,33 @@ impl CarrierClient {
         }
     }
 
-    pub fn create_account(&self, display_name: Option<&str>) -> Result<String> {
+    /// Provision a Jami account. When `archive_path` is `Some(non-empty)` the
+    /// account is imported from the archive on disk (with optional
+    /// `archive_password`); otherwise a fresh keypair is minted. Failure
+    /// modes are surfaced asynchronously as `carrier:AccountError` events
+    /// with a closed-vocabulary `carrier:cause` token — the caller listens
+    /// for those on the event stream.
+    pub fn create_account(
+        &self,
+        display_name: Option<&str>,
+        archive_path: Option<&str>,
+        archive_password: Option<&str>,
+    ) -> Result<String> {
         let name_c = display_name.map(CString::new).transpose()?;
         let name_ptr = name_c.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
+        let arch_c = archive_path.map(CString::new).transpose()?;
+        let arch_ptr = arch_c.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
+        let pw_c = archive_password.map(CString::new).transpose()?;
+        let pw_ptr = pw_c.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
         let mut buf = [0u8; CARRIER_ACCOUNT_ID_LEN];
         let rc = unsafe {
-            carrier_create_account(self.ptr, name_ptr, buf.as_mut_ptr() as *mut c_char)
+            carrier_create_account(
+                self.ptr,
+                name_ptr,
+                arch_ptr,
+                pw_ptr,
+                buf.as_mut_ptr() as *mut c_char,
+            )
         };
         if rc < 0 {
             bail!("carrier_create_account failed: {}", rc);
@@ -1061,6 +1135,41 @@ impl CarrierClient {
         let rc = unsafe { carrier_load_account(self.ptr, id_c.as_ptr()) };
         if rc < 0 {
             bail!("carrier_load_account failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    /// Export the account's archive to `destination_path`. `password` is
+    /// optional — pass `None` (or empty) to produce an unencrypted archive
+    /// that matches the default `create_account` flow. Caller must have
+    /// waited on `carrier:AccountReady` first; otherwise the C side emits
+    /// `carrier:AccountError ; carrier:cause "not-ready"`.
+    pub fn export_account(
+        &self,
+        account_id: &str,
+        destination_path: &str,
+        password: Option<&str>,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let dest_c = CString::new(destination_path)?;
+        let pw_c = password.map(CString::new).transpose()?;
+        let pw_ptr = pw_c.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
+        let rc = unsafe {
+            carrier_export_account(self.ptr, id_c.as_ptr(), dest_c.as_ptr(), pw_ptr)
+        };
+        if rc < 0 {
+            bail!("carrier_export_account failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    /// Tear down an account. Synchronous; no event emitted. Idempotent for
+    /// unknown account ids.
+    pub fn remove_account(&self, account_id: &str) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let rc = unsafe { carrier_remove_account(self.ptr, id_c.as_ptr()) };
+        if rc < 0 {
+            bail!("carrier_remove_account failed: {}", rc);
         }
         Ok(())
     }

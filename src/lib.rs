@@ -24,7 +24,7 @@ pub mod theme;
 pub mod ws;
 
 use anyhow::Result;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use crate::carrier::CarrierClient;
@@ -98,9 +98,18 @@ pub struct AntennaContext {
     pub store: RdfStore,
     pub dag: Dag,
     pub carrier: CarrierClient,
-    /// Account loaded or created at startup. Empty until bootstrap completes.
-    pub account_id: String,
+    /// Active Jami account id. Populated synchronously on the cold-boot mint
+    /// and load paths; populated asynchronously when `carrier:AccountReady`
+    /// fires on the onboarding-wait path (caller passed `account_id = Some("")`
+    /// to `new_with_ttl`). Shared with the FFI shim through an `Arc<Mutex>`
+    /// so `antenna_account_id` can observe the late update from a different
+    /// thread.
+    pub account_id: Arc<Mutex<String>>,
     carrier_event_rx: mpsc::Receiver<String>,
+    /// Single-shot Turtle blob emitted on the first `tick()` after bootstrap.
+    /// Used by the onboarding-wait path to publish `antenna:OnboardingRequired`
+    /// once the worker is actually pumping the OUT ring.
+    bootstrap_emit: Option<String>,
 }
 
 impl AntennaContext {
@@ -164,19 +173,35 @@ impl AntennaContext {
         let carrier = CarrierClient::new(data_dir, event_tx)?;
         tracing::info!(target: "JAMI", data_dir, "carrier started");
 
-        // Bootstrap an account: load if specified, create otherwise. The
-        // resulting account_id is what subsequent commands address.
-        let account = match account_id {
+        // Tri-state bootstrap (ISSUE-123 kickoff decision #4):
+        //   * None         → mint a fresh account synchronously (today's
+        //                    cold-boot path for run.sh and carrier-cli).
+        //   * Some("")     → wait for an explicit carrier:CreateAccount or
+        //                    carrier:ImportAccount; emit
+        //                    `antenna:OnboardingRequired` on the first tick
+        //                    so the pipeline can render the onboarding scene.
+        //   * Some("<id>") → attach an account already on disk.
+        let (account, bootstrap_emit) = match account_id {
+            None => {
+                let new_id = carrier.create_account(None, None, None)?;
+                tracing::info!(target: "JAMI", account = %new_id, "created account");
+                eprintln!("antenna: created account {new_id}");
+                (new_id, None)
+            }
+            Some("") => {
+                tracing::info!(target: "JAMI", "onboarding-wait mode: no account on cold boot");
+                (
+                    String::new(),
+                    Some(
+                        "[] a antenna:OnboardingRequired ; antenna:reason \"no-account\" ."
+                            .to_string(),
+                    ),
+                )
+            }
             Some(id) => {
                 carrier.load_account(id)?;
                 tracing::info!(target: "JAMI", account = id, "loading account");
-                id.to_string()
-            }
-            None => {
-                let new_id = carrier.create_account(None)?;
-                tracing::info!(target: "JAMI", account = %new_id, "created account");
-                eprintln!("antenna: created account {new_id}");
-                new_id
+                (id.to_string(), None)
             }
         };
 
@@ -184,13 +209,27 @@ impl AntennaContext {
             store,
             dag,
             carrier,
-            account_id: account,
+            account_id: Arc::new(Mutex::new(account)),
             carrier_event_rx: event_rx,
+            bootstrap_emit,
         })
     }
 
     /// One tick: iterate carrier, drain events to OUT, drain IN and dispatch.
     pub fn tick(&mut self, input: &mut dyn AntennaIn, output: &mut dyn AntennaOut) -> Result<()> {
+        // Bootstrap one-shot: publish the onboarding-wait announcement on
+        // the first tick after `new_with_ttl` returned. Emit + store so
+        // both the pipeline (via the DAG) and any pure-canvas listener see
+        // it; flow mirrors a regular carrier event arrival.
+        if let Some(turtle) = self.bootstrap_emit.take() {
+            output.send(&turtle);
+            self.dag.before_insert(&turtle);
+            if let Err(e) = self.store.insert_turtle(&turtle) {
+                tracing::warn!(target: "SPARQL", %e, "bootstrap insert error");
+            }
+            self.dag.after_insert(&turtle);
+        }
+
         self.dag.broadcast(
             "http://resonator.network/v2/antenna#clock",
             "[] a <http://resonator.network/v2/antenna#ClockTick> .",
@@ -199,6 +238,44 @@ impl AntennaContext {
         self.carrier.iterate()?;
 
         while let Ok(turtle) = self.carrier_event_rx.try_recv() {
+            // Onboarding-wait path needs to learn the account_id from the
+            // async AccountReady event (the synchronous create_account
+            // never ran). Update before we feed the line to dispatch so
+            // any downstream emit sees the populated id.
+            if turtle.contains("carrier:AccountReady") {
+                let mut acct_lock = self.account_id.lock().expect("account_id poisoned");
+                if acct_lock.is_empty() {
+                    if let Some(id) = dispatch::extract_property(&turtle, "carrier:account") {
+                        if !id.is_empty() {
+                            tracing::info!(
+                                target: "JAMI",
+                                account = %id,
+                                "onboarding-wait: account ready",
+                            );
+                            *acct_lock = id;
+                        }
+                    }
+                }
+                let pending_export = self.carrier.take_pending_auto_export();
+                let acct_now = acct_lock.clone();
+                drop(acct_lock);
+                if let Some(path) = pending_export {
+                    if acct_now.is_empty() {
+                        tracing::warn!(
+                            target: "JAMI",
+                            "auto-export requested but account_id empty after AccountReady",
+                        );
+                    } else if let Err(e) = self.carrier.export_account(&acct_now, &path, None) {
+                        tracing::warn!(
+                            target: "JAMI",
+                            %e,
+                            path = %path,
+                            "auto-export-on-create failed",
+                        );
+                    }
+                }
+            }
+
             output.send(&turtle);
             self.dag.before_insert(&turtle);
             if let Err(e) = self.store.insert_turtle(&turtle) {
@@ -206,6 +283,12 @@ impl AntennaContext {
             }
             self.dag.after_insert(&turtle);
         }
+
+        let acct_snapshot = self
+            .account_id
+            .lock()
+            .expect("account_id poisoned")
+            .clone();
 
         while let Some(line) = input.recv() {
             if line.is_empty() {
@@ -216,7 +299,7 @@ impl AntennaContext {
                 &self.store,
                 &self.dag,
                 Some(&self.carrier),
-                &self.account_id,
+                &acct_snapshot,
                 output,
             );
         }
@@ -230,7 +313,7 @@ impl AntennaContext {
                 &self.store,
                 &self.dag,
                 Some(&self.carrier),
-                &self.account_id,
+                &acct_snapshot,
                 output,
             );
         }

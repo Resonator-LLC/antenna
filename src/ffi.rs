@@ -15,7 +15,7 @@ use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::os::fd::RawFd;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -32,6 +32,19 @@ const FFI_RING_BYTES: usize = 1 << 20;
 /// swarm doesn't park script emits behind libjami's idle interval.
 const FFI_MAX_SLEEP_MS: i32 = 25;
 
+/// Process-global live handle. Carrier's `g_carrier` mutex makes libjami a
+/// per-process singleton, and libjami can't be cleanly re-initialised within
+/// one process (`libjami::fini` followed by `libjami::init` leaves new
+/// accounts stuck out of REGISTERED state). So on Flutter hot-restart —
+/// where the Dart isolate dies without calling `antenna_destroy` — we
+/// rebind the orphaned handle to the new isolate instead of recreating
+/// (ISSUE-122). The fresh isolate gets back the same `*mut AntennaHandle`
+/// and the same IN/OUT rings; the worker keeps spinning across the
+/// restart. Stored as `usize` because `*mut AntennaHandle` is not `Send`.
+/// `antenna_destroy` clears the slot when it matches, so a normal
+/// create/destroy cycle still tears down libjami at the end.
+static LIVE_HANDLE: Mutex<Option<usize>> = Mutex::new(None);
+
 /// Opaque handle returned to C. The layout is private to Rust; the embedding
 /// app only sees `*mut AntennaHandle`.
 pub struct AntennaHandle {
@@ -47,6 +60,15 @@ pub struct AntennaHandle {
     /// `antenna_create`.
     poisoned: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
+    /// Active Jami account id, shared with the worker's `AntennaContext`.
+    /// Populated synchronously on the cold-boot mint / load paths and
+    /// asynchronously when `carrier:AccountReady` fires on the
+    /// onboarding-wait path. `antenna_account_id` reads through this so a
+    /// caller that booted with `account_id_or_null = ""` can poll for the
+    /// late update. The rebind path (Flutter hot-restart) clones the
+    /// `Arc`, so the new isolate observes the same id without any sync
+    /// step on its side.
+    account_id: Arc<Mutex<String>>,
 }
 
 /// Callback signature for [`antenna_drain`]. The `(turtle, len)` pair points
@@ -83,6 +105,48 @@ pub unsafe extern "C" fn antenna_create(
     // swallows double-init via try_init().ok(), so reusing the same process
     // for a destroy/recreate cycle is safe.
     let _ = crate::logging::init("debug", "");
+
+    // Rebind path for Flutter hot-restart (ISSUE-122): the Dart isolate
+    // dies without calling antenna_destroy, so the previous AntennaHandle
+    // is still live in this process. libjami can't be cleanly re-inited
+    // inside a single process (carrier_jami.cc's g_carrier singleton, and
+    // accounts don't re-register after libjami::fini/init), so we hand
+    // the new isolate back the same handle and let it keep using the
+    // already-running worker, IN/OUT rings, store, and account.
+    //
+    // The rebind also republishes the account id through out_account_id so
+    // the caller sees the same contract a cold boot would.
+    {
+        let live = LIVE_HANDLE.lock().expect("LIVE_HANDLE poisoned");
+        if let Some(prev) = *live {
+            let prev_ptr = prev as *mut AntennaHandle;
+            tracing::warn!(
+                target: "FFI",
+                "antenna_create: prior handle still live (likely Flutter hot-restart); rebinding"
+            );
+            if !out_account_id.is_null() {
+                // SAFETY: `prev` was produced by Box::into_raw in a prior
+                // call to this function and stored in LIVE_HANDLE. It has
+                // not been freed (antenna_destroy clears the slot before
+                // freeing), so the pointer is still valid here.
+                let acct = unsafe {
+                    (*prev_ptr)
+                        .account_id
+                        .lock()
+                        .expect("account_id poisoned")
+                        .clone()
+                };
+                if let Ok(c_id) = CString::new(acct) {
+                    // SAFETY: caller contract — writable storage for one
+                    // *mut c_char.
+                    unsafe {
+                        *out_account_id = c_id.into_raw();
+                    }
+                }
+            }
+            return prev_ptr;
+        }
+    }
 
     let result = catch_unwind(AssertUnwindSafe(|| {
         tracing::info!(target: "FFI", "antenna_create: entered");
@@ -124,7 +188,14 @@ pub unsafe extern "C" fn antenna_create(
         let done_w = done.clone();
         let poisoned = Arc::new(AtomicBool::new(false));
         let poisoned_w = poisoned.clone();
-        let account_for_caller = ctx.account_id.clone();
+        // Both the handle and the worker observe the same Arc<Mutex<String>>
+        // so a late `AccountReady` update inside `tick()` is visible to
+        // `antenna_account_id` without a sync step.
+        let account_handle = ctx.account_id.clone();
+        let account_for_caller = account_handle
+            .lock()
+            .expect("account_id poisoned")
+            .clone();
 
         let worker = thread::Builder::new()
             .name("antenna-ffi-worker".to_string())
@@ -201,11 +272,16 @@ pub unsafe extern "C" fn antenna_create(
             done,
             poisoned,
             worker: Some(worker),
+            account_id: account_handle,
         })
     }));
 
     match result {
-        Ok(Ok(handle)) => Box::into_raw(Box::new(handle)),
+        Ok(Ok(handle)) => {
+            let raw = Box::into_raw(Box::new(handle));
+            *LIVE_HANDLE.lock().expect("LIVE_HANDLE poisoned") = Some(raw as usize);
+            raw
+        }
         Ok(Err(())) => std::ptr::null_mut(),
         Err(_) => {
             tracing::error!(target: "FFI", "antenna_create panicked");
@@ -214,8 +290,28 @@ pub unsafe extern "C" fn antenna_create(
     }
 }
 
-/// Push one Turtle document (or batch — antenna's dispatcher splits on the
-/// usual Turtle terminators) onto the worker's IN ring.
+/// Split `input` on newlines and push each non-empty trimmed line through
+/// `push`. Mirrors the WS server's line framing (ws.rs): dispatch() reads
+/// one `rdf:type` per call, so a multi-statement payload (e.g. the theme
+/// picker's `sp:Modify` + `design:ResolveActiveTheme` pair) must arrive as
+/// separate ring entries or only the first statement runs.
+///
+/// Returns 0 if every line pushed cleanly, -3 if the ring filled mid-batch.
+fn push_turtle_lines<F: FnMut(&str) -> bool>(input: &str, mut push: F) -> c_int {
+    for line in input.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !push(trimmed) {
+            return -3;
+        }
+    }
+    0
+}
+
+/// Push one Turtle document (or batch of newline-separated statements) onto
+/// the worker's IN ring. Newlines split into separate dispatches.
 ///
 /// Returns 0 on success and a negative code on failure:
 /// * `-1` — invalid arguments (null handle, or null pointer with non-zero len)
@@ -255,11 +351,7 @@ pub unsafe extern "C" fn antenna_send(
             Ok(s) => s,
             Err(_) => return -2,
         };
-        if h.in_writer.send(s) {
-            0
-        } else {
-            -3
-        }
+        push_turtle_lines(s, |line| h.in_writer.send(line))
     }));
     result.unwrap_or(-1)
 }
@@ -322,6 +414,50 @@ pub unsafe extern "C" fn antenna_clock_fd(handle: *mut AntennaHandle) -> c_int {
     h.out_clock_fd
 }
 
+/// Copy the current Jami account id (NUL-terminated, UTF-8) into `out_buf`.
+/// Returns the number of bytes actually written, excluding the trailing NUL.
+///
+/// * If `handle` is null, returns 0 and does not touch `out_buf`.
+/// * If the active account id is still empty (onboarding-wait path before
+///   `carrier:AccountReady` has fired), returns 0 and writes a single NUL
+///   byte into `out_buf` when `out_buf_len >= 1`.
+/// * If the id does not fit, copies as much as fits including a trailing
+///   NUL (i.e. `out_buf_len - 1` id bytes plus the NUL) and still returns
+///   the number of id bytes written. Callers should size the buffer at
+///   `CARRIER_ACCOUNT_ID_LEN` (64) which is libjami's hard cap.
+///
+/// # Safety
+/// `handle` must be live (see [`antenna_send`]). `out_buf` must be writable
+/// for `out_buf_len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn antenna_account_id(
+    handle: *mut AntennaHandle,
+    out_buf: *mut c_char,
+    out_buf_len: usize,
+) -> usize {
+    if handle.is_null() || out_buf.is_null() || out_buf_len == 0 {
+        return 0;
+    }
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: caller contract — handle is live.
+        let h = unsafe { &*handle };
+        let id = h
+            .account_id
+            .lock()
+            .expect("account_id poisoned")
+            .clone();
+        let bytes = id.as_bytes();
+        let max_copy = bytes.len().min(out_buf_len - 1);
+        // SAFETY: out_buf is writable for at least max_copy + 1 bytes.
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf as *mut u8, max_copy);
+            *out_buf.add(max_copy) = 0;
+        }
+        max_copy
+    }));
+    result.unwrap_or(0)
+}
+
 /// Signal the worker to exit, join it, and release all resources owned by
 /// the handle (including libjami via the dropped `AntennaContext`).
 ///
@@ -332,6 +468,15 @@ pub unsafe extern "C" fn antenna_clock_fd(handle: *mut AntennaHandle) -> c_int {
 pub unsafe extern "C" fn antenna_destroy(handle: *mut AntennaHandle) {
     if handle.is_null() {
         return;
+    }
+    // Clear the registry slot if this is the tracked live handle. The
+    // recycler in antenna_create may have already taken it; either way
+    // leaves the slot empty so no later create double-frees this handle.
+    {
+        let mut g = LIVE_HANDLE.lock().expect("LIVE_HANDLE poisoned");
+        if *g == Some(handle as usize) {
+            *g = None;
+        }
     }
     // SAFETY: caller contract — handle came from Box::into_raw in
     // antenna_create and has not been freed yet.
@@ -432,5 +577,60 @@ impl<I: AntennaIn> AntennaIn for DebugPanicIn<I> {
 
     fn clock_fd(&self) -> Option<RawFd> {
         self.inner.clock_fd()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::push_turtle_lines;
+
+    fn collect(input: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let rc = push_turtle_lines(input, |line| {
+            out.push(line.to_string());
+            true
+        });
+        assert_eq!(rc, 0);
+        out
+    }
+
+    #[test]
+    fn single_statement_passes_through_unchanged() {
+        let lines = collect("[] a sp:Ask ; sp:text \"ASK { ?s ?p ?o }\" .");
+        assert_eq!(lines, vec!["[] a sp:Ask ; sp:text \"ASK { ?s ?p ?o }\" ."]);
+    }
+
+    #[test]
+    fn theme_picker_payload_splits_into_two_dispatches() {
+        // Exact wire format from station/lib/ui/components/theme_picker.dart's
+        // buildThemeSwapTurtle — `sp:Modify` then `design:ResolveActiveTheme`.
+        // Pre-fix this fired only `sp:Modify` over FFI (the resolve was
+        // silently dropped), so theme swaps committed in the store but never
+        // broadcast a new design bundle to Station.
+        let wire = "@prefix sp: <http://spinrdf.org/sp#> .\n\
+                    @prefix design: <http://resonator.network/v2/design#> .\n\
+                    [] a sp:Modify ; sp:text \"DELETE { } INSERT { } WHERE { }\" .\n\
+                    [] a design:ResolveActiveTheme .\n";
+        let lines = collect(wire);
+        assert_eq!(lines.len(), 4);
+        assert!(lines[2].contains("sp:Modify"));
+        assert!(lines[3].contains("design:ResolveActiveTheme"));
+    }
+
+    #[test]
+    fn empty_and_whitespace_lines_are_skipped() {
+        let lines = collect("\n  \n[] a foo:Bar .\n\n");
+        assert_eq!(lines, vec!["[] a foo:Bar ."]);
+    }
+
+    #[test]
+    fn push_failure_returns_minus_three_and_stops() {
+        let mut count = 0;
+        let rc = push_turtle_lines("a\nb\nc\n", |_| {
+            count += 1;
+            count < 2
+        });
+        assert_eq!(rc, -3);
+        assert_eq!(count, 2);
     }
 }

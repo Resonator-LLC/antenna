@@ -305,11 +305,55 @@ fn handle_carrier(
 ) {
     let local = &rdf_type[CARRIER_NS.len()..];
     match local {
-        "CreateAccount" => {
+        // `ImportAccount` is a readability alias of `CreateAccount` at the
+        // RDF call site (carrier:CreateAccount + carrier:archivePath has the
+        // same effect, but "Import" reads better when the intent is "load
+        // an existing archive"). Same handler.
+        "CreateAccount" | "ImportAccount" => {
             let display_name = extract_property(line, "carrier:displayName");
-            match carrier.create_account(display_name.as_deref()) {
-                Ok(_) => {}
-                Err(e) => carrier_error(out, "CreateAccount", &e),
+            let archive_path =
+                extract_property(line, "carrier:archivePath").filter(|s| !s.is_empty());
+            let archive_password =
+                extract_property(line, "carrier:archivePassword").filter(|s| !s.is_empty());
+            let auto_export_path =
+                extract_property(line, "carrier:autoExportPath").filter(|s| !s.is_empty());
+            if let Some(p) = auto_export_path {
+                carrier.set_pending_auto_export(p);
+            }
+            // Avoid tracing the password — log a redacted summary instead.
+            tracing::debug!(
+                target: "DISPATCH",
+                command = local,
+                has_archive = archive_path.is_some(),
+                has_password = archive_password.is_some(),
+                "create/import account",
+            );
+            if let Err(e) = carrier.create_account(
+                display_name.as_deref(),
+                archive_path.as_deref(),
+                archive_password.as_deref(),
+            ) {
+                carrier_error(out, local, &e);
+            }
+        }
+        "ExportAccount" => {
+            let account = account_or_default(line, default_account);
+            let path = match extract_property(line, "carrier:path") {
+                Some(p) => p,
+                None => {
+                    missing_field(out, "ExportAccount", "carrier:path");
+                    return;
+                }
+            };
+            let password =
+                extract_property(line, "carrier:archivePassword").filter(|s| !s.is_empty());
+            tracing::debug!(
+                target: "DISPATCH",
+                has_password = password.is_some(),
+                "export account",
+            );
+            if let Err(e) = carrier.export_account(&account, &path, password.as_deref()) {
+                carrier_error(out, "ExportAccount", &e);
             }
         }
         "LoadAccount" => {

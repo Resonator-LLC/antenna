@@ -57,13 +57,22 @@ impl AntennaOut for CaptureOut {
 /// Boot the messenger2 pipeline with placeholder substitutions applied.
 /// Mirrors what `radios/messenger2/run.sh` does at launch.
 fn build_messenger2_pipeline() -> (RdfStore, Dag) {
+    build_messenger2_pipeline_with_auto_export("/tmp/messenger2-test/auto-export.gz")
+}
+
+/// Variant that lets a test pin the `__AUTO_EXPORT_PATH__` sed value (Cut F
+/// will do the equivalent substitution Station-side from
+/// `_EmbeddedRadioArgs.autoExportPath`). The default helper feeds a fixed
+/// path so the onboarding tests can assert on a known value.
+fn build_messenger2_pipeline_with_auto_export(auto_export_path: &str) -> (RdfStore, Dag) {
     let store = RdfStore::open(None).expect("in-memory store");
 
     let pipeline_raw = std::fs::read_to_string(rel("radios/messenger2/pipeline.ttl"))
         .expect("read messenger2 pipeline");
     let pipeline_ttl = pipeline_raw
         .replace("__NICK__", "alice")
-        .replace("__FILES_DIR__", "/tmp/messenger2-test/files");
+        .replace("__FILES_DIR__", "/tmp/messenger2-test/files")
+        .replace("__AUTO_EXPORT_PATH__", auto_export_path);
     store
         .insert_turtle(&pipeline_ttl)
         .expect("insert messenger2 pipeline");
@@ -260,5 +269,380 @@ fn messenger2_vcard_pipeline_emits_scene_per_contact() {
     assert!(
         panel_widget.contains("urn:msg2:inbox:scene"),
         "LevelContainer should point at the inbox Scene; got {panel_widget}",
+    );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// ISSUE-123 Cut E — onboarding pipeline tests
+//
+// Cover the three lifecycle points called out in the implementation plan:
+//
+//   1. `antenna:OnboardingRequired` re-links the seed-defined onboarding
+//      placed Object to its LOD so the welcome form renders.
+//   2. Tapping CREATE with a nick + autoExportPath emits a fully-formed
+//      `carrier:CreateAccount` event antenna's dispatch can route.
+//   3. `carrier:AccountReady` arriving while the form is live retracts
+//      the onboarding lod link and re-emits the messenger panel lod via
+//      the existing rebuild() path.
+//
+// Tests dispatch from outside the carrier (carrier=None at the dispatch
+// call site) so any emitted `carrier:CreateAccount` lands in the script's
+// emit stream verbatim — we sniff for it via `settle_collect_emits`
+// instead of trying to observe a real CarrierClient roundtrip.
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Same body as `settle` but returns every Turtle line the script emitted
+/// across the tick loop. Used to assert on the exact carrier:CreateAccount
+/// / carrier:ImportAccount payload — the regular `out` capture only
+/// observes lines that survive `dispatch::dispatch` past the
+/// `carrier=None` branch (warn-skip).
+fn settle_collect_emits(
+    dag: &Dag,
+    store: &RdfStore,
+    out: &mut CaptureOut,
+    max_iters: usize,
+) -> Vec<String> {
+    const EMPTY_BREAK: usize = 5;
+    let mut all_emits = Vec::new();
+    let mut empty_streak = 0usize;
+    let mut saw_emit = false;
+    for _ in 0..max_iters {
+        std::thread::sleep(Duration::from_millis(40));
+        dag.pump_queries(store);
+        let emits = dag.pump_emits();
+        if emits.is_empty() {
+            empty_streak += 1;
+            if saw_emit && empty_streak >= EMPTY_BREAK {
+                break;
+            }
+            continue;
+        }
+        saw_emit = true;
+        empty_streak = 0;
+        for turtle in &emits {
+            dispatch::dispatch(turtle, store, dag, None, "", out);
+        }
+        all_emits.extend(emits);
+    }
+    all_emits
+}
+
+/// Cold-boot OnboardingRequired event — same wire shape as the
+/// `bootstrap_emit` antenna publishes when `antenna_create` is invoked
+/// with the empty-string sentinel (see `antenna/src/lib.rs:196`).
+fn onboarding_required_event() -> String {
+    "[] a antenna:OnboardingRequired ; antenna:reason \"no-account\" .".to_string()
+}
+
+/// Synthetic TapEvent matching what `widget_renderer._RegisteredTapButton`
+/// emits when a Button with `onTap=<uri>` is tapped. Wrapped in
+/// `a antenna:Test` so dispatch falls through to `insert_with_dag` and
+/// the line reaches the script via `before_insert` (a bare
+/// `a antenna:TapEvent` line would parse the same way but the test marker
+/// makes it obvious in pipeline log lines that this is fabricated).
+fn tap_event(target: &str) -> String {
+    format!(
+        "[] a antenna:Test ; \
+         antenna:TapEvent \"_\" ; \
+         <http://resonator.network/v2/antenna#target> <{target}> ."
+    )
+}
+
+/// Synthetic TextChanged event — same wire shape as
+/// `widget_renderer._buildTextField`'s onChanged callback. The
+/// `<...#target>` and `<...#value>` IRIs are spelled out so the script's
+/// `extractProp(input, 'target> ')` substring match succeeds (a
+/// prefix-only `antenna:target` form would lack the `>` boundary the
+/// helper keys on).
+fn text_changed_event(target: &str, value: &str) -> String {
+    format!(
+        "[] a antenna:Test ; \
+         antenna:TextChanged \"_\" ; \
+         <http://resonator.network/v2/antenna#target> <{target}> ; \
+         <http://resonator.network/v2/antenna#value> \"{value}\" ."
+    )
+}
+
+/// Synthetic carrier:AccountReady event the script can recognise via its
+/// `input.indexOf('carrier:AccountReady')` branch. `a antenna:Test`
+/// avoids the carrier-dispatch warn-skip path; the carrier: properties
+/// stay readable to `extractProp`.
+fn account_ready_event(account_id: &str, self_uri: &str) -> String {
+    format!(
+        "[] a antenna:Test ; \
+         carrier:AccountReady \"_\" ; \
+         carrier:account \"{account_id}\" ; \
+         carrier:selfUri \"{self_uri}\" ."
+    )
+}
+
+#[test]
+fn onboarding_scene_emitted_on_onboarding_required() {
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+    // Don't settle first — the script's `init` block keys onboardingActive
+    // off the substring of its very first input. Dispatching
+    // OnboardingRequired before any other event ensures init takes the
+    // onboarding branch (rather than the "default boot, wipe the form"
+    // branch), matching the production cold-boot wait-mode sequence.
+    dispatch::dispatch(
+        &onboarding_required_event(),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    // The seed-defined onboarding Object exists statically; the
+    // OnboardingRequired handler's job is to keep its lod link live (the
+    // default-boot branch of init wipes the link, so we're asserting that
+    // the onboarding branch did NOT wipe it / has re-emitted it).
+    assert!(
+        ask(
+            &store,
+            &format!(
+                "PREFIX ant: <{ANTENNA_NS}> \
+                 ASK {{ <urn:msg2:onboarding> ant:lod <urn:msg2:onboarding:lod> }}"
+            ),
+        ),
+        "expected the onboarding placed Object to be linked to its LOD after \
+         antenna:OnboardingRequired (default-boot wipe-path took over instead)",
+    );
+
+    // Symmetric assertion: messenger panel lod should have been wiped so
+    // the seed-defined "connecting..." placeholder doesn't compete with
+    // the welcome form for screen space.
+    assert!(
+        !ask(
+            &store,
+            &format!(
+                "PREFIX ant: <{ANTENNA_NS}> \
+                 ASK {{ <urn:msg2:panel> ant:lod ?l }}"
+            ),
+        ),
+        "expected the messenger panel lod link to be wiped while onboarding \
+         is active",
+    );
+
+    // Sanity: the LOD widget itself still points at the onboarding Scene
+    // (the seed value, untouched by the pipeline).
+    let lod_widget = select(
+        &store,
+        &format!(
+            "PREFIX ant: <{ANTENNA_NS}> \
+             SELECT ?w WHERE {{ <urn:msg2:onboarding:lod> ant:widget ?w }}"
+        ),
+    );
+    assert_eq!(
+        lod_widget.len(),
+        1,
+        "expected one widget binding on the onboarding LOD, got {lod_widget:?}",
+    );
+    assert!(
+        lod_widget[0][0].contains("urn:msg2:onboarding:scene"),
+        "onboarding LOD widget should reference the onboarding Scene; got {}",
+        lod_widget[0][0],
+    );
+}
+
+#[test]
+fn create_account_tap_emits_carrier_event() {
+    let auto_export = "/tmp/messenger2-test/onboarding/auto-export.gz";
+    let (store, dag) = build_messenger2_pipeline_with_auto_export(auto_export);
+    let mut out = CaptureOut::new();
+
+    // Light up onboarding so the form's globalThis state is initialised
+    // and the CREATE tap handler is active.
+    dispatch::dispatch(
+        &onboarding_required_event(),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    // Seed the nick TextField — the script mirrors TextChanged events
+    // into globalThis.onboardingNick.
+    dispatch::dispatch(
+        &text_changed_event("urn:msg2:onboarding:nick", "alice"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    // Tap CREATE. Capture every emit drained while the script processes
+    // the tap — the carrier:CreateAccount Turtle would otherwise be
+    // routed into a `carrier=None` warn-skip and lost.
+    dispatch::dispatch(
+        &tap_event("urn:msg2:onboarding:create"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    let emits = settle_collect_emits(&dag, &store, &mut out, 30);
+
+    let create_emit = emits
+        .iter()
+        .find(|e| e.contains("carrier:CreateAccount"))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected a carrier:CreateAccount emit after tap; \
+                 saw {} emits, none matching. Emits:\n  {}",
+                emits.len(),
+                emits.join("\n  "),
+            )
+        });
+
+    assert!(
+        create_emit.contains("carrier:displayName \"alice\""),
+        "expected carrier:displayName \"alice\" in CreateAccount emit; got: {create_emit}",
+    );
+    assert!(
+        create_emit.contains(&format!("carrier:autoExportPath \"{auto_export}\"")),
+        "expected carrier:autoExportPath \"{auto_export}\" (seeded via __AUTO_EXPORT_PATH__) in CreateAccount emit; got: {create_emit}",
+    );
+}
+
+#[test]
+fn account_ready_clears_onboarding_and_renders_messenger() {
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+    dispatch::dispatch(
+        &onboarding_required_event(),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    // Pre-condition: onboarding is live (messenger panel wiped, onboarding
+    // lod present). Skipping the assertion here — covered by test (1).
+
+    // Simulate carrier completing the account mint. The pipeline's
+    // SelfId/AccountReady branch should: clear onboardingActive,
+    // unlink the onboarding Object, then run rebuild() which re-emits
+    // the messenger panel lod.
+    let alice_uri = "0123456789abcdef0123456789abcdef01234567";
+    let alice_account = "abc123def456abc123def456abc123def456abcd";
+    dispatch::dispatch(
+        &account_ready_event(alice_account, alice_uri),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    // Messenger panel lod is back — rebuild() ran with onboardingActive=false.
+    let panel_widget_rows = select(
+        &store,
+        &format!(
+            "PREFIX ant: <{ANTENNA_NS}> \
+             SELECT ?w WHERE {{ \
+               <urn:msg2:panel> ant:lod ?lod . \
+               ?lod ant:widget ?w \
+             }}"
+        ),
+    );
+    assert_eq!(
+        panel_widget_rows.len(),
+        1,
+        "expected exactly one messenger panel lod widget after AccountReady, \
+         got {panel_widget_rows:?}",
+    );
+    assert!(
+        panel_widget_rows[0][0].contains("LevelContainer"),
+        "messenger panel lod widget should be the LevelContainer wrap; got {}",
+        panel_widget_rows[0][0],
+    );
+
+    // Onboarding Object's lod link is gone — the form no longer renders.
+    assert!(
+        !ask(
+            &store,
+            &format!(
+                "PREFIX ant: <{ANTENNA_NS}> \
+                 ASK {{ <urn:msg2:onboarding> ant:lod ?l }}"
+            ),
+        ),
+        "expected the onboarding Object's lod link to be retracted after \
+         AccountReady cleared onboardingActive",
+    );
+}
+
+#[test]
+fn import_account_tap_emits_carrier_event() {
+    // ISSUE-123 Cut F — exercise the IMPORT branch end-to-end. Cut E
+    // deferred this case because the picker integration didn't exist
+    // yet; Cut F's `_openArchivePicker` writes the picked path back as
+    // a synthetic `antenna:TextChanged` targeting
+    // `urn:msg2:onboarding:archive-path`, which is what this test
+    // emulates. The IMPORT tap should then assemble a
+    // `carrier:ImportAccount ; carrier:archivePath "..." .` emit.
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch(
+        &onboarding_required_event(),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    // Pre-fill the archive path the way Cut F's _seedOnboardingArchivePath
+    // does on the `onboardingArchivePreselected` boot path, AND the way
+    // _openArchivePicker does after the user selects a file. Either
+    // origin lands on the same wire shape.
+    let archive_path = "/tmp/messenger2-test/onboarding/preselected-archive.gz";
+    dispatch::dispatch(
+        &text_changed_event("urn:msg2:onboarding:archive-path", archive_path),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    dispatch::dispatch(
+        &tap_event("urn:msg2:onboarding:import"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    let emits = settle_collect_emits(&dag, &store, &mut out, 30);
+
+    let import_emit = emits
+        .iter()
+        .find(|e| e.contains("carrier:ImportAccount"))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected a carrier:ImportAccount emit after IMPORT tap; \
+                 saw {} emits, none matching. Emits:\n  {}",
+                emits.len(),
+                emits.join("\n  "),
+            )
+        });
+
+    assert!(
+        import_emit.contains(&format!("carrier:archivePath \"{archive_path}\"")),
+        "expected carrier:archivePath \"{archive_path}\" in ImportAccount emit; got: {import_emit}",
     );
 }
