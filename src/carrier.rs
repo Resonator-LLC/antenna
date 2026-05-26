@@ -38,6 +38,7 @@ pub enum CarrierEventType {
     ContactOnline,
     ContactOffline,
     ContactName,
+    ContactRestored,
     TextMessage,
     MessageSent,
     GroupMessage,
@@ -109,6 +110,16 @@ pub struct ContactOfflineData {
 #[derive(Copy, Clone)]
 pub struct ContactNameData {
     pub contact_uri: [u8; CARRIER_URI_LEN],
+    pub display_name: [u8; CARRIER_NAME_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ContactRestoredData {
+    pub contact_uri: [u8; CARRIER_URI_LEN],
+    /// Empty when no FN was cached on disk yet. Always emitted on the
+    /// wire as `carrier:displayName ""` so the field is structurally
+    /// present on every ContactRestored statement.
     pub display_name: [u8; CARRIER_NAME_LEN],
 }
 
@@ -275,6 +286,7 @@ pub union CarrierEventData {
     pub contact_online: ContactOnlineData,
     pub contact_offline: ContactOfflineData,
     pub contact_name: ContactNameData,
+    pub contact_restored: ContactRestoredData,
     pub text_message: TextMessageData,
     pub message_sent: MessageSentData,
     pub group_message: GroupMessageData,
@@ -764,6 +776,18 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                 format!(
                     "{} ; carrier:contactUri \"{}\" ; carrier:displayName \"{}\"{} .",
                     header("ContactName", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.contact_uri)),
+                    turtle_escape(cstr_from_buf(&d.display_name)),
+                    ts
+                )
+            }
+            CarrierEventType::ContactRestored => {
+                // displayName is always emitted, empty-string included —
+                // see the C-side turtle_emit.c contract.
+                let d = ev.data.contact_restored;
+                format!(
+                    "{} ; carrier:contactUri \"{}\" ; carrier:displayName \"{}\"{} .",
+                    header("ContactRestored", &ev.account_id),
                     turtle_escape(cstr_from_buf(&d.contact_uri)),
                     turtle_escape(cstr_from_buf(&d.display_name)),
                     ts
@@ -1643,3 +1667,123 @@ pub const TURTLE_PREFIXES: &str = "\
 @prefix sp: <http://spinrdf.org/sp#> .\n\
 @prefix spin: <http://spinrdf.org/spin#> .\n\
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .";
+
+// ---------------------------------------------------------------------------
+// Tests — pure formatter coverage. The end-to-end FFI path is exercised by
+// the messenger pipeline integration tests; these pin the wire shape of the
+// turtle the Rust side emits so a header drift can't sneak through unnoticed.
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a zero-initialized CarrierEvent suitable for poking individual
+    /// union fields. Uses an unsafe transmute from a zeroed byte buffer
+    /// because `CarrierEventData` is a union and the safe `Default` route
+    /// would require ad-hoc field-by-field setup.
+    fn zeroed_event(ty: CarrierEventType) -> CarrierEvent {
+        // SAFETY: CarrierEvent is `#[repr(C)]` with all-trivial fields
+        // (POD arrays + an i64 + a tagged enum + a union of POD structs).
+        // A zero bit pattern is a valid value for every variant of the
+        // union; the explicit `type_` write replaces the zero discriminant.
+        unsafe {
+            let mut ev: CarrierEvent = std::mem::zeroed();
+            ev.type_ = ty;
+            ev
+        }
+    }
+
+    fn copy_into(dst: &mut [u8], src: &str) {
+        let n = src.len().min(dst.len().saturating_sub(1));
+        dst[..n].copy_from_slice(&src.as_bytes()[..n]);
+        dst[n] = 0;
+    }
+
+    #[test]
+    fn contact_restored_emits_full_predicate_set() {
+        let mut ev = zeroed_event(CarrierEventType::ContactRestored);
+        ev.timestamp = 1_748_000_000_000;
+        copy_into(&mut ev.account_id, "c314a87070bc4c74");
+        // SAFETY: ev.type_ matches ContactRestored => contact_restored is
+        // the active union variant.
+        unsafe {
+            copy_into(
+                &mut ev.data.contact_restored.contact_uri,
+                "4748d985a10c8e84990f592a0ec0232efb733293",
+            );
+            copy_into(&mut ev.data.contact_restored.display_name, "bob");
+        }
+
+        let line = event_to_turtle(&ev).expect("ContactRestored should format");
+        assert!(line.contains("[] a carrier:ContactRestored"), "line={line:?}");
+        assert!(
+            line.contains("carrier:account \"c314a87070bc4c74\""),
+            "line={line:?}"
+        );
+        assert!(
+            line.contains(
+                "carrier:contactUri \"4748d985a10c8e84990f592a0ec0232efb733293\""
+            ),
+            "line={line:?}"
+        );
+        assert!(line.contains("carrier:displayName \"bob\""), "line={line:?}");
+        assert!(line.ends_with(" ."), "line={line:?}");
+    }
+
+    #[test]
+    fn contact_restored_empty_display_name_still_serializes_predicate() {
+        // ISSUE-127 contract: the displayName field is ALWAYS present on
+        // the wire, even when the cached vCard had no FN. Consumers
+        // pattern-match on the predicate; an empty value tells them to
+        // render the bare URI until a later ContactName arrives.
+        let mut ev = zeroed_event(CarrierEventType::ContactRestored);
+        ev.timestamp = 1_748_000_000_000;
+        copy_into(&mut ev.account_id, "c314a87070bc4c74");
+        // SAFETY: contact_restored is the active union variant after the
+        // type_ write above.
+        unsafe {
+            copy_into(
+                &mut ev.data.contact_restored.contact_uri,
+                "51a5757140adc1aaa511ac55597cf53883489157",
+            );
+            // display_name stays zeroed => empty C string.
+        }
+
+        let line = event_to_turtle(&ev).expect("ContactRestored should format");
+        assert!(
+            line.contains("carrier:displayName \"\""),
+            "empty display_name must serialize as the empty literal, got: {line:?}"
+        );
+        // Defence against an accidental fallthrough that omits the
+        // predicate entirely.
+        assert!(
+            line.matches("carrier:displayName").count() == 1,
+            "displayName must appear exactly once, got: {line:?}"
+        );
+    }
+
+    #[test]
+    fn contact_restored_escapes_display_name() {
+        let mut ev = zeroed_event(CarrierEventType::ContactRestored);
+        ev.timestamp = 1_748_000_000_000;
+        copy_into(&mut ev.account_id, "c314a87070bc4c74");
+        // SAFETY: contact_restored is the active union variant.
+        unsafe {
+            copy_into(
+                &mut ev.data.contact_restored.contact_uri,
+                "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+            );
+            copy_into(
+                &mut ev.data.contact_restored.display_name,
+                "Bob \"The\" Builder",
+            );
+        }
+
+        let line = event_to_turtle(&ev).expect("ContactRestored should format");
+        assert!(
+            line.contains("carrier:displayName \"Bob \\\"The\\\" Builder\""),
+            "line={line:?}"
+        );
+    }
+}

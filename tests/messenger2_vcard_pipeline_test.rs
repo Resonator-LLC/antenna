@@ -128,6 +128,21 @@ fn contact_name_event(contact_uri: &str, display_name: &str) -> String {
     )
 }
 
+/// Cold-start roster replay shape — carrier emits one of these per entry
+/// returned by libjami::getContacts(account) at AccountReady. `display_name`
+/// may be empty when the cached vCard has no FN (or is a 0-byte stub),
+/// which is the specific case ISSUE-127 was opened against — trusted
+/// peers were vanishing from the rail because the prior `replay_contact_names`
+/// silently dropped them.
+fn contact_restored_event(contact_uri: &str, display_name: &str) -> String {
+    format!(
+        "[] a antenna:Test ; \
+         carrier:ContactRestored \"_\" ; \
+         carrier:contactUri \"{contact_uri}\" ; \
+         carrier:displayName \"{display_name}\" ."
+    )
+}
+
 /// Run a SPARQL ASK against the store and return whether it matched.
 fn ask(store: &RdfStore, sparql: &str) -> bool {
     match store.query(sparql).expect("sparql ASK") {
@@ -644,5 +659,185 @@ fn import_account_tap_emits_carrier_event() {
     assert!(
         import_emit.contains(&format!("carrier:archivePath \"{archive_path}\"")),
         "expected carrier:archivePath \"{archive_path}\" in ImportAccount emit; got: {import_emit}",
+    );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// ISSUE-127 — ContactRestored cold-start roster hydration
+//
+// The bug: trusted contacts whose cached vCard was empty / missing FN never
+// produced a `carrier:ContactName` on cold start (the old replay loop
+// silently dropped them), so the rail had no idea they existed.
+//
+// The fix: a dedicated `carrier:ContactRestored` event fires once per entry
+// returned by `libjami::getContacts(account)` regardless of vCard state.
+// The pipeline ensureContact()s on every ContactRestored, only updating
+// displayName when the event carries a non-empty value — so a later real
+// ContactName still wins.
+// ───────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn contact_restored_with_empty_display_name_still_renders_scene() {
+    // The originally-broken case: a trusted peer whose vCard has no FN
+    // arrives via ContactRestored with displayName="". The contact MUST
+    // appear in the store (per-contact Scene + inbox children list) —
+    // displayName falls back to shortUri() for now, gets upgraded later
+    // when a real vCard arrives.
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+    settle(&dag, &store, &mut out, 30);
+
+    let ghost_uri = "51a5757140adc1aaa511ac55597cf53883489157";
+    dispatch::dispatch(
+        &contact_restored_event(ghost_uri, ""),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    let scene_uri = format!("urn:msg2:contact:{}:scene", ghost_uri);
+    assert!(
+        ask(
+            &store,
+            &format!(
+                "PREFIX ant: <{ANTENNA_NS}> \
+                 ASK {{ <{scene_uri}> a ant:Scene }}"
+            ),
+        ),
+        "ContactRestored with empty displayName must still produce a contact \
+         Scene — that's the whole point of ISSUE-127. scene_uri={scene_uri}",
+    );
+
+    // And it must be wired into the inbox's children list so the tile
+    // actually appears in the rail.
+    assert!(
+        ask(
+            &store,
+            &format!(
+                "PREFIX ant: <{ANTENNA_NS}> \
+                 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \
+                 ASK {{ \
+                   <urn:msg2:inbox:scene> a ant:Scene ; \
+                     ant:children/rdf:rest*/rdf:first <{scene_uri}> \
+                 }}"
+            ),
+        ),
+        "ContactRestored must add the peer to the inbox children list so \
+         the rail tile renders. scene_uri={scene_uri}",
+    );
+}
+
+#[test]
+fn contact_restored_with_display_name_seeds_label() {
+    // Happy path: ContactRestored arrives with a non-empty displayName
+    // (cached vCard FN was present on disk). One round-trip and the Scene
+    // label matches.
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+    settle(&dag, &store, &mut out, 30);
+
+    let bob_uri = "4748d985a10c8e84990f592a0ec0232efb733293";
+    dispatch::dispatch(
+        &contact_restored_event(bob_uri, "bob"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    let scene_uri = format!("urn:msg2:contact:{}:scene", bob_uri);
+    let label_rows = select(
+        &store,
+        &format!(
+            "PREFIX ant: <{ANTENNA_NS}> \
+             SELECT ?label WHERE {{ \
+               <{scene_uri}> a ant:Scene ; ant:scenelabel ?label \
+             }}"
+        ),
+    );
+    assert_eq!(
+        label_rows.len(),
+        1,
+        "expected one Scene label binding for {scene_uri}, got {label_rows:?}",
+    );
+    assert!(
+        label_rows[0][0].contains("bob"),
+        "ContactRestored displayName should land in ant:scenelabel; got {}",
+        label_rows[0][0],
+    );
+}
+
+#[test]
+fn late_contact_name_upgrades_restored_peer_label() {
+    // The flow the bug fix promises: ContactRestored seeds the peer with
+    // an empty displayName, a later ContactName via Swarm sync upgrades
+    // it. The rail tile should re-render with the new name.
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+    settle(&dag, &store, &mut out, 30);
+
+    let alice_uri = "0123456789abcdef0123456789abcdef01234567";
+
+    // Cold-start replay: peer exists, no name yet.
+    dispatch::dispatch(
+        &contact_restored_event(alice_uri, ""),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    // Sanity: pre-upgrade the label MUST NOT yet say "Alice" — otherwise
+    // the next assertion would pass for the wrong reason.
+    let scene_uri = format!("urn:msg2:contact:{}:scene", alice_uri);
+    let pre_rows = select(
+        &store,
+        &format!(
+            "PREFIX ant: <{ANTENNA_NS}> \
+             SELECT ?label WHERE {{ \
+               <{scene_uri}> a ant:Scene ; ant:scenelabel ?label \
+             }}"
+        ),
+    );
+    assert_eq!(pre_rows.len(), 1, "Scene must exist after ContactRestored");
+    assert!(
+        !pre_rows[0][0].contains("Alice"),
+        "pre-upgrade label must not already carry the real name; got {}",
+        pre_rows[0][0],
+    );
+
+    // Swarm sync delivers the vCard later — real ContactName lands.
+    dispatch::dispatch(
+        &contact_name_event(alice_uri, "Alice"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    let post_rows = select(
+        &store,
+        &format!(
+            "PREFIX ant: <{ANTENNA_NS}> \
+             SELECT ?label WHERE {{ \
+               <{scene_uri}> a ant:Scene ; ant:scenelabel ?label \
+             }}"
+        ),
+    );
+    assert_eq!(post_rows.len(), 1, "Scene survives ContactName upgrade");
+    assert!(
+        post_rows[0][0].contains("Alice"),
+        "late ContactName must upgrade scenelabel from shortUri to the real \
+         name; got {}",
+        post_rows[0][0],
     );
 }
