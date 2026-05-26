@@ -415,6 +415,18 @@ extern "C" {
         conversation_id: *const c_char,
         text: *const c_char,
     ) -> c_int;
+    fn carrier_load_conversation_messages(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        conversation_id: *const c_char,
+        from_message: *const c_char,
+        n: usize,
+    ) -> c_int;
+    fn carrier_clear_conversation_cache(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        conversation_id: *const c_char,
+    ) -> c_int;
     fn carrier_accept_conversation_request(
         c: *mut Carrier,
         account_id: *const c_char,
@@ -1335,6 +1347,51 @@ impl CarrierClient {
         };
         if rc < 0 {
             bail!("carrier_send_conversation_message failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn load_conversation_messages(
+        &self,
+        account_id: &str,
+        conversation_id: &str,
+        from_message: &str,
+        n: usize,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let conv_c = CString::new(conversation_id)?;
+        let from_c = CString::new(from_message)?;
+        let rc = unsafe {
+            // SAFETY: self.ptr is a live Carrier handle owned by this struct;
+            // every CString borrow is valid NUL-terminated UTF-8 for the call.
+            carrier_load_conversation_messages(
+                self.ptr,
+                id_c.as_ptr(),
+                conv_c.as_ptr(),
+                from_c.as_ptr(),
+                n,
+            )
+        };
+        if rc < 0 {
+            bail!("carrier_load_conversation_messages failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    pub fn clear_conversation_cache(
+        &self,
+        account_id: &str,
+        conversation_id: &str,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let conv_c = CString::new(conversation_id)?;
+        let rc = unsafe {
+            // SAFETY: self.ptr is a live Carrier handle owned by this struct;
+            // every CString borrow is valid NUL-terminated UTF-8 for the call.
+            carrier_clear_conversation_cache(self.ptr, id_c.as_ptr(), conv_c.as_ptr())
+        };
+        if rc < 0 {
+            bail!("carrier_clear_conversation_cache failed: {}", rc);
         }
         Ok(())
     }

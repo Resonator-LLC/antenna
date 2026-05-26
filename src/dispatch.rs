@@ -498,6 +498,36 @@ fn handle_carrier(
                 carrier_error(out, "SendConversationMsg", &e);
             }
         }
+        "LoadConversationMessages" => {
+            let account = account_or_default(line, default_account);
+            let conv = match extract_property(line, "carrier:conversationId") {
+                Some(c) => c,
+                None => {
+                    missing_field(out, "LoadConversationMessages", "carrier:conversationId");
+                    return;
+                }
+            };
+            let from = extract_property(line, "carrier:fromMessage").unwrap_or_default();
+            let n = extract_property(line, "carrier:limit")
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(0);
+            if let Err(e) = carrier.load_conversation_messages(&account, &conv, &from, n) {
+                carrier_error(out, "LoadConversationMessages", &e);
+            }
+        }
+        "ClearConversationCache" => {
+            let account = account_or_default(line, default_account);
+            let conv = match extract_property(line, "carrier:conversationId") {
+                Some(c) => c,
+                None => {
+                    missing_field(out, "ClearConversationCache", "carrier:conversationId");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.clear_conversation_cache(&account, &conv) {
+                carrier_error(out, "ClearConversationCache", &e);
+            }
+        }
         "AcceptConversationRequest" => {
             let account = account_or_default(line, default_account);
             let conv = match extract_property(line, "carrier:conversationId") {
