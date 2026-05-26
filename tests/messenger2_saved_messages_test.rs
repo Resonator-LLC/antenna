@@ -1,33 +1,35 @@
-//! Cut D (Saved Messages, 2026-05-26) — pipeline smoke for the
-//! single-member-self swarm bootstrap in `radios/messenger2/pipeline.ttl`.
+//! Cut D + Cut E (Saved Messages, 2026-05-26) — pipeline smoke for the
+//! single-member-self swarm bootstrap and UI surfacing in
+//! `radios/messenger2/pipeline.ttl`.
 //!
-//! Cut D wires the JS-side state (`globalThis.savedConvId` /
+//! Cut D wired the JS-side state (`globalThis.savedConvId` /
 //! `globalThis.savedMessages`), the AccountReady → `GetSavedConversation`
 //! request, the `SavedConversation` reply handler, the `GroupMessage`
-//! routing + dedupe, and the `TextSubmitted` SAVED branch. None of these
-//! call `rebuild()` yet — Cut E adds rebuilds plus the
-//! `urn:msg2:select:saved` tap routing that flips `activeUri`. So this
-//! test file only asserts what's observable without an `activeUri` flip
-//! into Saved Messages:
+//! routing + dedupe, and the `TextSubmitted` SAVED branch. Cut E adds
+//! `rebuild()` invocations + the `urn:msg2:select:saved` tap routing,
+//! plus the tile/scene/composer DSL builders. The tests below cover
+//! both layers:
 //!
 //!   1. AccountReady emits `carrier:GetSavedConversation` carrying the
 //!      account id (D.3).
-//!   2. `carrier:SavedConversation` reply runs cleanly — no script error,
-//!      no spurious emits — and the pipeline keeps responding to
-//!      subsequent events (D.4 sanity).
+//!   2. `carrier:SavedConversation` reply runs cleanly — no spurious
+//!      Get*/Send* emits — and the pipeline keeps responding (D.4 + E.5).
 //!   3. `carrier:GroupMessage` on the resolved savedConvId runs cleanly,
-//!      and an off-conv GroupMessage doesn't perturb pipeline state
-//!      (D.5 sanity, dedupe coverage lands in Cut E once rebuild
-//!      emits an observable widget body).
-//!
-//! Cut E will extend this file with `tile_renders_above_contacts...`,
-//! `saved_select_tap_swaps_right_pane`, and the
-//! `appends_optimistically_then_dedupes_on_replay` body assertions.
+//!      and an off-conv GroupMessage doesn't perturb pipeline state.
+//!   4. After SavedConversation resolves, the inbox Level widget DSL
+//!      contains the pinned Saved Messages tile (E.1 + E.2).
+//!   5. `urn:msg2:select:saved` tap flips the right-pane to the saved
+//!      chat scaffolding (header "Saved Messages" + empty-state copy
+//!      "Notes links screenshots…") (E.3 + E.4).
+//!   6. Optimistic local send + GroupMessage replay dedupe converges to
+//!      a single message row (D.5 + E.5 — observable now that rebuild
+//!      surfaces the saved chat body into the inbox Level widget).
 
 use antenna::channel::AntennaOut;
 use antenna::dag::Dag;
 use antenna::dispatch;
 use antenna::store::RdfStore;
+use oxigraph::sparql::QueryResults;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -138,6 +140,50 @@ fn group_message_event(account_id: &str, conversation_id: &str, text: &str) -> S
          carrier:conversationId \"{conversation_id}\" ; \
          carrier:text \"{text}\" ."
     )
+}
+
+fn tap_event(target: &str) -> String {
+    format!(
+        "[] a antenna:Test ; \
+         antenna:TapEvent \"_\" ; \
+         <http://resonator.network/v2/antenna#target> <{target}> ."
+    )
+}
+
+fn text_submitted_event(target: &str, value: &str) -> String {
+    format!(
+        "[] a antenna:Test ; \
+         antenna:TextSubmitted \"_\" ; \
+         <http://resonator.network/v2/antenna#target> <{target}> ; \
+         <http://resonator.network/v2/antenna#value> \"{value}\" ."
+    )
+}
+
+fn select_rows(store: &RdfStore, sparql: &str) -> Vec<Vec<String>> {
+    let QueryResults::Solutions(rows) = store.query(sparql).expect("sparql SELECT")
+    else {
+        panic!("expected SELECT result");
+    };
+    let mut out = Vec::new();
+    for row in rows {
+        let row = row.expect("row");
+        out.push(row.iter().map(|(_, term)| term.to_string()).collect());
+    }
+    out
+}
+
+fn inbox_level_widget(store: &RdfStore) -> String {
+    let rows = select_rows(
+        store,
+        "PREFIX ant: <http://resonator.network/v2/antenna#> \
+         SELECT ?w WHERE { <urn:msg2:inbox:level> ant:widget ?w }",
+    );
+    assert_eq!(
+        rows.len(),
+        1,
+        "expected exactly one inbox-Level widget binding, got {rows:?}",
+    );
+    rows[0][0].clone()
 }
 
 const ALICE_URI: &str = "0123456789abcdef0123456789abcdef01234567";
@@ -301,5 +347,187 @@ fn group_message_routing_does_not_disturb_pipeline() {
         off_conv_sends.is_empty(),
         "off-conv GroupMessage must be a no-op; got:\n  {}",
         off_conv_sends.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n  "),
+    );
+}
+
+#[test]
+fn saved_tile_lands_in_inbox_level_after_resolve() {
+    // Cut E.1 + E.2: the SavedConversation reply triggers rebuild(), which
+    // re-emits the inbox Level widget. The pinned tile should appear in
+    // the rail — bookmark icon + literal "Saved Messages" label.
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+    let _boot = settle_collect_emits(&dag, &store, &mut out, 30);
+
+    dispatch::dispatch(
+        &account_ready_event(ALICE_ACCOUNT, ALICE_URI),
+        &store, &dag, None, "", &mut out,
+    );
+    settle_collect_emits(&dag, &store, &mut out, 30);
+
+    dispatch::dispatch(
+        &saved_conversation_event(ALICE_ACCOUNT, SAVED_CONV_ID),
+        &store, &dag, None, "", &mut out,
+    );
+    settle_collect_emits(&dag, &store, &mut out, 30);
+
+    let widget = inbox_level_widget(&store);
+    assert!(
+        widget.contains("value=Saved Messages"),
+        "inbox Level widget should embed the Saved Messages tile label; got:\n{widget}",
+    );
+    assert!(
+        widget.contains("name=bookmark"),
+        "inbox Level widget should embed the bookmark glyph; got:\n{widget}",
+    );
+    assert!(
+        widget.contains("urn:msg2:select:saved"),
+        "tile should wrap onTap=urn:msg2:select:saved; got:\n{widget}",
+    );
+
+    // Position invariant: with no live contacts, the saved tile sits
+    // above the "no contacts yet" placeholder (which CONTACTS section
+    // renders when contacts.length === 0).
+    let saved_at = widget.find("value=Saved Messages")
+        .expect("saved label present");
+    if let Some(placeholder_at) = widget.find("value=no contacts yet") {
+        assert!(
+            saved_at < placeholder_at,
+            "Saved Messages tile should be pinned ABOVE the empty-contacts \
+             placeholder; saved_at={saved_at} placeholder_at={placeholder_at}",
+        );
+    }
+}
+
+#[test]
+fn saved_select_tap_swaps_right_pane_to_saved_chat() {
+    // Cut E.3 + E.4: tapping the pinned tile sets activeUri to the saved
+    // pseudo URN; the next rebuild swaps the right pane to the saved
+    // chat scaffold. The empty-state copy is a stable substring we can
+    // anchor on.
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+    let _boot = settle_collect_emits(&dag, &store, &mut out, 30);
+
+    dispatch::dispatch(
+        &account_ready_event(ALICE_ACCOUNT, ALICE_URI),
+        &store, &dag, None, "", &mut out,
+    );
+    settle_collect_emits(&dag, &store, &mut out, 30);
+
+    dispatch::dispatch(
+        &saved_conversation_event(ALICE_ACCOUNT, SAVED_CONV_ID),
+        &store, &dag, None, "", &mut out,
+    );
+    settle_collect_emits(&dag, &store, &mut out, 30);
+
+    dispatch::dispatch(
+        &tap_event("urn:msg2:select:saved"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle_collect_emits(&dag, &store, &mut out, 30);
+
+    let widget = inbox_level_widget(&store);
+    assert!(
+        widget.contains("Notes links screenshots"),
+        "right pane should render the saved-chat empty-state copy; got:\n{widget}",
+    );
+    // Composer routes to the standard msg2-input target so the existing
+    // TextField/submit plumbing keeps working without a saved-specific
+    // input key.
+    assert!(
+        widget.contains("target=urn:msg2:msg-input"),
+        "saved composer should reuse the msg2-input target; got:\n{widget}",
+    );
+    assert!(
+        widget.contains("hint=note to self"),
+        "saved composer should use the 'note to self' hint copy; got:\n{widget}",
+    );
+}
+
+#[test]
+fn saved_text_send_emits_send_conv_msg_against_saved_conv() {
+    // Cut D.6 send path is now reachable through the Cut E tap.
+    // Confirm the optimistic local row is rendered AND the dedupe
+    // against the GroupMessage replay converges to a single bubble.
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+    let _boot = settle_collect_emits(&dag, &store, &mut out, 30);
+
+    dispatch::dispatch(
+        &account_ready_event(ALICE_ACCOUNT, ALICE_URI),
+        &store, &dag, None, "", &mut out,
+    );
+    settle_collect_emits(&dag, &store, &mut out, 30);
+
+    dispatch::dispatch(
+        &saved_conversation_event(ALICE_ACCOUNT, SAVED_CONV_ID),
+        &store, &dag, None, "", &mut out,
+    );
+    settle_collect_emits(&dag, &store, &mut out, 30);
+
+    dispatch::dispatch(
+        &tap_event("urn:msg2:select:saved"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle_collect_emits(&dag, &store, &mut out, 30);
+
+    out.messages.clear();
+
+    dispatch::dispatch(
+        &text_submitted_event("urn:msg2:msg-input", "first note"),
+        &store, &dag, None, "", &mut out,
+    );
+    let send_emits = settle_collect_emits(&dag, &store, &mut out, 30);
+
+    // Optimistic send: one SendConversationMsg, account + savedConvId.
+    let send_msgs: Vec<&String> = send_emits
+        .iter()
+        .filter(|e| e.contains("carrier:SendConversationMsg"))
+        .collect();
+    assert_eq!(
+        send_msgs.len(),
+        1,
+        "expected exactly one SendConversationMsg from TextSubmitted; got {send_msgs:?}",
+    );
+    assert!(
+        send_msgs[0].contains(&format!("carrier:conversationId \"{SAVED_CONV_ID}\"")),
+        "send should carry the resolved savedConvId; got: {}",
+        send_msgs[0],
+    );
+    assert!(
+        send_msgs[0].contains("carrier:text \"first note\""),
+        "send should carry the literal sanitized text; got: {}",
+        send_msgs[0],
+    );
+
+    // Optimistic row landed in the chat body. Count `msg-sent-bg`
+    // bubble containers — one per chat bubble. The tile preview also
+    // echoes the text in the rail, so `value=first note` substring
+    // matches would be 2 (preview + bubble); the bubble-shape count
+    // isolates the chat-body cardinality.
+    let widget_after_send = inbox_level_widget(&store);
+    let bubbles_after_send =
+        widget_after_send.matches("Container{color=msg-sent-bg").count();
+    assert_eq!(
+        bubbles_after_send, 1,
+        "saved chat body should show one sent bubble after the local send; got:\n{widget_after_send}",
+    );
+
+    // GroupMessage replay (same text, well within 5s dedupe window) must
+    // not double the bubble.
+    dispatch::dispatch(
+        &group_message_event(ALICE_ACCOUNT, SAVED_CONV_ID, "first note"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle_collect_emits(&dag, &store, &mut out, 30);
+
+    let widget_after_replay = inbox_level_widget(&store);
+    let bubbles_after_replay =
+        widget_after_replay.matches("Container{color=msg-sent-bg").count();
+    assert_eq!(
+        bubbles_after_replay, 1,
+        "GroupMessage replay must dedupe against the optimistic local row \
+         (expected 1 bubble, got {bubbles_after_replay}); widget:\n{widget_after_replay}",
     );
 }
