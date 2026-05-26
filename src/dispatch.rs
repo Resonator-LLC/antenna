@@ -472,6 +472,12 @@ fn handle_carrier(
                 carrier_error(out, local, &e);
             }
         }
+        "GetSavedConversation" => {
+            let account = account_or_default(line, default_account);
+            if let Err(e) = carrier.get_saved_conversation(&account) {
+                carrier_error(out, "GetSavedConversation", &e);
+            }
+        }
         "SendConversationMsg" => {
             let account = account_or_default(line, default_account);
             let conv = match extract_property(line, "carrier:conversationId") {

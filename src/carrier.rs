@@ -45,6 +45,7 @@ pub enum CarrierEventType {
     GroupPeerExit,
     ConversationRequest,
     ConversationReady,
+    SavedConversation,
     ConversationSyncFinished,
     SwarmCommit,
     Reaction,
@@ -170,6 +171,12 @@ pub struct ConversationReadyData {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
+pub struct SavedConversationData {
+    pub conversation_id: [u8; CARRIER_CONVERSATION_ID_LEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
 pub struct ConversationSyncFinishedData {
     pub _placeholder: u8,
 }
@@ -275,6 +282,7 @@ pub union CarrierEventData {
     pub group_peer_exit: GroupPeerExitData,
     pub conversation_request: ConversationRequestData,
     pub conversation_ready: ConversationReadyData,
+    pub saved_conversation: SavedConversationData,
     pub conversation_sync_finished: ConversationSyncFinishedData,
     pub swarm_commit: SwarmCommitData,
     pub reaction: ReactionData,
@@ -396,6 +404,10 @@ extern "C" {
         account_id: *const c_char,
         privacy: *const c_char,
         out_conversation_id: *mut c_char,
+    ) -> c_int;
+    fn carrier_get_saved_conversation(
+        c: *mut Carrier,
+        account_id: *const c_char,
     ) -> c_int;
     fn carrier_send_conversation_message(
         c: *mut Carrier,
@@ -829,6 +841,15 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                 format!(
                     "{} ; carrier:conversationId \"{}\"{} .",
                     header("ConversationReady", &ev.account_id),
+                    turtle_escape(cstr_from_buf(&d.conversation_id)),
+                    ts
+                )
+            }
+            CarrierEventType::SavedConversation => {
+                let d = ev.data.saved_conversation;
+                format!(
+                    "{} ; carrier:conversationId \"{}\"{} .",
+                    header("SavedConversation", &ev.account_id),
                     turtle_escape(cstr_from_buf(&d.conversation_id)),
                     ts
                 )
@@ -1280,6 +1301,19 @@ impl CarrierClient {
             bail!("carrier_create_conversation failed: {}", rc);
         }
         Ok(cstr_from_buf(&buf).to_string())
+    }
+
+    pub fn get_saved_conversation(&self, account_id: &str) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let rc = unsafe {
+            // SAFETY: self.ptr is a live Carrier handle owned by this struct;
+            // id_c is a valid NUL-terminated C string borrowed for the call.
+            carrier_get_saved_conversation(self.ptr, id_c.as_ptr())
+        };
+        if rc < 0 {
+            bail!("carrier_get_saved_conversation failed: {}", rc);
+        }
+        Ok(())
     }
 
     pub fn send_conversation_message(
