@@ -1,29 +1,30 @@
-//! Cut D + Cut E (Saved Messages, 2026-05-26) — pipeline smoke for the
-//! single-member-self swarm bootstrap and UI surfacing in
-//! `radios/messenger2/pipeline.ttl`.
+//! Saved Messages pipeline smoke for `radios/messenger2/pipeline.ttl`.
 //!
-//! Cut D wired the JS-side state (`globalThis.savedConvId` /
-//! `globalThis.savedMessages`), the AccountReady → `GetSavedConversation`
-//! request, the `SavedConversation` reply handler, the `GroupMessage`
-//! routing + dedupe, and the `TextSubmitted` SAVED branch. Cut E adds
-//! `rebuild()` invocations + the `urn:msg2:select:saved` tap routing,
-//! plus the tile/scene/composer DSL builders. The tests below cover
-//! both layers:
+//! Post-unification (2026-05-27): Saved Messages is a regular entry in
+//! `globalThis.contacts{}` (pre-seeded at init() with `kind: 'self'` and
+//! `uri: 'urn:msg2:saved'`); its history lives in
+//! `globalThis.messages[SAVED_PSEUDO_URI]`; its swarm convId lives in
+//! `globalThis.contactConv[SAVED_PSEUDO_URI]`; its rail tile is the same
+//! `ScenePortal{scene=<...>}[buildContactRailTile(c)]` as every other
+//! peer, the only divergence being a bookmark icon (instead of a
+//! StatusDot) for `c.kind === 'self'`. The tap target the ScenePortal
+//! routes through is `urn:msg2:select:urn:msg2:saved` — i.e. the
+//! `urn:msg2:select:` prefix + the literal `c.uri`. This file covers:
 //!
 //!   1. AccountReady emits `carrier:GetSavedConversation` carrying the
-//!      account id (D.3).
+//!      account id.
 //!   2. `carrier:SavedConversation` reply runs cleanly — no spurious
-//!      Get*/Send* emits — and the pipeline keeps responding (D.4 + E.5).
+//!      Get*/Send* emits — and the pipeline keeps responding.
 //!   3. `carrier:GroupMessage` on the resolved savedConvId runs cleanly,
 //!      and an off-conv GroupMessage doesn't perturb pipeline state.
 //!   4. After SavedConversation resolves, the inbox Level widget DSL
-//!      contains the pinned Saved Messages tile (E.1 + E.2).
-//!   5. `urn:msg2:select:saved` tap flips the right-pane to the saved
-//!      chat scaffolding (header "Saved Messages" + empty-state copy
-//!      "Notes links screenshots…") (E.3 + E.4).
+//!      contains the Saved Messages rail tile (label + bookmark glyph +
+//!      ScenePortal tap target).
+//!   5. Tapping the saved tile flips the right-pane to the saved chat
+//!      scaffolding (header "Saved Messages" + empty-state copy
+//!      "Notes links screenshots…").
 //!   6. Optimistic local send + GroupMessage replay dedupe converges to
-//!      a single message row (D.5 + E.5 — observable now that rebuild
-//!      surfaces the saved chat body into the inbox Level widget).
+//!      a single message row.
 
 use antenna::channel::AntennaOut;
 use antenna::dag::Dag;
@@ -189,6 +190,11 @@ fn inbox_level_widget(store: &RdfStore) -> String {
 const ALICE_URI: &str = "0123456789abcdef0123456789abcdef01234567";
 const ALICE_ACCOUNT: &str = "abc123def456abc123def456abc123def456abcd";
 const SAVED_CONV_ID: &str = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+/// Pipeline-side `SAVED_PSEUDO_URI` — mirror the constant used in
+/// `pipeline.ttl` so the test tap targets stay in lockstep with the
+/// `urn:msg2:select:` + `c.uri` shape `buildContactRow()` emits.
+const SAVED_PSEUDO_URI: &str = "urn:msg2:saved";
+const SAVED_SELECT_TAP: &str = "urn:msg2:select:urn:msg2:saved";
 
 #[test]
 fn account_ready_emits_get_saved_conversation() {
@@ -352,9 +358,12 @@ fn group_message_routing_does_not_disturb_pipeline() {
 
 #[test]
 fn saved_tile_lands_in_inbox_level_after_resolve() {
-    // Cut E.1 + E.2: the SavedConversation reply triggers rebuild(), which
-    // re-emits the inbox Level widget. The pinned tile should appear in
-    // the rail — bookmark icon + literal "Saved Messages" label.
+    // The SavedConversation reply triggers rebuild(), which re-emits the
+    // inbox Level widget. The Saved Messages tile rides the same
+    // ScenePortal-wrapping path as every peer; assert on (a) the
+    // displayName landing in a rail tile, (b) the bookmark glyph
+    // distinguishing the self-thread row from peer StatusDots, and
+    // (c) the ScenePortal tapTarget pointing at the synthetic select URN.
     let (store, dag) = build_messenger2_pipeline();
     let mut out = CaptureOut::new();
     let _boot = settle_collect_emits(&dag, &store, &mut out, 30);
@@ -378,33 +387,57 @@ fn saved_tile_lands_in_inbox_level_after_resolve() {
     );
     assert!(
         widget.contains("name=bookmark"),
-        "inbox Level widget should embed the bookmark glyph; got:\n{widget}",
+        "rail tile for the self-thread should carry a bookmark glyph; got:\n{widget}",
     );
     assert!(
-        widget.contains("urn:msg2:select:saved"),
-        "tile should wrap onTap=urn:msg2:select:saved; got:\n{widget}",
+        widget.contains(&format!("tapTarget={SAVED_SELECT_TAP}")),
+        "tile should expose ScenePortal tapTarget={SAVED_SELECT_TAP}; got:\n{widget}",
     );
 
-    // Position invariant: with no live contacts, the saved tile sits
-    // above the "no contacts yet" placeholder (which CONTACTS section
-    // renders when contacts.length === 0).
+    // Position invariant: Saved Messages is sorted to the top of
+    // the rail (sortedContactList returns it before any peer). With
+    // no live peers, only the saved tile appears under the CONTACTS
+    // header.
+    let header_at = widget.find("value=CONTACTS").expect("CONTACTS header present");
     let saved_at = widget.find("value=Saved Messages")
         .expect("saved label present");
-    if let Some(placeholder_at) = widget.find("value=no contacts yet") {
-        assert!(
-            saved_at < placeholder_at,
-            "Saved Messages tile should be pinned ABOVE the empty-contacts \
-             placeholder; saved_at={saved_at} placeholder_at={placeholder_at}",
-        );
-    }
+    assert!(
+        header_at < saved_at,
+        "Saved Messages tile should appear below the CONTACTS header; \
+         header_at={header_at} saved_at={saved_at}",
+    );
+
+    // The per-contact vCard Scene + Level emit runs for the saved
+    // contact too, so a pinch-zoom into the saved tile lands on a real
+    // Scene rather than a dead portal.
+    let saved_scene_uri = format!("urn:msg2:contact:{SAVED_PSEUDO_URI}:scene");
+    let scene_rows = select_rows(
+        &store,
+        &format!(
+            "PREFIX ant: <http://resonator.network/v2/antenna#> \
+             SELECT ?label WHERE {{ \
+               <{saved_scene_uri}> a ant:Scene ; ant:scenelabel ?label \
+             }}"
+        ),
+    );
+    assert_eq!(
+        scene_rows.len(),
+        1,
+        "expected exactly one Scene triple for the saved vCard at \
+         {saved_scene_uri}, got rows={scene_rows:?}",
+    );
+    assert!(
+        scene_rows[0][0].contains("Saved Messages"),
+        "saved vCard scenelabel should carry the Saved Messages display name; \
+         got {}", scene_rows[0][0],
+    );
 }
 
 #[test]
 fn saved_select_tap_swaps_right_pane_to_saved_chat() {
-    // Cut E.3 + E.4: tapping the pinned tile sets activeUri to the saved
-    // pseudo URN; the next rebuild swaps the right pane to the saved
-    // chat scaffold. The empty-state copy is a stable substring we can
-    // anchor on.
+    // Tapping the saved tile sets activeUri to the saved pseudo URN; the
+    // next rebuild swaps the right pane to the saved chat scaffold. The
+    // empty-state copy is a stable substring we can anchor on.
     let (store, dag) = build_messenger2_pipeline();
     let mut out = CaptureOut::new();
     let _boot = settle_collect_emits(&dag, &store, &mut out, 30);
@@ -422,7 +455,7 @@ fn saved_select_tap_swaps_right_pane_to_saved_chat() {
     settle_collect_emits(&dag, &store, &mut out, 30);
 
     dispatch::dispatch(
-        &tap_event("urn:msg2:select:saved"),
+        &tap_event(SAVED_SELECT_TAP),
         &store, &dag, None, "", &mut out,
     );
     settle_collect_emits(&dag, &store, &mut out, 30);
@@ -467,7 +500,7 @@ fn saved_text_send_emits_send_conv_msg_against_saved_conv() {
     settle_collect_emits(&dag, &store, &mut out, 30);
 
     dispatch::dispatch(
-        &tap_event("urn:msg2:select:saved"),
+        &tap_event(SAVED_SELECT_TAP),
         &store, &dag, None, "", &mut out,
     );
     settle_collect_emits(&dag, &store, &mut out, 30);
