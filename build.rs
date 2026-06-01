@@ -42,7 +42,10 @@ fn is_ios_device() -> bool {
 /// libraries flat (libpj.a, libpjsip.a, …); return empty strings to drive
 /// the contrib name list below to emit unsuffixed lib names.
 fn host_triple() -> (String, String) {
-    if target_os() == "ios" {
+    // iOS and Android both stage contrib archives flat (build-libjami.sh strips
+    // the per-arch triple suffix at staging time), so pjsip libs are named
+    // libpj.a / libpjsip.a / … — return empty strings to drive unsuffixed names.
+    if target_os() == "ios" || target_os() == "android" {
         return (String::new(), String::new());
     }
 
@@ -182,6 +185,30 @@ fn thin_archives_for_arch(src_dir: &Path, arch: &str, out_dir: &Path) -> HashSet
     present
 }
 
+/// Collect link-list stems ("libfoo.a" -> "foo") for every static archive in
+/// `dir`. Used to drop `-l` directives for contrib archives a given platform
+/// slice didn't produce (Android's contrib set isn't identical to the host's),
+/// avoiding a hard "library 'X' not found" at link time.
+fn present_lib_stems(dir: &Path) -> HashSet<String> {
+    let mut present = HashSet::new();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("a") {
+                continue;
+            }
+            if let Some(stem) = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .and_then(|s| s.strip_prefix("lib"))
+            {
+                present.insert(stem.to_string());
+            }
+        }
+    }
+    present
+}
+
 fn main() {
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let manifest_dir = Path::new(&manifest);
@@ -267,6 +294,8 @@ fn main() {
         } else {
             "build-ios-sim-arm64".to_string()
         }
+    } else if target_os() == "android" {
+        "build-android-arm64".to_string()
     } else {
         "build".to_string()
     };
@@ -283,6 +312,11 @@ fn main() {
                 } else {
                     "ios-simulator"
                 },
+            )
+        } else if target_os() == "android" {
+            format!(
+                "  cd {} && make libjami PLATFORM=android-arm64 && make libcarrier-android",
+                carrier_dir.display(),
             )
         } else {
             format!(
@@ -349,6 +383,8 @@ fn main() {
             "-ios-device-arm64"
         } else if is_ios_simulator() {
             "-ios-sim-fat"
+        } else if target_os() == "android" {
+            "-android-arm64"
         } else {
             ""
         };
@@ -366,7 +402,7 @@ fn main() {
     // OUT_DIR cache. The first build pays a one-time lipo cost (~50
     // archives, sub-second total); subsequent builds skip via mtime
     // check.
-    let (jami_lib_dir, ios_sim_present_libs) = if is_ios_simulator() {
+    let (jami_lib_dir, present_libs) = if is_ios_simulator() {
         // Rust's target_arch returns "aarch64"; lipo's arch identifier is
         // "arm64" (Mach-O naming). x86_64 is the same in both.
         let lipo_arch = match target_arch().as_str() {
@@ -377,6 +413,15 @@ fn main() {
         let thin_dir = out_dir.join("jami-thin");
         let present = thin_archives_for_arch(&jami_src_lib_dir, &lipo_arch, &thin_dir);
         (thin_dir, Some(present))
+    } else if target_os() == "android" {
+        // Android's contrib set isn't identical to the host's (a few packages
+        // are gated on HAVE_MACOSX / HAVE_IOS upstream). Rather than hardcode
+        // the delta, scan the prefix and drop link directives for archives that
+        // weren't produced — same defensive approach as the iOS-sim thinned set.
+        (
+            jami_src_lib_dir.clone(),
+            Some(present_lib_stems(&jami_src_lib_dir)),
+        )
     } else {
         (jami_src_lib_dir.clone(), None)
     };
@@ -391,6 +436,11 @@ fn main() {
                 } else {
                     "ios-simulator"
                 },
+            )
+        } else if target_os() == "android" {
+            format!(
+                "  cd {} && make libjami PLATFORM=android-arm64",
+                carrier_dir.display()
             )
         } else {
             format!("  cd {} && make libjami-build", carrier_dir.display())
@@ -479,15 +529,28 @@ fn main() {
         // BZ2_* symbols, so we link system /usr/lib/libbz2 below.
         contrib_static.extend(["minizip".into(), "zstd".into(), "bzip2".into()]);
     }
+    if target_os() == "android" {
+        // Android-only contrib archives. macOS/iOS don't ship these, and the
+        // present-filter above would drop them elsewhere anyway.
+        // - webrtc_audio_processing: Android's libjami builds + uses the WebRTC
+        //   AEC / noise-suppression module; libjami-core references
+        //   webrtc::AudioProcessing::Create (macOS/iOS use a different canceller).
+        // - iconv / charset: GNU libiconv from the contrib. macOS/iOS link the
+        //   SDK's system -liconv (see sys_libs below); Android has no system
+        //   iconv, so ffmpeg/etc.'s libiconv_* symbols come from the contrib .a.
+        contrib_static.push("webrtc_audio_processing".into());
+        contrib_static.push("iconv".into());
+        contrib_static.push("charset".into());
+    }
     for lib in &contrib_static {
         // On iOS sim, drop link directives for archives that didn't land
         // in the thinned dir (arch-mismatched contrib slices like
         // libvpx-x86_64-only on arm64-sim). The linker would otherwise
         // emit "library 'X' not found".
-        if let Some(present) = &ios_sim_present_libs {
+        if let Some(present) = &present_libs {
             if !present.contains(lib.as_str()) {
                 println!(
-                    "cargo:warning=dropping -l{lib} (no slice for arch in iOS-sim prefix)"
+                    "cargo:warning=dropping -l{lib} (no archive in the libjami prefix for this target)"
                 );
                 continue;
             }
@@ -549,13 +612,39 @@ fn main() {
         for sys in &sys_libs {
             println!("cargo:rustc-link-lib={sys}");
         }
+    } else if target_os_str == "android" {
+        // Android (Bionic): the C++ runtime is libc++ — link c++_shared to match
+        // the contrib's ANDROID_STL=c++_shared; libc++_shared.so is packaged
+        // into jniLibs by the antenna plugin's gradle. The platform libs the
+        // daemon's media backends reach into: aaudio (the primary audio layer —
+        // why minSdk is 26), OpenSLES (fallback audio), mediandk (FFmpeg
+        // MediaCodec hwaccel), log, android. m/dl round out the NDK runtime.
+        // Deliberately omitted vs the Linux branch: `stdc++` (GNU libstdc++
+        // doesn't exist on Android), `rt` and `resolv` (folded into Bionic
+        // libc), and `-lpthread` (also in libc — see the guard below). libz
+        // comes from the contrib (libz.a).
+        for sys in &["c++_shared", "log", "m", "dl", "android", "aaudio", "OpenSLES", "mediandk"] {
+            println!("cargo:rustc-link-lib={sys}");
+        }
+        // The android cdylib is dlopen'd at runtime, so an unresolved strong
+        // symbol is a load-time crash, not a link error. Promote it to a link
+        // error: --no-undefined fails the build if any non-weak symbol is
+        // missing (weak undefs like getrandom on API<28 stay exempt). This is
+        // what would have caught the gnutls/brotli, webrtc, iconv and aaudio
+        // gaps without a device round-trip.
+        println!("cargo:rustc-link-arg=-Wl,--no-undefined");
     } else {
         for sys in &["stdc++", "dl", "rt", "resolv"] {
             println!("cargo:rustc-link-lib={sys}");
         }
     }
 
-    println!("cargo:rustc-link-lib=pthread");
+    // pthread is a standalone library on macOS/iOS (libSystem stub) and Linux,
+    // but on Android it's folded into Bionic libc — `-lpthread` there fails with
+    // "library 'pthread' not found".
+    if target_os_str != "android" {
+        println!("cargo:rustc-link-lib=pthread");
+    }
 
     println!("cargo:rerun-if-changed={}", carrier_lib.display());
     println!("cargo:rerun-if-changed={}", carrier_inc.display());
