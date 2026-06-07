@@ -53,9 +53,16 @@ impl AntennaOut for CaptureOut {
 fn build_pipeline() -> (RdfStore, Dag) {
     let store = RdfStore::open(None).expect("in-memory store");
 
+    // Theme-definition triples live in the dedicated <urn:design:theme> named
+    // graph (mirrors AntennaContext::new / lib.rs DESIGN_BUNDLE), so the
+    // GRAPH-scoped resolver and the pipeline's GRAPH-scoped hex read/write
+    // both see them. radio:hasTheme stays in the default graph (below) — that
+    // is the active-theme selector and is queried unscoped.
     for path in ["arch/ontology/design.ttl", "themes/voidline/voidline.ttl"] {
         let ttl = std::fs::read_to_string(rel(path)).expect("read theme file");
-        store.insert_turtle(&ttl).expect("insert theme");
+        store
+            .insert_turtle_to_graph(&ttl, theme::THEME_GRAPH)
+            .expect("insert theme");
     }
     theme::load_resolver(&store, &rel("antenna/spin/theme_resolver.spin.ttl"))
         .expect("load resolver");
@@ -112,7 +119,12 @@ fn slider_event(target: &str, value: f64) -> String {
 }
 
 fn current_hex(store: &RdfStore, token_iri: &str) -> Option<String> {
-    let q = format!("SELECT ?h WHERE {{ <{token_iri}> <{DESIGN_NS}hex> ?h }}");
+    // The token hex lives in the theme graph (see build_pipeline); the
+    // pipeline's writeHex DELETE/INSERTs it there, so read it back from there.
+    let q = format!(
+        "SELECT ?h WHERE {{ GRAPH <{graph}> {{ <{token_iri}> <{DESIGN_NS}hex> ?h }} }}",
+        graph = theme::THEME_GRAPH,
+    );
     let results = store.query(&q).ok()?;
     if let QueryResults::Solutions(solutions) = results {
         for sol in solutions.flatten() {
