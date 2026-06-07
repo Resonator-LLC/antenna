@@ -32,6 +32,18 @@ use crate::channel::{AntennaIn, AntennaOut};
 use crate::dag::Dag;
 use crate::store::RdfStore;
 
+/// Reserved named graph that holds the **reviewed, bundle-shipped** pipeline.
+///
+/// `replace_pipeline` mirrors the app's bundled `pipeline.ttl` into this graph
+/// (in addition to the default graph). When the `peer-scripting` feature is
+/// **off** — the iOS store build — `dag::query_script_nodes` sources script
+/// bodies *only* from this graph, so peer/raw Turtle (which always lands in the
+/// default graph via `insert_turtle`) can never become an executing DAG node.
+/// This is the declarative boundary that makes CMP-001's bundle-only guarantee
+/// compiled-out rather than incidental. See `Cargo.toml`'s `peer-scripting`
+/// feature and the CMP-001 backlog item.
+pub const TRUSTED_PIPELINE_GRAPH: &str = "urn:resonator:trusted-pipeline";
+
 /// Design ontology + canonical themes embedded at compile time. Loaded on
 /// every antenna boot so Station's B2 theme gate opens regardless of which
 /// radio is running. Keep ordering: ontology first, then voidline (canonical),
@@ -91,7 +103,18 @@ pub fn replace_pipeline(store: &RdfStore, ttl: &str) -> Result<()> {
     ";
     store.update(PIPELINE_RESET_NODES)?;
     store.update(PIPELINE_RESET_SOURCES)?;
-    store.insert_turtle(ttl)
+    store.insert_turtle(ttl)?;
+
+    // Mirror the reviewed pipeline into the trusted named graph. The iOS store
+    // build (`peer-scripting` off) reads script bodies *only* from this graph,
+    // so the bundle-only guarantee holds even if the DAG is rebuilt against a
+    // persistent store that a peer has written into the default graph. Clear
+    // first: the trusted graph holds nothing but the pipeline, so a full wipe
+    // is simpler than the type-targeted DELETEs above and prevents stale
+    // ScriptSource bodies accumulating across restarts. See [`TRUSTED_PIPELINE_GRAPH`]
+    // and CMP-001. On a fresh store `clear_graph` is a no-op.
+    store.clear_graph(TRUSTED_PIPELINE_GRAPH)?;
+    store.insert_turtle_to_graph(ttl, TRUSTED_PIPELINE_GRAPH)
 }
 
 pub struct AntennaContext {
@@ -149,8 +172,24 @@ impl AntennaContext {
         // gate can open without each radio having to seed its own theme.
         // The TTL is embedded at compile time so the binary is self-
         // contained — no workspace-relative paths at runtime.
+        //
+        // Theme-definition triples + the SPIN resolver go into the dedicated
+        // <urn:design:theme> named graph (not the default graph) so the
+        // resolver can scope its walk patterns to that graph. This keeps
+        // `resolve_active_theme` O(theme-graph) instead of O(whole-store):
+        // without it, a store bloated with radio/swarm data (messenger2's
+        // hydrated Swarm) made the resolver scan everything and pin the
+        // embedded worker at ~100% CPU, so the theme bundle never emitted and
+        // Station hung on a black boot gate.
+        //
+        // The store is persistent and additive, so we clear the graph first:
+        // a reload across an antenna upgrade would otherwise leave an older
+        // resolver version alongside the new one, and `fetch_query_text` could
+        // pick the stale (scanning) query. Clear + reload is idempotent — all
+        // of THEME_GRAPH is rebuilt from these compile-time bundles every boot.
+        store.clear_graph(theme::THEME_GRAPH)?;
         for ttl in DESIGN_BUNDLE {
-            store.insert_turtle(ttl)?;
+            store.insert_turtle_to_graph(ttl, theme::THEME_GRAPH)?;
         }
         theme::load_resolver_str(&store, THEME_RESOLVER_TTL)?;
         store.insert_turtle(EMOJI_CATALOG_TTL)?;
@@ -476,8 +515,12 @@ mod tests {
     #[test]
     fn design_bundle_and_resolver_install_into_fresh_store() {
         let store = RdfStore::open(None).expect("in-memory store");
+        // Mirror AntennaContext::new: theme data goes into THEME_GRAPH, the
+        // resolver query texts stay in the default graph.
         for ttl in DESIGN_BUNDLE {
-            store.insert_turtle(ttl).expect("insert design ttl");
+            store
+                .insert_turtle_to_graph(ttl, theme::THEME_GRAPH)
+                .expect("insert design ttl into theme graph");
         }
         theme::load_resolver_str(&store, THEME_RESOLVER_TTL)
             .expect("load resolver");

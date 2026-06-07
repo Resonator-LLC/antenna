@@ -492,6 +492,17 @@ fn create_account_tap_emits_carrier_event() {
     );
     settle(&dag, &store, &mut out, 30);
 
+    // CMP-002 — accept the Terms; CREATE is gated on it.
+    dispatch::dispatch(
+        &tap_event("urn:msg2:onboarding:eula-toggle"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
     // Tap CREATE. Capture every emit drained while the script processes
     // the tap — the carrier:CreateAccount Turtle would otherwise be
     // routed into a `carrier=None` warn-skip and lost.
@@ -626,6 +637,17 @@ fn import_account_tap_emits_carrier_event() {
     let archive_path = "/tmp/messenger2-test/onboarding/preselected-archive.gz";
     dispatch::dispatch(
         &text_changed_event("urn:msg2:onboarding:archive-path", archive_path),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    // CMP-002 — accept the Terms; IMPORT is gated on it.
+    dispatch::dispatch(
+        &tap_event("urn:msg2:onboarding:eula-toggle"),
         &store,
         &dag,
         None,

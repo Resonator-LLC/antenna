@@ -27,6 +27,16 @@ use crate::store::RdfStore;
 /// same constant the resolver does.
 pub const DESIGN_NS: &str = "http://resonator.network/v2/design#";
 
+/// Named graph that holds every theme-definition triple (design ontology,
+/// theme bundles, role bindings, tokens, strokeWidth). The SPIN resolver
+/// scopes its walk patterns to this graph (`GRAPH <urn:design:theme> { … }`)
+/// so resolution stays O(theme-graph) regardless of how much radio/swarm data
+/// accumulates in the default graph. Callers that load themes or mutate
+/// `design:active` / token properties at runtime MUST target this graph, or
+/// the resolver won't see their writes. The `radio:hasTheme` selector is the
+/// one input that stays in the default graph (the radio seed puts it there).
+pub const THEME_GRAPH: &str = "urn:design:theme";
+
 /// IRIs of the three resolver queries inside `theme_resolver.spin.ttl`.
 pub const RESOLVER_QUERIES: &[&str] = &[
     "urn:resolver:theme/role-bindings",
@@ -38,18 +48,24 @@ pub const RESOLVER_QUERIES: &[&str] = &[
 ///
 /// The resolver is just RDF data: three `sp:Construct` resources named by
 /// stable URNs. Loading it makes the queries fetchable via SELECT.
+///
+/// Loaded into THEME_GRAPH (not the default graph) so that an idempotent
+/// `clear_graph(THEME_GRAPH)` + reload at boot drops any prior resolver text.
+/// The persistent store is additive, so without this an older resolver version
+/// (e.g. a pre-fix `?token ?tProp ?tVal` query) would linger and `fetch_query_text`
+/// could pick it up — silently reintroducing the default-graph scan.
 pub fn load_resolver(store: &RdfStore, path: &Path) -> Result<()> {
     let ttl =
         std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    store.insert_turtle(&ttl)?;
+    store.insert_turtle_to_graph(&ttl, THEME_GRAPH)?;
     Ok(())
 }
 
 /// Load resolver TTL from an in-memory string. Used by the binary entrypoint
 /// where the resolver source is embedded via `include_str!` rather than read
-/// from a workspace path.
+/// from a workspace path. Loaded into THEME_GRAPH (see [`load_resolver`]).
 pub fn load_resolver_str(store: &RdfStore, ttl: &str) -> Result<()> {
-    store.insert_turtle(ttl)?;
+    store.insert_turtle_to_graph(ttl, THEME_GRAPH)?;
     Ok(())
 }
 
@@ -60,19 +76,91 @@ pub fn load_resolver_str(store: &RdfStore, ttl: &str) -> Result<()> {
 /// strokeWidth — as a single concatenated vector. The caller is
 /// responsible for serializing them to wire format if needed.
 pub fn resolve_active_theme(store: &RdfStore) -> Result<Vec<Triple>> {
+    // Resolve the active theme IRI up front, then pin it into each CONSTRUCT as
+    // `VALUES ?activeTheme { <iri> }`. Three scoping disciplines keep resolution
+    // O(theme-graph) regardless of Swarm size (see the .spin.ttl header for the
+    // failure this prevents):
+    //   1. The theme-definition walk lives in GRAPH <urn:design:theme>.
+    //   2. ?activeTheme is bound to a constant (not joined cross-graph).
+    //   3. Token properties are emitted via `?tProp a rdf:Property ; ?token
+    //      ?tProp ?tVal` — the predicate is BOUND (to declared design
+    //      properties), never the catch-all `?token ?tProp ?tVal`, whose
+    //      unbound predicate defeats Oxigraph's GRAPH scoping and scans the
+    //      default graph.
+    let active = match active_theme_iri(store)? {
+        Some(iri) => iri,
+        None => return Ok(Vec::new()),
+    };
+    // Performance note: the CONSTRUCTs run directly against `store`. The cost is
+    // dominated by the `design:extends*` property-path walk over all loaded
+    // themes — ~1.4s in a release build, ~13s in a debug/unoptimized build —
+    // and is essentially INDEPENDENT of the store backend (in-memory ≈ RocksDB;
+    // see the `resolve_in_memory_vs_rocksdb` probe). The embedded Station builds
+    // antenna unoptimized for Flutter's debug config, so `flutter run` shows a
+    // ~13s themed-gate delay; `flutter run --release` boots in ~1.4s. An earlier
+    // attempt to mirror THEME_GRAPH into an in-memory store was reverted because
+    // it gave no real speedup once measured on equal footing (the original "14s
+    // RocksDB vs 1s in-memory" was a debug-vs-release comparison, not a backend
+    // one). The named-graph isolation in `theme_resolver.spin.ttl` is what keeps
+    // this O(theme-graph) rather than O(whole-store).
     let mut out = Vec::new();
     for q_iri in RESOLVER_QUERIES {
         let text = fetch_query_text(store, q_iri)?;
-        run_construct(store, &text, &mut out)?;
+        run_construct(store, &bind_active_theme(&text, &active), &mut out)?;
     }
     Ok(out)
 }
 
-/// Look up the `sp:text` literal of a resolver query by its IRI.
+/// Resolve the active theme IRI in `<iri>` display form. A `radio:hasTheme`
+/// override (default graph) wins; otherwise the `design:active true` fallback
+/// (theme graph) applies. Returns None when neither selects a theme — the
+/// caller then yields an empty bundle (Station boots black per Decision B2).
+fn active_theme_iri(store: &RdfStore) -> Result<Option<String>> {
+    let radio = "PREFIX radio: <http://resonator.network/v2/radio#> \
+                 SELECT ?t WHERE { ?_r radio:hasTheme ?t } LIMIT 1";
+    if let Some(iri) = first_binding(store, radio, "t")? {
+        return Ok(Some(iri));
+    }
+    let active = format!(
+        "PREFIX design: <{DESIGN_NS}> \
+         SELECT ?t WHERE {{ GRAPH <{THEME_GRAPH}> {{ ?t a design:Theme ; design:active true }} }} \
+         LIMIT 1"
+    );
+    first_binding(store, &active, "t")
+}
+
+/// Run a SELECT and return the first solution's `var` binding in term display
+/// form (`<iri>` / `"literal"`), or None if there are no solutions.
+fn first_binding(store: &RdfStore, sparql: &str, var: &str) -> Result<Option<String>> {
+    if let QueryResults::Solutions(mut solutions) = store.query(sparql)? {
+        if let Some(sol) = solutions.next() {
+            if let Some(term) = sol?.get(var) {
+                return Ok(Some(term.to_string()));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Inject `VALUES ?activeTheme { <iri> }` immediately after the query's top
+/// `WHERE {` so the theme walk runs with the active theme pinned to a constant.
+/// `iri_display` is already in term form (`<…>`), as produced by Oxigraph's
+/// `Term::to_string`.
+fn bind_active_theme(query: &str, iri_display: &str) -> String {
+    query.replacen(
+        "WHERE {",
+        &format!("WHERE {{ VALUES ?activeTheme {{ {iri_display} }}"),
+        1,
+    )
+}
+
+/// Look up the `sp:text` literal of a resolver query by its IRI. Scoped to
+/// THEME_GRAPH (where [`load_resolver`] puts it) so a stale resolver version
+/// left in the default graph by an older build can't be picked up.
 fn fetch_query_text(store: &RdfStore, query_iri: &str) -> Result<String> {
     let select = format!(
         "PREFIX sp: <http://spinrdf.org/sp#> \
-         SELECT ?text WHERE {{ <{query_iri}> sp:text ?text }}"
+         SELECT ?text WHERE {{ GRAPH <{THEME_GRAPH}> {{ <{query_iri}> sp:text ?text }} }}"
     );
     let results = store.query(&select)?;
     if let QueryResults::Solutions(mut solutions) = results {
@@ -145,10 +233,10 @@ mod tests {
         workspace_root().join(p)
     }
 
-    /// Build a fresh in-memory store with vocab, every shipped theme, and
-    /// the resolver loaded.
-    fn build_store() -> RdfStore {
-        let store = RdfStore::open(None).expect("in-memory store");
+    /// Load vocab, every shipped theme, and the resolver into `store`'s
+    /// THEME_GRAPH. Backend-agnostic so both the in-memory test store and the
+    /// RocksDB perf probe populate identically.
+    fn populate_themes(store: &RdfStore) {
         let bundles: Vec<String> = std::iter::once("arch/ontology/design.ttl".to_string())
             .chain(std::iter::once(
                 "themes/voidline/voidline.ttl".to_string(),
@@ -164,10 +252,19 @@ mod tests {
             .collect();
         for path in &bundles {
             let ttl = std::fs::read_to_string(rel(path)).expect("read theme file");
-            store.insert_turtle(&ttl).expect("insert theme");
+            store
+                .insert_turtle_to_graph(&ttl, THEME_GRAPH)
+                .expect("insert theme into theme graph");
         }
-        load_resolver(&store, &rel("antenna/spin/theme_resolver.spin.ttl"))
+        load_resolver(store, &rel("antenna/spin/theme_resolver.spin.ttl"))
             .expect("load resolver");
+    }
+
+    /// Build a fresh in-memory store with vocab, every shipped theme, and
+    /// the resolver loaded.
+    fn build_store() -> RdfStore {
+        let store = RdfStore::open(None).expect("in-memory store");
+        populate_themes(&store);
         store
     }
 
@@ -189,11 +286,14 @@ mod tests {
     ];
 
     fn activate(store: &RdfStore, theme_iri: &str) {
+        // design:active lives in the theme graph (THEME_GRAPH), so the toggle
+        // must be graph-scoped or the resolver — which reads that graph —
+        // won't observe it.
         let upd = format!(
             "PREFIX design: <{DESIGN_NS}>
-             DELETE {{ ?t design:active true }}
-             INSERT {{ <{theme_iri}> design:active true }}
-             WHERE  {{ ?t a design:Theme . OPTIONAL {{ ?t design:active true }} }}"
+             DELETE {{ GRAPH <{THEME_GRAPH}> {{ ?t design:active true }} }}
+             INSERT {{ GRAPH <{THEME_GRAPH}> {{ <{theme_iri}> design:active true }} }}
+             WHERE  {{ GRAPH <{THEME_GRAPH}> {{ ?t a design:Theme . OPTIONAL {{ ?t design:active true }} }} }}"
         );
         store.update(&upd).expect("activate theme");
     }
@@ -461,12 +561,13 @@ mod tests {
     fn no_active_theme_yields_empty_resolution() {
         let store = build_store();
         // Don't activate anything. design:active true exists on voidline by
-        // default in the source ttl, so we explicitly clear it.
+        // default in the source ttl, so we explicitly clear it. The flag lives
+        // in THEME_GRAPH, so the clear must be graph-scoped.
         store
             .update(&format!(
                 "PREFIX design: <{DESIGN_NS}>
-                 DELETE {{ ?t design:active true }}
-                 WHERE  {{ ?t design:active true }}"
+                 DELETE {{ GRAPH <{THEME_GRAPH}> {{ ?t design:active true }} }}
+                 WHERE  {{ GRAPH <{THEME_GRAPH}> {{ ?t design:active true }} }}"
             ))
             .expect("clear active");
 
@@ -479,9 +580,154 @@ mod tests {
     }
 
     #[test]
+    fn resolver_ignores_lookalike_triples_in_default_graph() {
+        // Regression guard for the embedded-messenger2 black-boot hang. The
+        // embedded path loads the entire Swarm (hundreds of conversation /
+        // contact triples) into the DEFAULT graph, where the resolver's theme
+        // walk used to run. That made resolution O(whole-store): on a hydrated
+        // Swarm the worker pinned ~100% CPU and never returned, so the theme
+        // bundle never emitted and Station hung on a black B2 boot gate.
+        //
+        // Theme data now lives in THEME_GRAPH and the resolver is scoped to it.
+        // We prove the scoping two ways at once: a default-graph triple shaped
+        // exactly like a role binding hung off the active theme must NOT leak
+        // into the bundle (a scoped resolver cannot see default-graph data, so
+        // it also cannot fan out across the Swarm).
+        let store = build_store();
+        activate(&store, &format!("{VOIDLINE_NS}voidline"));
+
+        store
+            .insert_turtle(&format!(
+                "<{VOIDLINE_NS}voidline> <{DESIGN_NS}bindsRole> <urn:swarm:fakeBinding> .
+                 <urn:swarm:fakeBinding> <{DESIGN_NS}role> <{DESIGN_NS}fakeRole> ;
+                                         <{DESIGN_NS}to>   <urn:swarm:fakeToken> .
+                 <urn:swarm:fakeToken> <{DESIGN_NS}hex> \"#FF00FF\" ."
+            ))
+            .expect("insert look-alike default-graph triples");
+
+        let triples = resolve_active_theme(&store).expect("resolve");
+        let roles = role_map(&triples);
+
+        assert!(
+            !roles.contains_key(&iri(DESIGN_NS, "fakeRole")),
+            "resolver leaked a default-graph look-alike binding into the bundle",
+        );
+        assert_eq!(
+            roles.len(),
+            VOIDLINE_ROLE_COUNT,
+            "canonical voidline bundle must be unchanged by default-graph noise",
+        );
+    }
+
+    #[test]
+    fn resolver_cost_is_independent_of_default_graph_size() {
+        // The exact failure that hung embedded messenger2: a hydrated Swarm
+        // loads thousands of triples into the DEFAULT graph, and the (pre-fix)
+        // resolver scanned them, degrading to a near-cartesian walk that
+        // pinned the worker at ~100% CPU and never emitted ThemeBundleComplete.
+        // design:active selection path. Assert correctness AND that resolve
+        // cost is independent of default-graph size (clean vs bloated ratio,
+        // robust against CPU contention from parallel tests).
+        let bloated = {
+            let s = build_store();
+            activate(&s, &format!("{VOIDLINE_NS}voidline"));
+            let mut bulk = String::with_capacity(8000 * 96);
+            for i in 0..8000 {
+                bulk.push_str(&format!(
+                    "<urn:swarm:msg:{i}> a <urn:msg:Message> ; \
+                     <urn:msg:body> \"hello {i}\" ; \
+                     <urn:msg:author> <urn:swarm:peer:{}> .\n",
+                    i % 50
+                ));
+            }
+            s.insert_turtle(&bulk).expect("insert swarm-scale bulk");
+            s
+        };
+        let clean = {
+            let s = build_store();
+            activate(&s, &format!("{VOIDLINE_NS}voidline"));
+            s
+        };
+
+        let t0 = std::time::Instant::now();
+        let triples = resolve_active_theme(&bloated).expect("resolve");
+        let bloated_ms = t0.elapsed().as_millis();
+        let t1 = std::time::Instant::now();
+        resolve_active_theme(&clean).expect("resolve clean");
+        let clean_ms = t1.elapsed().as_millis();
+
+        assert_eq!(
+            role_map(&triples).len(),
+            VOIDLINE_ROLE_COUNT,
+            "bundle must be correct despite 8k default-graph triples",
+        );
+        assert!(
+            bloated_ms <= clean_ms * 4 + 500,
+            "resolve scaled with default-graph size: clean={clean_ms}ms \
+             bloated={bloated_ms}ms — resolver is scanning the default graph",
+        );
+    }
+
+    #[test]
+    fn resolver_radio_has_theme_cost_independent_of_default_graph() {
+        // The EXACT messenger2 path: theme selected via radio:hasTheme (branch
+        // 1), default graph bloated with a hydrated Swarm. This is the case
+        // that hung live. Assert the bundle is correct AND that resolve cost
+        // does not scale with default-graph size (compare clean vs bloated
+        // rather than an absolute wall-clock bound, which flakes under parallel
+        // test CPU load).
+        let bloated = {
+            let s = build_store();
+            set_radio_theme(&s, &format!("{VOIDLINE_NS}voidline"));
+            let mut bulk = String::with_capacity(8000 * 110);
+            for i in 0..8000 {
+                bulk.push_str(&format!(
+                    "<urn:swarm:msg:{i}> a <urn:msg:Message> ; \
+                     <urn:msg:body> \"hello {i}\" ; \
+                     <urn:msg:author> <urn:swarm:peer:{}> ; \
+                     <urn:msg:conv> <urn:swarm:conv:{}> .\n",
+                    i % 50,
+                    i % 7
+                ));
+            }
+            s.insert_turtle(&bulk).expect("insert swarm-scale bulk");
+            s
+        };
+        let clean = {
+            let s = build_store();
+            set_radio_theme(&s, &format!("{VOIDLINE_NS}voidline"));
+            s
+        };
+
+        let t0 = std::time::Instant::now();
+        let triples = resolve_active_theme(&bloated).expect("resolve");
+        let bloated_ms = t0.elapsed().as_millis();
+        let t1 = std::time::Instant::now();
+        resolve_active_theme(&clean).expect("resolve clean");
+        let clean_ms = t1.elapsed().as_millis();
+
+        assert_eq!(
+            role_map(&triples).len(),
+            VOIDLINE_ROLE_COUNT,
+            "radio:hasTheme bundle correct despite 8k default-graph triples",
+        );
+        // Non-scaling: 8k extra default-graph triples must not blow up resolve.
+        // Pre-fix this was ~700x (12ms → 8s); allow generous noise headroom.
+        assert!(
+            bloated_ms <= clean_ms * 4 + 500,
+            "resolve scaled with default-graph size: clean={clean_ms}ms \
+             bloated={bloated_ms}ms — branch-1 path is scanning the Swarm",
+        );
+    }
+
+    #[test]
     fn missing_resolver_query_errors_clearly() {
         let store = RdfStore::open(None).expect("store");
-        // Don't load any resolver / themes.
+        // An active theme is selected (so resolution proceeds past the
+        // active-theme lookup) but no resolver queries are loaded. The missing
+        // query must surface as a clear, IRI-naming error rather than a silent
+        // empty bundle.
+        set_radio_theme(&store, &format!("{VOIDLINE_NS}voidline"));
         let err = resolve_active_theme(&store).unwrap_err().to_string();
         assert!(
             err.contains("urn:resolver:theme"),
@@ -756,5 +1002,58 @@ mod tests {
                 "{local}: canvas should resolve to a token in own namespace, got {canvas}",
             );
         }
+    }
+
+    // ---- perf probe (manual; #[ignore]) ------------------------------------
+
+    /// Guards against re-misdiagnosing resolver latency. Times the canonical
+    /// `resolve_active_theme` on identical 10-theme data across two backends —
+    /// an in-memory store and a RocksDB store — and reports whether the build is
+    /// optimized.
+    ///
+    /// The lesson it preserves: resolve cost is dominated by the
+    /// `design:extends*` walk and is ~equal across backends (in-memory ≈
+    /// RocksDB). What swings it ~10x is the BUILD PROFILE: ≈1.4s release vs ≈13s
+    /// debug. The original "14s RocksDB vs 1s in-memory" was a debug-vs-release
+    /// comparison, NOT a backend one — so do NOT reintroduce an in-memory mirror
+    /// on that false premise. The embedded Station builds antenna unoptimized for
+    /// Flutter's debug config (hence the slow `flutter run` boot); `--release`
+    /// boots fast. Named-graph isolation (theme_resolver.spin.ttl) is the real
+    /// scaling fix — it keeps this O(theme-graph), not O(whole-store).
+    ///
+    /// Run optimized to mirror the shipped app:
+    ///   cargo test --release --lib resolve_in_memory_vs_rocksdb \
+    ///       -- --ignored --nocapture
+    /// #[ignore]'d — wall-clock, not a CI gate (see existing perf-test notes on
+    /// flakiness under parallel load).
+    #[test]
+    #[ignore]
+    fn resolve_in_memory_vs_rocksdb() {
+        use std::time::Instant;
+        fn timed(f: impl FnOnce() -> usize) -> (u128, usize) {
+            let t = Instant::now();
+            let n = f();
+            (t.elapsed().as_millis(), n)
+        }
+
+        let mem = build_store();
+        activate(&mem, &format!("{VOIDLINE_NS}voidline"));
+
+        let dir = std::env::temp_dir().join(format!("antenna-theme-probe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let rocks = RdfStore::open(Some(dir.to_str().unwrap())).expect("open rocksdb store");
+        populate_themes(&rocks);
+        activate(&rocks, &format!("{VOIDLINE_NS}voidline"));
+
+        let (mem_ms, mem_n) = timed(|| resolve_active_theme(&mem).unwrap().len());
+        let (rocks_ms, rocks_n) = timed(|| resolve_active_theme(&rocks).unwrap().len());
+
+        eprintln!("\n=== RESOLVE PERF PROBE (optimized={}) ===", !cfg!(debug_assertions));
+        eprintln!("  in-memory backend: {mem_ms:>6} ms  ({mem_n} triples)");
+        eprintln!("  RocksDB backend:   {rocks_ms:>6} ms  ({rocks_n} triples)");
+        eprintln!("  -> backends ~equal; build profile (release vs debug) is the ~10x lever.");
+        eprintln!("===========================================\n");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

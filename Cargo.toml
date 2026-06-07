@@ -17,7 +17,7 @@ path = "src/main.rs"
 required-features = ["cli", "ws"]
 
 [features]
-default = ["cli", "ws", "llm-http", "debug-panic"]
+default = ["cli", "ws", "llm-http", "debug-panic", "peer-scripting"]
 # CLI binary (clap arg parsing). Off → no `antenna` binary, library only.
 cli = ["dep:clap"]
 # WebSocket server transport. Off → `antenna::ws` module is excluded.
@@ -35,6 +35,16 @@ debug-panic = []
 # Marker for the embedded-staticlib build. Combined with
 # `--no-default-features`, this is what Station's plugin selects.
 ffi-embed = []
+# Allow the DAG to source script bodies store-wide (the default graph, where
+# peer/raw Turtle is `insert_turtle`'d) — the future peer-/P2P-delivered
+# scripting path. ON by default so the CLI, WS server, and `cargo test` keep
+# today's behaviour. OFF — selected only by the iOS store build via
+# `station/antenna/Cargo.toml` — restricts script bodies to the reserved trusted
+# graph <urn:resonator:trusted-pipeline>, populated solely by `replace_pipeline`
+# from the reviewed app bundle. With the flag off a peer-injected
+# `antenna:ScriptNode` can never become an executing DAG node, even if the DAG
+# is rebuilt against a persistent store. See CMP-001 (Apple 2.5.2 / 4.7).
+peer-scripting = []
 
 [dependencies]
 oxigraph = "0.5"

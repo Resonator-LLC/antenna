@@ -611,22 +611,56 @@ fn log_script_inbox_recv(node_uri: &str, channel_uri: &str, bytes: usize) {
 // Query Oxigraph for ScriptNode definitions
 // ---------------------------------------------------------------------------
 
+/// The graph pattern that enumerates `antenna:ScriptNode` definitions. Wrapped
+/// either against the whole store (default graph) or scoped to the trusted
+/// graph, depending on the `peer-scripting` feature — see [`script_nodes_query`].
+const SCRIPT_NODES_PATTERN: &str = "\
+        ?node a antenna:ScriptNode ;\n\
+              antenna:scriptSource ?src .\n\
+        ?src antenna:body ?body .\n\
+        OPTIONAL { ?src antenna:language ?language }\n\
+        OPTIONAL { ?node antenna:in ?in }\n\
+        OPTIONAL { ?node antenna:out ?out }\n\
+        OPTIONAL { ?node antenna:where ?where }";
+
+/// Build the SPARQL that loads script-node definitions for the DAG.
+///
+/// The selected variables and the body pattern are identical in both builds;
+/// only the *graph scope* differs:
+///
+/// * **`peer-scripting` on** (default — CLI, WS, `cargo test`): reads the
+///   default graph store-wide, which holds the bundled pipeline *and* any
+///   peer/raw Turtle inserted via `insert_turtle`. This is today's behaviour
+///   and the seam a future peer-/P2P-delivered scripting path plugs into.
+/// * **`peer-scripting` off** (iOS store build): reads **only** the reserved
+///   trusted graph `<urn:resonator:trusted-pipeline>`, populated solely by
+///   `replace_pipeline` from the reviewed bundle. A peer-injected
+///   `antenna:ScriptNode` (default graph) can never be sourced as a script
+///   body — the bundle-only guarantee is compiled in, not incidental. CMP-001.
+fn script_nodes_query() -> String {
+    #[cfg(feature = "peer-scripting")]
+    {
+        format!(
+            "PREFIX antenna: <{ANTENNA_NS}>\n\
+             SELECT ?node ?body ?language ?in ?out ?where WHERE {{\n{SCRIPT_NODES_PATTERN}\n}}"
+        )
+    }
+    #[cfg(not(feature = "peer-scripting"))]
+    {
+        format!(
+            "PREFIX antenna: <{ANTENNA_NS}>\n\
+             SELECT ?node ?body ?language ?in ?out ?where WHERE {{\n\
+               GRAPH <{graph}> {{\n{SCRIPT_NODES_PATTERN}\n}}\n}}",
+            graph = crate::TRUSTED_PIPELINE_GRAPH,
+        )
+    }
+}
+
 fn query_script_nodes(store: &RdfStore) -> Result<Vec<ScriptNodeDef>> {
-    let sparql = r#"
-        PREFIX antenna: <http://resonator.network/v2/antenna#>
-        SELECT ?node ?body ?language ?in ?out ?where WHERE {
-            ?node a antenna:ScriptNode ;
-                  antenna:scriptSource ?src .
-            ?src antenna:body ?body .
-            OPTIONAL { ?src antenna:language ?language }
-            OPTIONAL { ?node antenna:in ?in }
-            OPTIONAL { ?node antenna:out ?out }
-            OPTIONAL { ?node antenna:where ?where }
-        }
-    "#;
+    let sparql = script_nodes_query();
 
     let start = std::time::Instant::now();
-    let results = store.query(sparql)?;
+    let results = store.query(&sparql)?;
     let mut node_map: HashMap<String, ScriptNodeDef> = HashMap::new();
 
     if let QueryResults::Solutions(solutions) = results {
@@ -861,6 +895,173 @@ mod tests {
             captured,
             vec![(Level::DEBUG, "SCRIPT".to_string())],
             "non-clock channel inbox recv must remain at DEBUG",
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // CMP-001: bundle-only scripting gate (`peer-scripting` feature)
+    //
+    // These tests pin the invariant from the CMP-001 backlog item: with
+    // `peer-scripting` off (the iOS store build) a peer-injected
+    // `antenna:ScriptNode` can never become an executing DAG node. The
+    // assertions are split by `#[cfg]` so every case is meaningful in BOTH
+    // build configurations:
+    //   * `cargo test`                              → peer-scripting ON  (store-wide)
+    //   * `cargo test --no-default-features --features ffi-embed`
+    //                                               → peer-scripting OFF (trusted-graph only)
+    // CI must run both to exercise the gate.
+    // -----------------------------------------------------------------------
+    use crate::store::RdfStore;
+
+    /// A peer-authored ScriptNode whose body would `emit()` a tell-tale triple
+    /// if it ever ran. Stands in for hostile RDF arriving over the wire — the
+    /// peer/raw ingest path `insert_turtle`'s it into the **default** graph.
+    const PEER_SCRIPT_TTL: &str = r#"
+        @prefix antenna: <http://resonator.network/v2/antenna#> .
+        <urn:peer:src> a antenna:ScriptSource ;
+            antenna:language "javascript" ;
+            antenna:body "emit('<urn:pwned:by-peer> a <urn:Exploit> .');" .
+        <urn:peer:node> a antenna:ScriptNode ;
+            antenna:scriptSource <urn:peer:src> ;
+            antenna:in antenna:beforeInsert ;
+            antenna:out antenna:mainOut .
+    "#;
+
+    /// A reviewed, bundle-shipped node, loaded the production way via
+    /// `replace_pipeline` (which writes both the default and trusted graphs).
+    const BUNDLE_SCRIPT_TTL: &str = r#"
+        @prefix antenna: <http://resonator.network/v2/antenna#> .
+        <urn:bundle:src> a antenna:ScriptSource ;
+            antenna:language "javascript" ;
+            antenna:body "emit('<urn:bundle:ok> a <urn:Ok> .');" .
+        <urn:bundle:node> a antenna:ScriptNode ;
+            antenna:scriptSource <urn:bundle:src> ;
+            antenna:in antenna:beforeInsert ;
+            antenna:out antenna:mainOut .
+    "#;
+
+    /// A peer ScriptNode in the **default** graph must be invisible to the
+    /// gated build's loader and visible to the default build's loader.
+    #[test]
+    fn query_script_nodes_respects_peer_scripting_gate() {
+        let store = RdfStore::open(None).unwrap();
+        store.insert_turtle(PEER_SCRIPT_TTL).unwrap();
+
+        let nodes = query_script_nodes(&store).unwrap();
+
+        #[cfg(not(feature = "peer-scripting"))]
+        assert!(
+            nodes.is_empty(),
+            "iOS build (peer-scripting off) must never source a ScriptNode \
+             from the default graph — only <{}> is trusted",
+            crate::TRUSTED_PIPELINE_GRAPH,
+        );
+
+        #[cfg(feature = "peer-scripting")]
+        assert_eq!(
+            nodes.len(),
+            1,
+            "default build reads script nodes store-wide (the future P2P path)",
+        );
+    }
+
+    /// Mirror image: a node in the **trusted** graph is the gated build's only
+    /// source; the default build (which reads the default graph) ignores it.
+    /// Confirms the two graph scopes are genuinely distinct.
+    #[test]
+    fn query_script_nodes_trusted_graph_visibility() {
+        let store = RdfStore::open(None).unwrap();
+        store
+            .insert_turtle_to_graph(PEER_SCRIPT_TTL, crate::TRUSTED_PIPELINE_GRAPH)
+            .unwrap();
+
+        let nodes = query_script_nodes(&store).unwrap();
+
+        #[cfg(not(feature = "peer-scripting"))]
+        assert_eq!(
+            nodes.len(),
+            1,
+            "gated build sources script bodies from the trusted graph",
+        );
+
+        #[cfg(feature = "peer-scripting")]
+        assert!(
+            nodes.is_empty(),
+            "default build reads the default graph, not the trusted mirror",
+        );
+    }
+
+    /// Production shape: the bundle goes through `replace_pipeline` (default +
+    /// trusted graphs), then a peer injects a hostile node into the default
+    /// graph. The reviewed bundle node must always load; the peer node loads
+    /// only where store-wide reads are enabled.
+    #[test]
+    fn replace_pipeline_loads_bundle_and_gates_peer_node() {
+        let store = RdfStore::open(None).unwrap();
+        crate::replace_pipeline(&store, BUNDLE_SCRIPT_TTL).unwrap();
+        store.insert_turtle(PEER_SCRIPT_TTL).unwrap();
+
+        let nodes = query_script_nodes(&store).unwrap();
+
+        assert!(
+            nodes.iter().any(|n| n.uri == "urn:bundle:node"),
+            "the reviewed bundle node must always load via replace_pipeline",
+        );
+
+        let peer_present = nodes.iter().any(|n| n.uri == "urn:peer:node");
+        #[cfg(not(feature = "peer-scripting"))]
+        assert!(
+            !peer_present,
+            "gated build must not load the peer node from the default graph",
+        );
+        #[cfg(feature = "peer-scripting")]
+        assert!(
+            peer_present,
+            "default build reads store-wide so the peer node is also loaded",
+        );
+    }
+
+    /// End-to-end proof of the CMP-001 invariant: build the DAG straight from a
+    /// store a peer has written into (the latent hole — no `replace_pipeline`),
+    /// fire the channel the peer node subscribed to, and watch the emit stream.
+    ///
+    /// The default build emits the tell-tale (proving the harness actually
+    /// detects script execution); the gated build must emit nothing — the peer
+    /// node is never even loaded, so it never runs.
+    #[test]
+    fn peer_script_node_executes_only_with_peer_scripting() {
+        use std::time::{Duration, Instant};
+
+        let store = RdfStore::open(None).unwrap();
+        store.insert_turtle(PEER_SCRIPT_TTL).unwrap();
+        let dag = Dag::load(&store).unwrap();
+
+        // Fire the channel the peer node declared as its input.
+        dag.before_insert("trigger");
+
+        // Drain emits for up to 400ms, breaking the moment the tell-tale shows.
+        let deadline = Instant::now() + Duration::from_millis(400);
+        let mut emitted: Vec<String> = Vec::new();
+        while Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+            emitted.extend(dag.pump_emits());
+            if emitted.iter().any(|t| t.contains("urn:pwned:by-peer")) {
+                break;
+            }
+        }
+        let pwned = emitted.iter().any(|t| t.contains("urn:pwned:by-peer"));
+
+        #[cfg(feature = "peer-scripting")]
+        assert!(
+            pwned,
+            "default build reads store-wide: the peer node loads and emits \
+             (also proves this test can observe script execution)",
+        );
+        #[cfg(not(feature = "peer-scripting"))]
+        assert!(
+            !pwned,
+            "gated build: a peer-injected ScriptNode in the default graph must \
+             NEVER execute — CMP-001 bundle-only invariant",
         );
     }
 }

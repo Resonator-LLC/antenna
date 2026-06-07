@@ -121,6 +121,14 @@ pub struct ContactRestoredData {
     /// wire as `carrier:displayName ""` so the field is structurally
     /// present on every ContactRestored statement.
     pub display_name: [u8; CARRIER_NAME_LEN],
+    /// CMP-002 — `true` when this restored contact is libjami-banned (the
+    /// user blocked them in a prior session). libjami persists the ban on
+    /// disk + syncs it across linked devices, so the AccountReady replay is
+    /// the durable source of truth for the block across restarts. Serialized
+    /// as `carrier:blocked "true"|"false"` so the pipeline re-hydrates its
+    /// render gate / blocklist graph from the daemon ban. Matches the C
+    /// `bool blocked;` field — written as exactly 0/1 by the shim.
+    pub blocked: bool,
 }
 
 #[repr(C)]
@@ -401,6 +409,16 @@ extern "C" {
         contact_uri: *const c_char,
     ) -> c_int;
     fn carrier_remove_contact(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        contact_uri: *const c_char,
+    ) -> c_int;
+    fn carrier_block_peer(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        contact_uri: *const c_char,
+    ) -> c_int;
+    fn carrier_unblock_peer(
         c: *mut Carrier,
         account_id: *const c_char,
         contact_uri: *const c_char,
@@ -783,13 +801,17 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
             }
             CarrierEventType::ContactRestored => {
                 // displayName is always emitted, empty-string included —
-                // see the C-side turtle_emit.c contract.
+                // see the C-side turtle_emit.c contract. carrier:blocked is
+                // likewise always present (CMP-002): "true" re-hydrates the
+                // pipeline's render gate + blocklist graph from libjami's
+                // durable ban, "false" is the common case.
                 let d = ev.data.contact_restored;
                 format!(
-                    "{} ; carrier:contactUri \"{}\" ; carrier:displayName \"{}\"{} .",
+                    "{} ; carrier:contactUri \"{}\" ; carrier:displayName \"{}\" ; carrier:blocked \"{}\"{} .",
                     header("ContactRestored", &ev.account_id),
                     turtle_escape(cstr_from_buf(&d.contact_uri)),
                     turtle_escape(cstr_from_buf(&d.display_name)),
+                    if d.blocked { "true" } else { "false" },
                     ts
                 )
             }
@@ -1303,6 +1325,30 @@ impl CarrierClient {
         Ok(())
     }
 
+    /// Block a peer by keypair identity (content moderation — CMP-002): libjami
+    /// ban + carrier-side drop of the peer's group/file commits.
+    pub fn block_peer(&self, account_id: &str, contact_uri: &str) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let uri_c = CString::new(contact_uri)?;
+        let rc = unsafe { carrier_block_peer(self.ptr, id_c.as_ptr(), uri_c.as_ptr()) };
+        if rc < 0 {
+            bail!("carrier_block_peer failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    /// Reverse [`block_peer`](Self::block_peer): lift the libjami ban and clear
+    /// the carrier-side block set.
+    pub fn unblock_peer(&self, account_id: &str, contact_uri: &str) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let uri_c = CString::new(contact_uri)?;
+        let rc = unsafe { carrier_unblock_peer(self.ptr, id_c.as_ptr(), uri_c.as_ptr()) };
+        if rc < 0 {
+            bail!("carrier_unblock_peer failed: {}", rc);
+        }
+        Ok(())
+    }
+
     pub fn send_message(&self, account_id: &str, contact_uri: &str, text: &str) -> Result<()> {
         let id_c = CString::new(account_id)?;
         let uri_c = CString::new(contact_uri)?;
@@ -1728,7 +1774,42 @@ mod tests {
             "line={line:?}"
         );
         assert!(line.contains("carrier:displayName \"bob\""), "line={line:?}");
+        // CMP-002 — blocked is structurally present; an un-banned restore is
+        // "false".
+        assert!(
+            line.contains("carrier:blocked \"false\""),
+            "an un-banned restored contact must serialize carrier:blocked \"false\", got: {line:?}"
+        );
         assert!(line.ends_with(" ."), "line={line:?}");
+    }
+
+    #[test]
+    fn contact_restored_banned_serializes_blocked_true() {
+        // CMP-002 — a libjami-banned contact (the user blocked them in a prior
+        // session) is replayed at AccountReady with blocked=true so the
+        // pipeline re-hydrates its render gate + blocklist graph from the
+        // daemon's durable ban rather than from wiped in-memory state.
+        let mut ev = zeroed_event(CarrierEventType::ContactRestored);
+        ev.timestamp = 1_748_000_000_000;
+        copy_into(&mut ev.account_id, "c314a87070bc4c74");
+        // SAFETY: contact_restored is the active union variant.
+        unsafe {
+            copy_into(
+                &mut ev.data.contact_restored.contact_uri,
+                "4748d985a10c8e84990f592a0ec0232efb733293",
+            );
+            ev.data.contact_restored.blocked = true;
+        }
+
+        let line = event_to_turtle(&ev).expect("ContactRestored should format");
+        assert!(
+            line.contains("carrier:blocked \"true\""),
+            "a banned restored contact must serialize carrier:blocked \"true\", got: {line:?}"
+        );
+        assert!(
+            line.matches("carrier:blocked").count() == 1,
+            "blocked must appear exactly once, got: {line:?}"
+        );
     }
 
     #[test]

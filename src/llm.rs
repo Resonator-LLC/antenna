@@ -402,91 +402,101 @@ fn simple_id() -> String {
 mod tests {
     use super::*;
 
-    // -- json_escape --
+    // JSON helpers (json_escape / parse_json_string / extract_json_field /
+    // extract_nested_content) only exist under the `llm-http` feature, so their
+    // tests must be gated too — otherwise the embedded build
+    // (`--no-default-features --features ffi-embed`, the iOS posture from
+    // CMP-001) fails to compile its test binary on these now-absent symbols.
+    #[cfg(feature = "llm-http")]
+    mod json_helpers {
+        use super::*;
 
-    #[test]
-    fn json_escape_simple() {
-        assert_eq!(json_escape("hello"), "\"hello\"");
-    }
+        // -- json_escape --
 
-    #[test]
-    fn json_escape_quotes_and_backslash() {
-        assert_eq!(json_escape("say \"hi\""), "\"say \\\"hi\\\"\"");
-        assert_eq!(json_escape("a\\b"), "\"a\\\\b\"");
-    }
+        #[test]
+        fn json_escape_simple() {
+            assert_eq!(json_escape("hello"), "\"hello\"");
+        }
 
-    #[test]
-    fn json_escape_newlines_tabs() {
-        assert_eq!(json_escape("a\nb\tc"), "\"a\\nb\\tc\"");
-    }
+        #[test]
+        fn json_escape_quotes_and_backslash() {
+            assert_eq!(json_escape("say \"hi\""), "\"say \\\"hi\\\"\"");
+            assert_eq!(json_escape("a\\b"), "\"a\\\\b\"");
+        }
 
-    #[test]
-    fn json_escape_control_chars() {
-        assert_eq!(json_escape("\x01"), "\"\\u0001\"");
-    }
+        #[test]
+        fn json_escape_newlines_tabs() {
+            assert_eq!(json_escape("a\nb\tc"), "\"a\\nb\\tc\"");
+        }
 
-    // -- parse_json_string --
+        #[test]
+        fn json_escape_control_chars() {
+            assert_eq!(json_escape("\x01"), "\"\\u0001\"");
+        }
 
-    #[test]
-    fn parse_json_string_basic() {
-        assert_eq!(parse_json_string("\"hello\"").unwrap(), "hello");
-    }
+        // -- parse_json_string --
 
-    #[test]
-    fn parse_json_string_escapes() {
-        assert_eq!(parse_json_string(r#""a\"b\\c\n""#).unwrap(), "a\"b\\c\n");
-    }
+        #[test]
+        fn parse_json_string_basic() {
+            assert_eq!(parse_json_string("\"hello\"").unwrap(), "hello");
+        }
 
-    #[test]
-    fn parse_json_string_unicode_escape() {
-        assert_eq!(parse_json_string(r#""\u0041""#).unwrap(), "A");
-    }
+        #[test]
+        fn parse_json_string_escapes() {
+            assert_eq!(parse_json_string(r#""a\"b\\c\n""#).unwrap(), "a\"b\\c\n");
+        }
 
-    #[test]
-    fn parse_json_string_unterminated() {
-        assert!(parse_json_string("\"hello").is_err());
-    }
+        #[test]
+        fn parse_json_string_unicode_escape() {
+            assert_eq!(parse_json_string(r#""\u0041""#).unwrap(), "A");
+        }
 
-    #[test]
-    fn parse_json_string_not_a_string() {
-        assert!(parse_json_string("42").is_err());
-    }
+        #[test]
+        fn parse_json_string_unterminated() {
+            assert!(parse_json_string("\"hello").is_err());
+        }
 
-    // -- extract_json_field --
+        #[test]
+        fn parse_json_string_not_a_string() {
+            assert!(parse_json_string("42").is_err());
+        }
 
-    #[test]
-    fn extract_json_field_basic() {
-        let json = r#"{"response":"hello world","done":true}"#;
-        assert_eq!(extract_json_field(json, "response").unwrap(), "hello world");
-    }
+        // -- extract_json_field --
 
-    #[test]
-    fn extract_json_field_with_escapes() {
-        let json = r#"{"response":"line1\nline2"}"#;
-        assert_eq!(
-            extract_json_field(json, "response").unwrap(),
-            "line1\nline2"
-        );
-    }
+        #[test]
+        fn extract_json_field_basic() {
+            let json = r#"{"response":"hello world","done":true}"#;
+            assert_eq!(extract_json_field(json, "response").unwrap(), "hello world");
+        }
 
-    #[test]
-    fn extract_json_field_missing() {
-        let json = r#"{"other":"val"}"#;
-        assert!(extract_json_field(json, "response").is_err());
-    }
+        #[test]
+        fn extract_json_field_with_escapes() {
+            let json = r#"{"response":"line1\nline2"}"#;
+            assert_eq!(
+                extract_json_field(json, "response").unwrap(),
+                "line1\nline2"
+            );
+        }
 
-    #[test]
-    fn extract_json_field_not_string() {
-        let json = r#"{"count":42}"#;
-        assert!(extract_json_field(json, "count").is_err());
-    }
+        #[test]
+        fn extract_json_field_missing() {
+            let json = r#"{"other":"val"}"#;
+            assert!(extract_json_field(json, "response").is_err());
+        }
 
-    // -- extract_nested_content --
+        #[test]
+        fn extract_json_field_not_string() {
+            let json = r#"{"count":42}"#;
+            assert!(extract_json_field(json, "count").is_err());
+        }
 
-    #[test]
-    fn extract_nested_content_openai() {
-        let json = r#"{"choices":[{"message":{"content":"hello"}}]}"#;
-        assert_eq!(extract_nested_content(json).unwrap(), "hello");
+        // -- extract_nested_content --
+
+        #[test]
+        fn extract_nested_content_openai() {
+            let json = r#"{"choices":[{"message":{"content":"hello"}}]}"#;
+            assert_eq!(extract_nested_content(json).unwrap(), "hello");
+        }
     }
 
     // -- extract_turtle_completion --

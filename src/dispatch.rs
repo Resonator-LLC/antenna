@@ -443,6 +443,37 @@ fn handle_carrier(
                 carrier_error(out, "RemoveContact", &e);
             }
         }
+        // Content moderation (CMP-002). The peer's identity is also persisted
+        // to the `urn:resonator:blocklist` named graph by the radio pipeline
+        // (via sp:InsertData) so the render filter survives restarts; here we
+        // additionally ban at the network layer so the daemon stops
+        // acknowledging the blocked identity (Jami parity).
+        "BlockContact" => {
+            let account = account_or_default(line, default_account);
+            let uri = match extract_property(line, "carrier:contactUri") {
+                Some(u) => u,
+                None => {
+                    missing_field(out, "BlockContact", "carrier:contactUri");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.block_peer(&account, &uri) {
+                carrier_error(out, "BlockContact", &e);
+            }
+        }
+        "UnblockContact" => {
+            let account = account_or_default(line, default_account);
+            let uri = match extract_property(line, "carrier:contactUri") {
+                Some(u) => u,
+                None => {
+                    missing_field(out, "UnblockContact", "carrier:contactUri");
+                    return;
+                }
+            };
+            if let Err(e) = carrier.unblock_peer(&account, &uri) {
+                carrier_error(out, "UnblockContact", &e);
+            }
+        }
         "SendMsg" => {
             let account = account_or_default(line, default_account);
             let uri = match extract_property(line, "carrier:contactUri") {
@@ -1250,7 +1281,9 @@ mod tests {
         ] {
             let ttl = std::fs::read_to_string(workspace_root().join(path))
                 .expect("read theme file");
-            store.insert_turtle(&ttl).expect("insert theme");
+            store
+                .insert_turtle_to_graph(&ttl, crate::theme::THEME_GRAPH)
+                .expect("insert theme into theme graph");
         }
         crate::theme::load_resolver(
             &store,
@@ -1278,7 +1311,9 @@ mod tests {
                 workspace_root().join(format!("themes/{dir}/{dir}.ttl")),
             )
             .expect("read terminal theme");
-            store.insert_turtle(&ttl).expect("insert terminal theme");
+            store
+                .insert_turtle_to_graph(&ttl, crate::theme::THEME_GRAPH)
+                .expect("insert terminal theme into theme graph");
         }
         store
     }
