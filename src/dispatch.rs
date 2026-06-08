@@ -65,8 +65,57 @@ pub fn dispatch(
         }
     } else if rdf_type.starts_with(DESIGN_NS) {
         handle_design(&rdf_type, store, out);
+    } else if rdf_type == format!("{ANTENNA_NS}SubscribeBlocklist") {
+        // CMP-024 — verify the developer signature on a subscribed blocklist
+        // and re-emit each verified entry as antenna:BlocklistApply for the
+        // radio pipeline to apply through its existing block path. Verification
+        // happens here (the QuickJS pipeline has no crypto); nothing is applied
+        // unless the Ed25519 signature checks out against the pinned key.
+        handle_subscribe_blocklist(line, store, dag, out);
     } else {
         insert_with_dag(line, store, dag, out);
+    }
+}
+
+/// CMP-024 — handle an `antenna:SubscribeBlocklist` emit. Extracts the base64
+/// payload + detached signature, verifies against the pinned developer key,
+/// and on success feeds each entry back to the script DAG as
+/// `antenna:BlocklistApply ; antenna:contactUri "<uri>"`. A verification
+/// failure feeds back a single `antenna:BlocklistRejected ; antenna:reason`
+/// so the pipeline can surface the rejection instead of applying anything.
+fn handle_subscribe_blocklist(line: &str, store: &RdfStore, dag: &Dag, out: &mut dyn AntennaOut) {
+    let payload = extract_property(line, "antenna:blocklistPayload");
+    let sig = extract_property(line, "antenna:blocklistSig");
+    let (payload, sig) = match (payload, sig) {
+        (Some(p), Some(s)) => (p, s),
+        _ => {
+            missing_field(out, "SubscribeBlocklist", "antenna:blocklistPayload/Sig");
+            return;
+        }
+    };
+    match crate::blocklist::verify_signed_blocklist(
+        &payload,
+        &sig,
+        &crate::blocklist::DEV_BLOCKLIST_PUBKEY,
+    ) {
+        Ok(entries) => {
+            tracing::info!(target: "MODERATION", count = entries.len(), "blocklist verified");
+            for uri in entries {
+                // The payload is developer-signed, but defend the Turtle
+                // literal anyway: a URI can't carry a quote/backslash that
+                // would break the re-emit.
+                let safe: String = uri.chars().filter(|c| *c != '"' && *c != '\\').collect();
+                let apply =
+                    format!("[] a antenna:BlocklistApply ; antenna:contactUri \"{safe}\" .");
+                insert_with_dag(&apply, store, dag, out);
+            }
+        }
+        Err(e) => {
+            tracing::warn!(target: "MODERATION", error = %e, "blocklist rejected");
+            let reason: String = e.to_string().chars().filter(|c| *c != '"' && *c != '\\').collect();
+            let rej = format!("[] a antenna:BlocklistRejected ; antenna:reason \"{reason}\" .");
+            insert_with_dag(&rej, store, dag, out);
+        }
     }
 }
 

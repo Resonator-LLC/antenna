@@ -51,6 +51,11 @@ oxigraph = "0.5"
 clap = { version = "4", features = ["derive"], optional = true }
 anyhow = "1"
 libc = "0.2"
+# CMP-024 — verify the Ed25519 signature on the developer-maintained
+# subscribable blocklist before applying any entry. Pure-Rust, audited; keeps
+# the verify self-contained in antenna (no carrier FFI / submodule churn).
+ed25519-dalek = "2"
+base64 = "0.22"
 tungstenite = { version = "0.24", optional = true }
 ureq = { version = "2", optional = true }
 tracing = "0.1"
@@ -61,6 +66,10 @@ cc = "1"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+# CMP-024 — the blocklist integration test signs a sample list with the dev
+# seed so it exercises the real verify path through dispatch.
+ed25519-dalek = "2"
+base64 = "0.22"
 
 [[bench]]
 name = "dispatch_bench"

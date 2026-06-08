@@ -10,6 +10,7 @@
 //! Transports are trait-based (`AntennaIn`/`AntennaOut`): stdin/stdout pipes,
 //! WebSocket, or lock-free ring buffer channels for FFI embedding.
 
+pub mod blocklist;
 pub mod carrier;
 pub mod channel;
 pub mod dag;

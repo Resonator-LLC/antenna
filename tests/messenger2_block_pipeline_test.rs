@@ -482,3 +482,237 @@ fn eula_gate_blocks_account_creation_until_accepted() {
         post.join("\n  "),
     );
 }
+
+// ---------------------------------------------------------------------------
+// CMP-022 — in-app report mechanism
+// ---------------------------------------------------------------------------
+
+#[test]
+fn reporting_a_contact_composes_an_evidence_bundle_and_offers_block() {
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+
+    // A peer comes online and sends an objectionable message.
+    dispatch::dispatch(&contact_online_event(PEER_URI), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 30);
+    dispatch::dispatch(
+        &text_message_event(PEER_URI, "conv-1", "HELLO_OBJECTIONABLE_PAYLOAD"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    // Tap Report on the peer's vCard.
+    dispatch::dispatch(
+        &tap_event(&format!("urn:msg2:report:{PEER_URI}")),
+        &store, &dag, None, "", &mut out,
+    );
+    let emits = settle_collect_emits(&dag, &store, &mut out, 30);
+
+    // The report routes out-of-band: a mailto: to the published support
+    // contact carrying the evidence bundle (sender identity + the offending
+    // inbound message). encodeURIComponent leaves the hex URI + the
+    // alnum/underscore message text literal, so we can match them directly.
+    let mailto = emits
+        .iter()
+        .find(|e| e.contains("urn:msg:OpenExternal") && e.contains("mailto:"))
+        .unwrap_or_else(|| panic!("Report must emit an OpenExternal mailto; emits:\n  {}", emits.join("\n  ")));
+    assert!(
+        mailto.contains("mailto:support@resonator.network"),
+        "report must be addressed to the published support contact; got:\n{mailto}",
+    );
+    assert!(
+        mailto.contains(PEER_URI),
+        "evidence bundle must carry the sender's keypair identity; got:\n{mailto}",
+    );
+    assert!(
+        mailto.contains("HELLO_OBJECTIONABLE_PAYLOAD"),
+        "evidence bundle must carry the offending inbound message; got:\n{mailto}",
+    );
+
+    // The reporter gets a confirmation and is offered Block in the same flow.
+    let vcard = vcard_widget(&store, PEER_URI).expect("reported contact vCard");
+    assert!(
+        vcard.contains("Report composed"),
+        "vCard must confirm the report was composed; got:\n{vcard}",
+    );
+    assert!(
+        vcard.contains(&format!("urn:msg2:block:{PEER_URI}")),
+        "the report-confirmation flow must still offer Block; got:\n{vcard}",
+    );
+}
+
+// ---------------------------------------------------------------------------
+// CMP-024 — default subscribable signed blocklist
+// ---------------------------------------------------------------------------
+
+/// Dev signing seed; its public key is pinned as `DEV_BLOCKLIST_PUBKEY` in
+/// `antenna::blocklist`. Dev-only — the real key's secret never enters the repo.
+const DEV_SEED: [u8; 32] = [0x42u8; 32];
+
+/// Sign `payload` with the dev key, returning `(payload_b64, sig_b64)` — the
+/// exact pair Station would fetch and hand to antenna.
+fn sign_blocklist(payload: &str) -> (String, String) {
+    use base64::Engine;
+    use ed25519_dalek::{Signer, SigningKey};
+    let key = SigningKey::from_bytes(&DEV_SEED);
+    let sig = key.sign(payload.as_bytes());
+    let engine = base64::engine::general_purpose::STANDARD;
+    (engine.encode(payload.as_bytes()), engine.encode(sig.to_bytes()))
+}
+
+fn subscribe_event(payload_b64: &str, sig_b64: &str) -> String {
+    format!(
+        "[] a antenna:SubscribeBlocklist ; \
+         antenna:blocklistPayload \"{payload_b64}\" ; \
+         antenna:blocklistSig \"{sig_b64}\" ."
+    )
+}
+
+fn peer_in_blocklist_graph(store: &RdfStore) -> bool {
+    ask(
+        store,
+        &format!(
+            "ASK {{ GRAPH <{BLOCKLIST_GRAPH}> {{ \
+             <urn:resonator:blocked:{PEER_URI}> a <urn:resonator:BlockedPeer> }} }}"
+        ),
+    )
+}
+
+#[test]
+fn subscribed_blocklist_applies_through_the_same_gate() {
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+
+    // The peer is a live contact whose messages render.
+    dispatch::dispatch(&contact_online_event(PEER_URI), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 30);
+    dispatch::dispatch(
+        &text_message_event(PEER_URI, "conv-1", "BEFORE_SUBSCRIPTION"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+    assert!(inbox_widget(&store).contains("BEFORE_SUBSCRIPTION"), "pre-subscription message renders");
+
+    // A developer-signed list naming the peer is applied (antenna verifies the
+    // signature, re-emits BlocklistApply, the pipeline blocks via the same path).
+    let (p, s) = sign_blocklist(&format!("# resonator default blocklist\n{PEER_URI}\n"));
+    dispatch::dispatch(&subscribe_event(&p, &s), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 40);
+
+    // Same enforcement path as a manual block: blocklist graph + render gate.
+    assert!(peer_in_blocklist_graph(&store), "subscription must persist via the blocklist graph");
+    let vcard = vcard_widget(&store, PEER_URI).expect("vCard");
+    assert!(vcard.contains("You blocked this contact"), "subscribed entry blocks the vCard; got:\n{vcard}");
+
+    // A later message from the now-blocked peer is dropped.
+    dispatch::dispatch(
+        &text_message_event(PEER_URI, "conv-1", "AFTER_SUBSCRIPTION"),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+    assert!(
+        !inbox_widget(&store).contains("AFTER_SUBSCRIPTION"),
+        "a subscription-blocked peer's later message must never render",
+    );
+
+    // Transparency: the self card labels subscription entries.
+    let self_card = vcard_widget(&store, "urn:msg2:saved").expect("self card");
+    assert!(
+        self_card.contains("(subscription)"),
+        "the self card must mark subscription-applied entries; got:\n{self_card}",
+    );
+}
+
+#[test]
+fn subscribed_blocklist_override_is_sticky() {
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch(&contact_online_event(PEER_URI), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 30);
+
+    let (p, s) = sign_blocklist(&format!("{PEER_URI}\n"));
+    dispatch::dispatch(&subscribe_event(&p, &s), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 40);
+    assert!(peer_in_blocklist_graph(&store), "subscription applied");
+
+    // The user overrides locally by unblocking the subscribed entry.
+    dispatch::dispatch(
+        &tap_event(&format!("urn:msg2:unblock:{PEER_URI}")),
+        &store, &dag, None, "", &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+    assert!(!peer_in_blocklist_graph(&store), "override must lift the block locally");
+
+    // Re-applying the same signed list must NOT re-block the overridden entry.
+    dispatch::dispatch(&subscribe_event(&p, &s), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 40);
+    assert!(
+        !peer_in_blocklist_graph(&store),
+        "a re-subscribe must respect the local override and not re-apply the entry",
+    );
+}
+
+#[test]
+fn tampered_blocklist_is_rejected_not_applied() {
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch(&contact_online_event(PEER_URI), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 30);
+
+    // Sign one list, then ship a DIFFERENT payload under that signature.
+    let (_p, s) = sign_blocklist(&format!("{PEER_URI}\n"));
+    let tampered = {
+        use base64::Engine;
+        base64::engine::general_purpose::STANDARD.encode(b"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n")
+    };
+    dispatch::dispatch(&subscribe_event(&tampered, &s), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 40);
+
+    assert!(
+        !peer_in_blocklist_graph(&store),
+        "a tampered list must apply NOTHING",
+    );
+    let self_card = vcard_widget(&store, "urn:msg2:saved").expect("self card");
+    assert!(
+        self_card.contains("Blocklist rejected"),
+        "a rejected list must surface a notice, not silently apply; got:\n{self_card}",
+    );
+}
+
+// ---------------------------------------------------------------------------
+// CMP-002 remainder — safe-mode toggle
+// ---------------------------------------------------------------------------
+
+#[test]
+fn safe_mode_defaults_on_and_toggles_with_persistence() {
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+
+    // Trigger init + render of the self card.
+    dispatch::dispatch(&contact_online_event(PEER_URI), &store, &dag, None, "", &mut out);
+    settle(&dag, &store, &mut out, 30);
+
+    let self_card = vcard_widget(&store, "urn:msg2:saved").expect("self card");
+    assert!(
+        self_card.contains("Safe mode (hide images)"),
+        "self card must surface the safe-mode toggle; got:\n{self_card}",
+    );
+    assert!(
+        self_card.contains("urn:msg2:safemode:toggle"),
+        "safe-mode toggle must be tappable; got:\n{self_card}",
+    );
+
+    // Toggling OFF must persist the preference as the SafeModeOff marker.
+    dispatch::dispatch(
+        &tap_event("urn:msg2:safemode:toggle"),
+        &store, &dag, None, "", &mut out,
+    );
+    let emits = settle_collect_emits(&dag, &store, &mut out, 30);
+    assert!(
+        emits.iter().any(|e| e.contains("SafeModeOff")),
+        "toggling safe mode off must persist a SafeModeOff marker; emits:\n  {}",
+        emits.join("\n  "),
+    );
+}
