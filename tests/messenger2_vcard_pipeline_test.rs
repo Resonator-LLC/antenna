@@ -492,9 +492,10 @@ fn create_account_tap_emits_carrier_event() {
     );
     settle(&dag, &store, &mut out, 30);
 
-    // CMP-002 — accept the Terms; CREATE is gated on it.
+    // CMP-002 — accept the Terms (the conversational "I agree" turn); the
+    // connect action is gated on it.
     dispatch::dispatch(
-        &tap_event("urn:msg2:onboarding:eula-toggle"),
+        &tap_event("urn:msg2:onboarding:agree"),
         &store,
         &dag,
         None,
@@ -503,11 +504,11 @@ fn create_account_tap_emits_carrier_event() {
     );
     settle(&dag, &store, &mut out, 30);
 
-    // Tap CREATE. Capture every emit drained while the script processes
+    // Tap connect. Capture every emit drained while the script processes
     // the tap — the carrier:CreateAccount Turtle would otherwise be
     // routed into a `carrier=None` warn-skip and lost.
     dispatch::dispatch(
-        &tap_event("urn:msg2:onboarding:create"),
+        &tap_event("urn:msg2:onboarding:connect"),
         &store,
         &dag,
         None,
@@ -645,9 +646,10 @@ fn import_account_tap_emits_carrier_event() {
     );
     settle(&dag, &store, &mut out, 30);
 
-    // CMP-002 — accept the Terms; IMPORT is gated on it.
+    // CMP-002 — accept the Terms (the conversational "I agree" turn); IMPORT
+    // is gated on it.
     dispatch::dispatch(
-        &tap_event("urn:msg2:onboarding:eula-toggle"),
+        &tap_event("urn:msg2:onboarding:agree"),
         &store,
         &dag,
         None,

@@ -453,32 +453,33 @@ fn eula_gate_blocks_account_creation_until_accepted() {
     );
     settle(&dag, &store, &mut out, 30);
 
-    // Tap CREATE without accepting the Terms — no carrier:CreateAccount.
+    // CMP-019 conversational flow: tap the connect action before accepting the
+    // Terms — emitOnboardingCreate()'s EULA guard must refuse to mint.
     dispatch::dispatch(
-        &tap_event("urn:msg2:onboarding:create"),
+        &tap_event("urn:msg2:onboarding:connect"),
         &store, &dag, None, "", &mut out,
     );
     let pre = settle_collect_emits(&dag, &store, &mut out, 30);
     assert!(
         !pre.iter().any(|e| e.contains("carrier:CreateAccount")),
-        "CREATE must not mint an account before the Terms are accepted; emits:\n  {}",
+        "connect must not mint an account before the Terms are accepted; emits:\n  {}",
         pre.join("\n  "),
     );
 
-    // Accept the Terms, then CREATE works.
+    // Accept the Terms (the "I agree" turn), then connect works.
     dispatch::dispatch(
-        &tap_event("urn:msg2:onboarding:eula-toggle"),
+        &tap_event("urn:msg2:onboarding:agree"),
         &store, &dag, None, "", &mut out,
     );
     settle(&dag, &store, &mut out, 30);
     dispatch::dispatch(
-        &tap_event("urn:msg2:onboarding:create"),
+        &tap_event("urn:msg2:onboarding:connect"),
         &store, &dag, None, "", &mut out,
     );
     let post = settle_collect_emits(&dag, &store, &mut out, 30);
     assert!(
         post.iter().any(|e| e.contains("carrier:CreateAccount")),
-        "CREATE must mint an account once the Terms are accepted; emits:\n  {}",
+        "connect must mint an account once the Terms are accepted; emits:\n  {}",
         post.join("\n  "),
     );
 }
