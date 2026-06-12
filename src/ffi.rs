@@ -159,16 +159,11 @@ pub unsafe extern "C" fn antenna_create(
         let pipeline_ttl = unsafe { opt_cstr(pipeline_ttl_or_null) }?;
         let seed_ttl = unsafe { opt_cstr(seed_ttl_or_null) }?;
 
-        let ctx = AntennaContext::new_with_ttl(
-            data_dir,
-            account_id,
-            store_dir,
-            pipeline_ttl,
-            seed_ttl,
-        )
-        .map_err(|e| {
-            tracing::error!(target: "FFI", %e, "antenna_create: context init failed");
-        })?;
+        let ctx =
+            AntennaContext::new_with_ttl(data_dir, account_id, store_dir, pipeline_ttl, seed_ttl)
+                .map_err(|e| {
+                tracing::error!(target: "FFI", %e, "antenna_create: context init failed");
+            })?;
 
         let pair_in = InternalChannel::new(FFI_RING_BYTES).map_err(|e| {
             tracing::error!(target: "FFI", %e, "antenna_create: IN channel alloc failed");
@@ -192,10 +187,7 @@ pub unsafe extern "C" fn antenna_create(
         // so a late `AccountReady` update inside `tick()` is visible to
         // `antenna_account_id` without a sync step.
         let account_handle = ctx.account_id.clone();
-        let account_for_caller = account_handle
-            .lock()
-            .expect("account_id poisoned")
-            .clone();
+        let account_for_caller = account_handle.lock().expect("account_id poisoned").clone();
 
         let worker = thread::Builder::new()
             .name("antenna-ffi-worker".to_string())
@@ -441,11 +433,7 @@ pub unsafe extern "C" fn antenna_account_id(
     let result = catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: caller contract — handle is live.
         let h = unsafe { &*handle };
-        let id = h
-            .account_id
-            .lock()
-            .expect("account_id poisoned")
-            .clone();
+        let id = h.account_id.lock().expect("account_id poisoned").clone();
         let bytes = id.as_bytes();
         let max_copy = bytes.len().min(out_buf_len - 1);
         // SAFETY: out_buf is writable for at least max_copy + 1 bytes.

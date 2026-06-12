@@ -76,7 +76,9 @@ struct CaptureOut {
 
 impl CaptureOut {
     fn new() -> Self {
-        Self { messages: Vec::new() }
+        Self {
+            messages: Vec::new(),
+        }
     }
 }
 
@@ -197,11 +199,32 @@ fn counter_decrement_and_reset_mutate_store() {
     let mut out = CaptureOut::new();
 
     // Two increments, one decrement.
-    dispatch::dispatch(&tap("urn:counter:increment"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &tap("urn:counter:increment"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 20);
-    dispatch::dispatch(&tap("urn:counter:increment"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &tap("urn:counter:increment"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 20);
-    dispatch::dispatch(&tap("urn:counter:decrement"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &tap("urn:counter:decrement"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 20);
 
     let widgets = widget_literals(&store);

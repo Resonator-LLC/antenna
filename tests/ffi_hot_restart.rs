@@ -22,7 +22,13 @@ fn unique_dir(prefix: &str) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let path = format!("{}/{}-{}-{}", std::env::temp_dir().display(), prefix, pid, ts);
+    let path = format!(
+        "{}/{}-{}-{}",
+        std::env::temp_dir().display(),
+        prefix,
+        pid,
+        ts
+    );
     std::fs::create_dir_all(&path).expect("create temp dir");
     path
 }
@@ -49,7 +55,10 @@ fn second_create_rebinds_to_orphaned_handle() {
         )
     };
     assert!(!handle_a.is_null(), "first antenna_create returned NULL");
-    assert!(!out_account_a.is_null(), "first call did not populate out_account_id");
+    assert!(
+        !out_account_a.is_null(),
+        "first call did not populate out_account_id"
+    );
     // SAFETY: out_account_a is a NUL-terminated string we own.
     let account_a = unsafe { CStr::from_ptr(out_account_a) }
         .to_str()
@@ -77,7 +86,10 @@ fn second_create_rebinds_to_orphaned_handle() {
         handle_a, handle_b,
         "second antenna_create should rebind to the orphaned handle (got a different pointer)"
     );
-    assert!(!out_account_b.is_null(), "second call did not populate out_account_id");
+    assert!(
+        !out_account_b.is_null(),
+        "second call did not populate out_account_id"
+    );
     // SAFETY: out_account_b is a NUL-terminated string we own.
     let account_b = unsafe { CStr::from_ptr(out_account_b) }
         .to_str()

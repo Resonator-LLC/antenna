@@ -43,27 +43,33 @@ fn unique_dir(prefix: &str) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let path = format!("{}/{}-{}-{}", std::env::temp_dir().display(), prefix, pid, ts);
+    let path = format!(
+        "{}/{}-{}-{}",
+        std::env::temp_dir().display(),
+        prefix,
+        pid,
+        ts
+    );
     std::fs::create_dir_all(&path).expect("create temp dir");
     path
 }
 
 /// Drive `antenna_drain` until `predicate` finds a match or the timeout
 /// elapses. Returns the matched doc, or panics with the full drained log.
-fn drain_until<F>(handle: *mut AntennaHandle, sink: &Sink, timeout: Duration, predicate: F) -> String
+fn drain_until<F>(
+    handle: *mut AntennaHandle,
+    sink: &Sink,
+    timeout: Duration,
+    predicate: F,
+) -> String
 where
     F: Fn(&str) -> bool,
 {
     let start = Instant::now();
     loop {
         // SAFETY: handle came from antenna_create and is still live.
-        let rc: c_int = unsafe {
-            antenna_drain(
-                handle,
-                Some(collect_cb),
-                sink as *const Sink as *mut c_void,
-            )
-        };
+        let rc: c_int =
+            unsafe { antenna_drain(handle, Some(collect_cb), sink as *const Sink as *mut c_void) };
         assert!(rc >= 0, "antenna_drain returned {rc}");
 
         if let Ok(guard) = sink.lock() {
@@ -112,7 +118,10 @@ fn ffi_create_send_drain_destroy_roundtrip() {
         )
     };
     assert!(!handle.is_null(), "antenna_create returned NULL");
-    assert!(!out_account_id.is_null(), "out_account_id was not populated");
+    assert!(
+        !out_account_id.is_null(),
+        "out_account_id was not populated"
+    );
 
     // SAFETY: out_account_id is a NUL-terminated string we own until we hand
     // it back to antenna_free.
@@ -120,7 +129,10 @@ fn ffi_create_send_drain_destroy_roundtrip() {
         .to_str()
         .expect("account id is valid UTF-8")
         .to_string();
-    assert!(!account_id.is_empty(), "minted account id should be non-empty");
+    assert!(
+        !account_id.is_empty(),
+        "minted account id should be non-empty"
+    );
 
     // Clock fd is best-effort on macOS (pipe-based) but must be non-negative.
     // SAFETY: handle is live.

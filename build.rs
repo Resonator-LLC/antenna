@@ -151,9 +151,8 @@ fn thin_archives_for_arch(src_dir: &Path, arch: &str, out_dir: &Path) -> HashSet
                 );
                 continue;
             }
-            std::fs::copy(&path, &dst).unwrap_or_else(|e| {
-                panic!("copy {} -> {}: {}", path.display(), dst.display(), e)
-            });
+            std::fs::copy(&path, &dst)
+                .unwrap_or_else(|e| panic!("copy {} -> {}: {}", path.display(), dst.display(), e));
             if let Some(s) = stem.clone() {
                 present.insert(s);
             }
@@ -166,9 +165,7 @@ fn thin_archives_for_arch(src_dir: &Path, arch: &str, out_dir: &Path) -> HashSet
                 .arg("-output")
                 .arg(&dst)
                 .status()
-                .unwrap_or_else(|e| {
-                    panic!("lipo -thin {} {}: {}", arch, path.display(), e)
-                });
+                .unwrap_or_else(|e| panic!("lipo -thin {} {}: {}", arch, path.display(), e));
             if !status.success() {
                 panic!(
                     "lipo -thin {} {} -> {} failed",
@@ -623,7 +620,16 @@ fn main() {
         // doesn't exist on Android), `rt` and `resolv` (folded into Bionic
         // libc), and `-lpthread` (also in libc — see the guard below). libz
         // comes from the contrib (libz.a).
-        for sys in &["c++_shared", "log", "m", "dl", "android", "aaudio", "OpenSLES", "mediandk"] {
+        for sys in &[
+            "c++_shared",
+            "log",
+            "m",
+            "dl",
+            "android",
+            "aaudio",
+            "OpenSLES",
+            "mediandk",
+        ] {
             println!("cargo:rustc-link-lib={sys}");
         }
         // The android cdylib is dlopen'd at runtime, so an unresolved strong
@@ -656,8 +662,14 @@ fn main() {
         "cargo:rerun-if-changed={}",
         src_dir.join("quickjs_shim.c").display()
     );
-    println!("cargo:rerun-if-changed={}", qjs_dir.join("VERSION").display());
-    println!("cargo:rerun-if-changed={}", qjs_dir.join("quickjs.h").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        qjs_dir.join("VERSION").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        qjs_dir.join("quickjs.h").display()
+    );
     println!("cargo:rerun-if-env-changed=CARRIER_DIR");
     println!("cargo:rerun-if-env-changed=JAMI_PREFIX");
 }

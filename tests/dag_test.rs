@@ -1,62 +1,32 @@
-///! Integration test: complicated DAG with parallel tracks, filtering, and merging.
-///!
-///! DAG topology:
-///!
-///!   beforeInsert ──→ [tagger]    ──→ tagged ──→ [uppercaser] ──→ mainOut
-///!                                       │
-///!   beforeInsert ──→ [filter]    ──→ filtered ──→ [merger] ──→ mainOut
-///!                                                    ↑
-///!   afterInsert  ────────────────────────────────────┘
-///!
-///! - tagger:     prepends "TAGGED:" to every message, emits to 'tagged'
-///! - filter:     only passes messages containing "important", emits to 'filtered'
-///! - uppercaser: uppercases the input, emits to mainOut
-///! - merger:     has TWO ins (filtered + afterInsert), prefixes with which channel
-///!               fired, emits to mainOut
-///!
-///! This tests:
-///!   1. Parallel tracks from the same channel (beforeInsert → tagger + filter)
-///!   2. Sequential chaining (tagger → tagged → uppercaser → mainOut)
-///!   3. Filtering (filter drops non-matching messages)
-///!   4. Multi-input node (merger reads from filtered AND afterInsert)
-///!   5. Thread-per-node (all 4 run on separate threads)
-///!   6. Clock signals (each node blocks on poll until data arrives)
-///!   7. emit() routing through the broadcast map
-use antenna::channel::{ChannelWriter, InternalChannel};
+//! Integration test: complicated DAG with parallel tracks, filtering, and merging.
+//!
+//! DAG topology:
+//!
+//!   beforeInsert ──→ [tagger]    ──→ tagged ──→ [uppercaser] ──→ mainOut
+//!                                       │
+//!   beforeInsert ──→ [filter]    ──→ filtered ──→ [merger] ──→ mainOut
+//!                                                    ↑
+//!   afterInsert  ────────────────────────────────────┘
+//!
+//! - tagger:     prepends "TAGGED:" to every message, emits to 'tagged'
+//! - filter:     only passes messages containing "important", emits to 'filtered'
+//! - uppercaser: uppercases the input, emits to mainOut
+//! - merger:     has TWO ins (filtered + afterInsert), prefixes with which
+//!   channel fired, emits to mainOut
+//!
+//! This tests:
+//!   1. Parallel tracks from the same channel (beforeInsert → tagger + filter)
+//!   2. Sequential chaining (tagger → tagged → uppercaser → mainOut)
+//!   3. Filtering (filter drops non-matching messages)
+//!   4. Multi-input node (merger reads from filtered AND afterInsert)
+//!   5. Thread-per-node (all 4 run on separate threads)
+//!   6. Clock signals (each node blocks on poll until data arrives)
+//!   7. emit() routing through the broadcast map
+use antenna::channel::InternalChannel;
 use antenna::dag::Dag;
 use antenna::store::RdfStore;
 use std::sync::mpsc;
 use std::time::Duration;
-
-/// Collect everything that arrives on mainOut via a reader on the channel.
-fn collect_main_out(reader: &antenna::channel::ChannelReader, timeout: Duration) -> Vec<String> {
-    let deadline = std::time::Instant::now() + timeout;
-    let mut results = Vec::new();
-
-    while std::time::Instant::now() < deadline {
-        // Poll with short timeout
-        let mut pfd = libc::pollfd {
-            fd: reader.clock_fd(),
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        let remaining = deadline
-            .duration_since(std::time::Instant::now())
-            .as_millis() as i32;
-        unsafe {
-            libc::poll(&mut pfd, 1, remaining.min(100));
-        }
-        if pfd.revents & libc::POLLIN != 0 {
-            reader.consume_clock();
-            while let Some(s) = reader.recv() {
-                if !s.is_empty() {
-                    results.push(s);
-                }
-            }
-        }
-    }
-    results
-}
 
 #[test]
 fn test_complicated_dag() {
@@ -126,34 +96,12 @@ fn test_complicated_dag() {
     // 3. Load the DAG (spawns 4 threads)
     let dag = Dag::load(&store).unwrap();
 
-    // 4. Create a mainOut channel so we can read what scripts emit there
-    let main_out_ch = InternalChannel::new(65536).unwrap();
-    let main_out_reader = main_out_ch.reader();
-    let main_out_writer = main_out_ch.writer();
-
-    // Register mainOut writer in the DAG's broadcast map.
-    // Since broadcast_map is private, we test by manually broadcasting
-    // and using the DAG's own mainOut if it's wired up. But the DAG
-    // creates writers only for channels that nodes subscribe to as IN.
-    // mainOut is an OUT target, not an IN — so we need a subscriber.
-    //
-    // The test approach: we'll use the internal broadcast + pump_emits
-    // and check what arrives. Since mainOut doesn't have subscribers
-    // in the broadcast_map (no node reads from it), we need to add one.
-    //
-    // Actually, let's test the full flow differently: we'll create a
-    // dedicated collector node that reads from mainOut.
-    // OR: we can insert a collector script into the DAG definition.
-
-    // Simpler: insert a collector node that reads mainOut and writes
-    // to a custom "results" channel we can read from.
-    let results_ch = InternalChannel::new(65536).unwrap();
-    let results_reader = results_ch.reader();
-
-    // We need the collector's inbox to be in the broadcast_map for mainOut.
-    // But the DAG is already loaded... Let's reload with the collector.
-
-    // Drop old DAG and add collector node
+    // mainOut can't be tapped from outside: internal channels are created
+    // inside Dag::load, broadcast_map is private, and the DAG only creates
+    // writers for channels a node subscribes to as IN (mainOut is an OUT
+    // target with no subscriber). So observation happens via a collector
+    // node inside the DAG definition instead — drop the old DAG and reload
+    // with the collector added.
     drop(dag);
 
     let collector_ttl = r#"
@@ -172,18 +120,11 @@ fn test_complicated_dag() {
     "#;
     store.insert_turtle(collector_ttl).unwrap();
 
-    // Reload DAG with all 5 nodes
+    // Reload DAG with all 5 nodes (smoke-tests reload with the collector),
+    // then drop it: urn:ch:results is just as unreachable from outside as
+    // mainOut was, so the observable test below restructures the whole DAG
+    // around dispatch-level entry points instead.
     let dag = Dag::load(&store).unwrap();
-
-    // Now we need a reader for urn:ch:results
-    // But internal channels are created inside Dag::load...
-    // We can't easily get a reader for an internal channel from outside.
-    //
-    // Better approach: use an mpsc-based collector. Let's restructure.
-    // The simplest way to observe output: insert a final node that writes
-    // to a channel, then use Dag::broadcast to inject test data and
-    // Dag::pump_emits to route it through, and check the store.
-
     drop(dag);
 
     // === REVISED APPROACH ===
@@ -460,35 +401,20 @@ fn test_ring_buffer_and_clock() {
 
 #[test]
 fn test_store_spin_dispatch() {
-    use antenna::channel::AntennaOut;
     use antenna::dag::Dag;
-    use antenna::dispatch;
     use antenna::store::RdfStore;
 
     let store = RdfStore::open(None).unwrap();
-    let dag = Dag::load(&store).unwrap();
-
-    // Mock ToxCarrier — we can't create one without a profile, so we test
-    // only SPIN dispatch and raw insert (tox commands will be skipped).
-    // For this test we use dispatch::dispatch with a tox that we skip.
+    // Keep the (empty) DAG alive for the duration — its load is part of the
+    // smoke test even though dispatch can't be exercised here: we can't
+    // create a ToxCarrier without a profile, so this test drives the store
+    // directly with SPIN-style queries instead of dispatch::dispatch.
+    let _dag = Dag::load(&store).unwrap();
 
     // Insert some data first
     store
         .insert_turtle("<urn:msg:1> a <http://resonator.network/v2/carrier#TextMessage> ; <http://resonator.network/v2/carrier#text> \"hello\" .")
         .unwrap();
-
-    // Test SPARQL Ask via dispatch
-    struct TestOut {
-        messages: Vec<String>,
-    }
-    impl AntennaOut for TestOut {
-        fn send(&mut self, turtle: &str) {
-            self.messages.push(turtle.to_string());
-        }
-    }
-
-    // We can't call dispatch::dispatch without a ToxCarrier reference.
-    // Instead, test the store directly with SPIN-style queries.
 
     // ASK query
     let result = store
@@ -535,11 +461,7 @@ fn test_store_spin_dispatch() {
         .unwrap();
     assert!(!exists, "msg:2 should be gone after DELETE DATA");
 
-    // Raw RDF insert through DAG (no scripts, empty DAG)
-    let mut out = TestOut {
-        messages: Vec::new(),
-    };
-    // Insert raw RDF
+    // Raw RDF insert (no scripts, empty DAG)
     store
         .insert_turtle(
             "<urn:test:raw> a <http://resonator.network/v2/antenna#Bookmark> ; <http://www.w3.org/2000/01/rdf-schema#label> \"test bookmark\" .",
@@ -631,7 +553,10 @@ fn test_script_vm_caches_compiled_body() {
             "function __pad{i}(a, b) {{ return a * {i} + b - {i}; }}\n"
         ));
     }
-    assert!(body.len() > 100_000, "body should be >100KB to expose parse cost");
+    assert!(
+        body.len() > 100_000,
+        "body should be >100KB to expose parse cost"
+    );
 
     let t0 = Instant::now();
     vm.exec(&body, "first", "urn:ch:x").unwrap();

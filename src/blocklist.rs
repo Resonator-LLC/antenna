@@ -118,7 +118,10 @@ mod tests {
         let payload = "# resonator default blocklist\nidentity-aaa\nidentity-bbb\n\nidentity-ccc\n";
         let (p, s) = sign(&key, payload);
         let entries = verify_signed_blocklist(&p, &s, &DEV_BLOCKLIST_PUBKEY).expect("verify");
-        assert_eq!(entries, vec!["identity-aaa", "identity-bbb", "identity-ccc"]);
+        assert_eq!(
+            entries,
+            vec!["identity-aaa", "identity-bbb", "identity-ccc"]
+        );
     }
 
     #[test]

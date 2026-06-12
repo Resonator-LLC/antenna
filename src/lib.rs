@@ -324,11 +324,7 @@ impl AntennaContext {
             self.dag.after_insert(&turtle);
         }
 
-        let acct_snapshot = self
-            .account_id
-            .lock()
-            .expect("account_id poisoned")
-            .clone();
+        let acct_snapshot = self.account_id.lock().expect("account_id poisoned").clone();
 
         while let Some(line) = input.recv() {
             if line.is_empty() {
@@ -374,8 +370,8 @@ impl AntennaContext {
         // when it asks us to wake sooner.
         const MAX_SLEEP_MS: i32 = 25;
         loop {
-            let timeout_ms = (self.carrier.iteration_interval().as_millis() as i32)
-                .clamp(1, MAX_SLEEP_MS);
+            let timeout_ms =
+                (self.carrier.iteration_interval().as_millis() as i32).clamp(1, MAX_SLEEP_MS);
 
             if let Some(clock_fd) = input.clock_fd() {
                 let mut pfd = libc::pollfd {
@@ -484,7 +480,9 @@ mod tests {
     #[test]
     fn emoji_catalog_loads_with_at_least_one_category_per_section() {
         let store = RdfStore::open(None).expect("in-memory store");
-        store.insert_turtle(EMOJI_CATALOG_TTL).expect("insert emoji catalog");
+        store
+            .insert_turtle(EMOJI_CATALOG_TTL)
+            .expect("insert emoji catalog");
 
         let results = store
             .query(
@@ -523,8 +521,7 @@ mod tests {
                 .insert_turtle_to_graph(ttl, theme::THEME_GRAPH)
                 .expect("insert design ttl into theme graph");
         }
-        theme::load_resolver_str(&store, THEME_RESOLVER_TTL)
-            .expect("load resolver");
+        theme::load_resolver_str(&store, THEME_RESOLVER_TTL).expect("load resolver");
 
         let triples = theme::resolve_active_theme(&store)
             .expect("resolver runs against pre-loaded design data");

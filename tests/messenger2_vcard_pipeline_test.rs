@@ -45,7 +45,9 @@ struct CaptureOut {
 }
 impl CaptureOut {
     fn new() -> Self {
-        Self { messages: Vec::new() }
+        Self {
+            messages: Vec::new(),
+        }
     }
 }
 impl AntennaOut for CaptureOut {
@@ -77,9 +79,11 @@ fn build_messenger2_pipeline_with_auto_export(auto_export_path: &str) -> (RdfSto
         .insert_turtle(&pipeline_ttl)
         .expect("insert messenger2 pipeline");
 
-    let seed_ttl = std::fs::read_to_string(rel("radios/messenger2/seed.ttl"))
-        .expect("read messenger2 seed");
-    store.insert_turtle(&seed_ttl).expect("insert messenger2 seed");
+    let seed_ttl =
+        std::fs::read_to_string(rel("radios/messenger2/seed.ttl")).expect("read messenger2 seed");
+    store
+        .insert_turtle(&seed_ttl)
+        .expect("insert messenger2 seed");
 
     let dag = Dag::load(&store).expect("load dag");
     (store, dag)
@@ -155,17 +159,13 @@ fn ask(store: &RdfStore, sparql: &str) -> bool {
 /// bound variables in projection order. Convenience for asserting on
 /// scene/widget bindings.
 fn select(store: &RdfStore, sparql: &str) -> Vec<Vec<String>> {
-    let QueryResults::Solutions(rows) = store.query(sparql).expect("sparql SELECT")
-    else {
+    let QueryResults::Solutions(rows) = store.query(sparql).expect("sparql SELECT") else {
         panic!("expected SELECT result");
     };
     let mut out = Vec::new();
     for row in rows {
         let row = row.expect("row");
-        let vars: Vec<String> = row
-            .iter()
-            .map(|(_, term)| term.to_string())
-            .collect();
+        let vars: Vec<String> = row.iter().map(|(_, term)| term.to_string()).collect();
         out.push(vars);
     }
     out

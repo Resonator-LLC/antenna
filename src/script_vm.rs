@@ -407,8 +407,7 @@ impl ScriptVm {
             JS_SetPropertyStr(ctx, console_obj, warn_name.as_ptr(), warn_func);
 
             let error_name = CString::new("error").unwrap();
-            let error_func =
-                JS_NewCFunction2(ctx, js_console_error, error_name.as_ptr(), 1, 0, 0);
+            let error_func = JS_NewCFunction2(ctx, js_console_error, error_name.as_ptr(), 1, 0, 0);
             JS_SetPropertyStr(ctx, console_obj, error_name.as_ptr(), error_func);
 
             let cname = CString::new("console").unwrap();

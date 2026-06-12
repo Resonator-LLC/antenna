@@ -42,27 +42,33 @@ fn unique_dir(prefix: &str) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let path = format!("{}/{}-{}-{}", std::env::temp_dir().display(), prefix, pid, ts);
+    let path = format!(
+        "{}/{}-{}-{}",
+        std::env::temp_dir().display(),
+        prefix,
+        pid,
+        ts
+    );
     std::fs::create_dir_all(&path).expect("create temp dir");
     path
 }
 
 /// Poll antenna_drain until either `predicate` matches a doc or the timeout
 /// elapses. On timeout, dump everything seen so a CI failure is debuggable.
-fn drain_until<F>(handle: *mut AntennaHandle, sink: &Sink, timeout: Duration, predicate: F) -> String
+fn drain_until<F>(
+    handle: *mut AntennaHandle,
+    sink: &Sink,
+    timeout: Duration,
+    predicate: F,
+) -> String
 where
     F: Fn(&str) -> bool,
 {
     let start = Instant::now();
     loop {
         // SAFETY: handle came from antenna_create and is still live.
-        let rc: c_int = unsafe {
-            antenna_drain(
-                handle,
-                Some(collect_cb),
-                sink as *const Sink as *mut c_void,
-            )
-        };
+        let rc: c_int =
+            unsafe { antenna_drain(handle, Some(collect_cb), sink as *const Sink as *mut c_void) };
         assert!(rc >= 0, "antenna_drain returned {rc}");
 
         if let Ok(guard) = sink.lock() {
@@ -112,10 +118,16 @@ fn wait_then_create_emits_onboarding_and_populates_account_id() {
             &mut out_account_id as *mut *mut c_char,
         )
     };
-    assert!(!handle.is_null(), "antenna_create returned NULL on empty-account path");
+    assert!(
+        !handle.is_null(),
+        "antenna_create returned NULL on empty-account path"
+    );
 
     // out_account_id is populated (possibly empty string) per the new contract.
-    assert!(!out_account_id.is_null(), "out_account_id should be set even on onboarding path");
+    assert!(
+        !out_account_id.is_null(),
+        "out_account_id should be set even on onboarding path"
+    );
     // SAFETY: out_account_id is a NUL-terminated string we own.
     let initial = unsafe { CStr::from_ptr(out_account_id) }
         .to_str()
@@ -140,7 +152,9 @@ fn wait_then_create_emits_onboarding_and_populates_account_id() {
     });
     let before_create: Vec<String> = sink.lock().unwrap().clone();
     assert!(
-        !before_create.iter().any(|s| s.contains("carrier:Connected")),
+        !before_create
+            .iter()
+            .any(|s| s.contains("carrier:Connected")),
         "carrier:Connected should not fire before CreateAccount; got:\n{}",
         before_create.join("\n"),
     );
@@ -153,8 +167,7 @@ fn wait_then_create_emits_onboarding_and_populates_account_id() {
     // Phase 2: push CreateAccount and wait for AccountReady.
     let create = br#"[] a carrier:CreateAccount ; carrier:displayName "alice" ."#;
     // SAFETY: handle is live; create is a valid byte slice.
-    let send_rc =
-        unsafe { antenna_send(handle, create.as_ptr() as *const c_char, create.len()) };
+    let send_rc = unsafe { antenna_send(handle, create.as_ptr() as *const c_char, create.len()) };
     assert_eq!(send_rc, 0, "antenna_send(CreateAccount) returned {send_rc}");
 
     let ready = drain_until(handle, &sink, Duration::from_secs(45), |s| {

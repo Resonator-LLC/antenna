@@ -6,10 +6,7 @@ use antenna::store::RdfStore;
 
 #[test]
 fn disk_store_opens_without_panic() {
-    let dir = std::env::temp_dir().join(format!(
-        "antenna-issue002-{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("antenna-issue002-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
 

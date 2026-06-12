@@ -353,8 +353,7 @@ pub struct Carrier {
     _opaque: [u8; 0],
 }
 
-pub type CarrierEventCb =
-    unsafe extern "C" fn(event: *const CarrierEvent, userdata: *mut c_void);
+pub type CarrierEventCb = unsafe extern "C" fn(event: *const CarrierEvent, userdata: *mut c_void);
 pub type CarrierLogCb =
     unsafe extern "C" fn(record: *const CarrierLogRecord, userdata: *mut c_void);
 
@@ -387,11 +386,7 @@ extern "C" {
     ) -> c_int;
     fn carrier_remove_account(c: *mut Carrier, account_id: *const c_char) -> c_int;
     fn carrier_get_id(c: *mut Carrier, account_id: *const c_char) -> c_int;
-    fn carrier_set_nick(
-        c: *mut Carrier,
-        account_id: *const c_char,
-        nick: *const c_char,
-    ) -> c_int;
+    fn carrier_set_nick(c: *mut Carrier, account_id: *const c_char, nick: *const c_char) -> c_int;
     fn carrier_send_trust_request(
         c: *mut Carrier,
         account_id: *const c_char,
@@ -435,10 +430,7 @@ extern "C" {
         privacy: *const c_char,
         out_conversation_id: *mut c_char,
     ) -> c_int;
-    fn carrier_get_saved_conversation(
-        c: *mut Carrier,
-        account_id: *const c_char,
-    ) -> c_int;
+    fn carrier_get_saved_conversation(c: *mut Carrier, account_id: *const c_char) -> c_int;
     fn carrier_send_conversation_message(
         c: *mut Carrier,
         account_id: *const c_char,
@@ -512,10 +504,7 @@ extern "C" {
         conversation_id: *const c_char,
         file_id: *const c_char,
     ) -> c_int;
-    fn carrier_create_linking_account(
-        c: *mut Carrier,
-        out_account_id: *mut c_char,
-    ) -> c_int;
+    fn carrier_create_linking_account(c: *mut Carrier, out_account_id: *mut c_char) -> c_int;
     fn carrier_authorize_device(
         c: *mut Carrier,
         account_id: *const c_char,
@@ -706,7 +695,9 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
     // SAFETY: the union variant matches ev.type_ by C-side contract.
     let line = unsafe {
         match ev.type_ {
-            CarrierEventType::Connected => format!("{}{} .", header("Connected", &ev.account_id), ts),
+            CarrierEventType::Connected => {
+                format!("{}{} .", header("Connected", &ev.account_id), ts)
+            }
             CarrierEventType::Disconnected => {
                 format!("{}{} .", header("Disconnected", &ev.account_id), ts)
             }
@@ -719,10 +710,7 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                 ));
                 let dn = cstr_from_buf(&d.display_name);
                 if !dn.is_empty() {
-                    s.push_str(&format!(
-                        " ; carrier:displayName \"{}\"",
-                        turtle_escape(dn)
-                    ));
+                    s.push_str(&format!(" ; carrier:displayName \"{}\"", turtle_escape(dn)));
                 }
                 s.push_str(&ts);
                 s.push_str(" .");
@@ -852,10 +840,7 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                 ));
                 let dn = cstr_from_buf(&d.display_name);
                 if !dn.is_empty() {
-                    s.push_str(&format!(
-                        " ; carrier:displayName \"{}\"",
-                        turtle_escape(dn)
-                    ));
+                    s.push_str(&format!(" ; carrier:displayName \"{}\"", turtle_escape(dn)));
                 }
                 s.push_str(&format!(
                     " ; carrier:text \"{}\"{} .",
@@ -942,10 +927,7 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                 ));
                 let rid = cstr_from_buf(&d.reaction_id);
                 if !rid.is_empty() {
-                    s.push_str(&format!(
-                        " ; carrier:reactionId \"{}\"",
-                        turtle_escape(rid)
-                    ));
+                    s.push_str(&format!(" ; carrier:reactionId \"{}\"", turtle_escape(rid)));
                 }
                 s.push_str(&ts);
                 s.push_str(" .");
@@ -973,10 +955,7 @@ pub fn event_to_turtle(ev: &CarrierEvent) -> Option<String> {
                 ));
                 let fname = cstr_from_buf(&d.filename);
                 if !fname.is_empty() {
-                    s.push_str(&format!(
-                        " ; carrier:filename \"{}\"",
-                        turtle_escape(fname)
-                    ));
+                    s.push_str(&format!(" ; carrier:filename \"{}\"", turtle_escape(fname)));
                 }
                 s.push_str(&format!(" ; carrier:size {}", d.size));
                 s.push_str(&ts);
@@ -1104,9 +1083,7 @@ impl CarrierClient {
     /// holds no account yet; call `create_account` or `load_account`.
     pub fn new(data_dir: &str, sender: Sender<String>) -> Result<Self> {
         let dir_c = CString::new(data_dir)?;
-        let ptr = unsafe {
-            carrier_new(dir_c.as_ptr(), Some(log_callback), std::ptr::null_mut())
-        };
+        let ptr = unsafe { carrier_new(dir_c.as_ptr(), Some(log_callback), std::ptr::null_mut()) };
         if ptr.is_null() {
             bail!("carrier_new returned NULL");
         }
@@ -1152,7 +1129,10 @@ impl CarrierClient {
     pub fn iterate(&self) -> Result<()> {
         let current = std::thread::current().id();
         let owner = self.iterate_thread.get_or_init(|| current);
-        debug_assert_eq!(*owner, current, "CarrierClient::iterate() from wrong thread");
+        debug_assert_eq!(
+            *owner, current,
+            "CarrierClient::iterate() from wrong thread"
+        );
 
         let rc = unsafe { carrier_iterate(self.ptr) };
         if rc < 0 {
@@ -1233,9 +1213,8 @@ impl CarrierClient {
         let dest_c = CString::new(destination_path)?;
         let pw_c = password.map(CString::new).transpose()?;
         let pw_ptr = pw_c.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
-        let rc = unsafe {
-            carrier_export_account(self.ptr, id_c.as_ptr(), dest_c.as_ptr(), pw_ptr)
-        };
+        let rc =
+            unsafe { carrier_export_account(self.ptr, id_c.as_ptr(), dest_c.as_ptr(), pw_ptr) };
         if rc < 0 {
             bail!("carrier_export_account failed: {}", rc);
         }
@@ -1282,9 +1261,8 @@ impl CarrierClient {
         let uri_c = CString::new(contact_uri)?;
         let msg_c = message.map(CString::new).transpose()?;
         let msg_ptr = msg_c.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
-        let rc = unsafe {
-            carrier_send_trust_request(self.ptr, id_c.as_ptr(), uri_c.as_ptr(), msg_ptr)
-        };
+        let rc =
+            unsafe { carrier_send_trust_request(self.ptr, id_c.as_ptr(), uri_c.as_ptr(), msg_ptr) };
         if rc < 0 {
             bail!("carrier_send_trust_request failed: {}", rc);
         }
@@ -1294,9 +1272,7 @@ impl CarrierClient {
     pub fn accept_trust_request(&self, account_id: &str, contact_uri: &str) -> Result<()> {
         let id_c = CString::new(account_id)?;
         let uri_c = CString::new(contact_uri)?;
-        let rc = unsafe {
-            carrier_accept_trust_request(self.ptr, id_c.as_ptr(), uri_c.as_ptr())
-        };
+        let rc = unsafe { carrier_accept_trust_request(self.ptr, id_c.as_ptr(), uri_c.as_ptr()) };
         if rc < 0 {
             bail!("carrier_accept_trust_request failed: {}", rc);
         }
@@ -1306,9 +1282,7 @@ impl CarrierClient {
     pub fn discard_trust_request(&self, account_id: &str, contact_uri: &str) -> Result<()> {
         let id_c = CString::new(account_id)?;
         let uri_c = CString::new(contact_uri)?;
-        let rc = unsafe {
-            carrier_discard_trust_request(self.ptr, id_c.as_ptr(), uri_c.as_ptr())
-        };
+        let rc = unsafe { carrier_discard_trust_request(self.ptr, id_c.as_ptr(), uri_c.as_ptr()) };
         if rc < 0 {
             bail!("carrier_discard_trust_request failed: {}", rc);
         }
@@ -1362,11 +1336,7 @@ impl CarrierClient {
         Ok(())
     }
 
-    pub fn create_conversation(
-        &self,
-        account_id: &str,
-        privacy: Option<&str>,
-    ) -> Result<String> {
+    pub fn create_conversation(&self, account_id: &str, privacy: Option<&str>) -> Result<String> {
         let id_c = CString::new(account_id)?;
         let privacy_c = privacy.map(CString::new).transpose()?;
         let privacy_ptr = privacy_c.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
@@ -1448,11 +1418,7 @@ impl CarrierClient {
         Ok(())
     }
 
-    pub fn clear_conversation_cache(
-        &self,
-        account_id: &str,
-        conversation_id: &str,
-    ) -> Result<()> {
+    pub fn clear_conversation_cache(&self, account_id: &str, conversation_id: &str) -> Result<()> {
         let id_c = CString::new(account_id)?;
         let conv_c = CString::new(conversation_id)?;
         let rc = unsafe {
@@ -1508,12 +1474,7 @@ impl CarrierClient {
         let conv_c = CString::new(conversation_id)?;
         let uri_c = CString::new(contact_uri)?;
         let rc = unsafe {
-            carrier_invite_to_conversation(
-                self.ptr,
-                id_c.as_ptr(),
-                conv_c.as_ptr(),
-                uri_c.as_ptr(),
-            )
+            carrier_invite_to_conversation(self.ptr, id_c.as_ptr(), conv_c.as_ptr(), uri_c.as_ptr())
         };
         if rc < 0 {
             bail!("carrier_invite_to_conversation failed: {}", rc);
@@ -1524,9 +1485,7 @@ impl CarrierClient {
     pub fn remove_conversation(&self, account_id: &str, conversation_id: &str) -> Result<()> {
         let id_c = CString::new(account_id)?;
         let conv_c = CString::new(conversation_id)?;
-        let rc = unsafe {
-            carrier_remove_conversation(self.ptr, id_c.as_ptr(), conv_c.as_ptr())
-        };
+        let rc = unsafe { carrier_remove_conversation(self.ptr, id_c.as_ptr(), conv_c.as_ptr()) };
         if rc < 0 {
             bail!("carrier_remove_conversation failed: {}", rc);
         }
@@ -1652,9 +1611,8 @@ impl CarrierClient {
 
     pub fn create_linking_account(&self) -> Result<String> {
         let mut buf = [0u8; CARRIER_ACCOUNT_ID_LEN];
-        let rc = unsafe {
-            carrier_create_linking_account(self.ptr, buf.as_mut_ptr() as *mut c_char)
-        };
+        let rc =
+            unsafe { carrier_create_linking_account(self.ptr, buf.as_mut_ptr() as *mut c_char) };
         if rc < 0 {
             bail!("carrier_create_linking_account failed: {}", rc);
         }
@@ -1664,9 +1622,7 @@ impl CarrierClient {
     pub fn authorize_device(&self, account_id: &str, pin: &str) -> Result<()> {
         let id_c = CString::new(account_id)?;
         let pin_c = CString::new(pin)?;
-        let rc = unsafe {
-            carrier_authorize_device(self.ptr, id_c.as_ptr(), pin_c.as_ptr())
-        };
+        let rc = unsafe { carrier_authorize_device(self.ptr, id_c.as_ptr(), pin_c.as_ptr()) };
         if rc < 0 {
             bail!("carrier_authorize_device failed: {}", rc);
         }
@@ -1676,9 +1632,7 @@ impl CarrierClient {
     pub fn revoke_device(&self, account_id: &str, device_id: &str) -> Result<()> {
         let id_c = CString::new(account_id)?;
         let did_c = CString::new(device_id)?;
-        let rc = unsafe {
-            carrier_revoke_device(self.ptr, id_c.as_ptr(), did_c.as_ptr())
-        };
+        let rc = unsafe { carrier_revoke_device(self.ptr, id_c.as_ptr(), did_c.as_ptr()) };
         if rc < 0 {
             bail!("carrier_revoke_device failed: {}", rc);
         }
@@ -1691,11 +1645,7 @@ impl Drop for CarrierClient {
         if !self.ptr.is_null() {
             // SAFETY: ptr was obtained from carrier_new and not freed elsewhere.
             unsafe {
-                carrier_set_event_callback(
-                    self.ptr,
-                    placeholder_event_cb,
-                    std::ptr::null_mut(),
-                );
+                carrier_set_event_callback(self.ptr, placeholder_event_cb, std::ptr::null_mut());
                 carrier_set_log_callback(self.ptr, None, std::ptr::null_mut());
                 carrier_free(self.ptr);
             }
@@ -1762,18 +1712,22 @@ mod tests {
         }
 
         let line = event_to_turtle(&ev).expect("ContactRestored should format");
-        assert!(line.contains("[] a carrier:ContactRestored"), "line={line:?}");
+        assert!(
+            line.contains("[] a carrier:ContactRestored"),
+            "line={line:?}"
+        );
         assert!(
             line.contains("carrier:account \"c314a87070bc4c74\""),
             "line={line:?}"
         );
         assert!(
-            line.contains(
-                "carrier:contactUri \"4748d985a10c8e84990f592a0ec0232efb733293\""
-            ),
+            line.contains("carrier:contactUri \"4748d985a10c8e84990f592a0ec0232efb733293\""),
             "line={line:?}"
         );
-        assert!(line.contains("carrier:displayName \"bob\""), "line={line:?}");
+        assert!(
+            line.contains("carrier:displayName \"bob\""),
+            "line={line:?}"
+        );
         // CMP-002 — blocked is structurally present; an un-banned restore is
         // "false".
         assert!(

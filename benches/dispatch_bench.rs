@@ -23,9 +23,18 @@ fn bench_extract_type(c: &mut Criterion) {
 
 fn bench_extract_property(c: &mut Criterion) {
     let lines = [
-        ("[] a sp:Select ; sp:text \"SELECT ?s WHERE { ?s a carrier:TextMessage }\" .", "sp:text"),
-        ("[] a carrier:SendMsg ; carrier:contactUri \"abc\" ; carrier:text \"hello world\" .", "carrier:text"),
-        ("[] a carrier:SetNick ; carrier:displayName \"mynode\" .", "carrier:displayName"),
+        (
+            "[] a sp:Select ; sp:text \"SELECT ?s WHERE { ?s a carrier:TextMessage }\" .",
+            "sp:text",
+        ),
+        (
+            "[] a carrier:SendMsg ; carrier:contactUri \"abc\" ; carrier:text \"hello world\" .",
+            "carrier:text",
+        ),
+        (
+            "[] a carrier:SetNick ; carrier:displayName \"mynode\" .",
+            "carrier:displayName",
+        ),
     ];
 
     c.bench_function("extract_property", |b| {
@@ -55,5 +64,10 @@ fn bench_turtle_escape(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_extract_type, bench_extract_property, bench_turtle_escape);
+criterion_group!(
+    benches,
+    bench_extract_type,
+    bench_extract_property,
+    bench_turtle_escape
+);
 criterion_main!(benches);

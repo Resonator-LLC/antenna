@@ -50,7 +50,9 @@ struct CaptureOut {
 }
 impl CaptureOut {
     fn new() -> Self {
-        Self { messages: Vec::new() }
+        Self {
+            messages: Vec::new(),
+        }
     }
 }
 impl AntennaOut for CaptureOut {
@@ -67,14 +69,19 @@ fn build_messenger2_pipeline() -> (RdfStore, Dag) {
     let pipeline_ttl = pipeline_raw
         .replace("__NICK__", "alice")
         .replace("__FILES_DIR__", "/tmp/messenger2-saved-test/files")
-        .replace("__AUTO_EXPORT_PATH__", "/tmp/messenger2-saved-test/auto-export.gz");
+        .replace(
+            "__AUTO_EXPORT_PATH__",
+            "/tmp/messenger2-saved-test/auto-export.gz",
+        );
     store
         .insert_turtle(&pipeline_ttl)
         .expect("insert messenger2 pipeline");
 
-    let seed_ttl = std::fs::read_to_string(rel("radios/messenger2/seed.ttl"))
-        .expect("read messenger2 seed");
-    store.insert_turtle(&seed_ttl).expect("insert messenger2 seed");
+    let seed_ttl =
+        std::fs::read_to_string(rel("radios/messenger2/seed.ttl")).expect("read messenger2 seed");
+    store
+        .insert_turtle(&seed_ttl)
+        .expect("insert messenger2 seed");
 
     let dag = Dag::load(&store).expect("load dag");
     (store, dag)
@@ -161,8 +168,7 @@ fn text_submitted_event(target: &str, value: &str) -> String {
 }
 
 fn select_rows(store: &RdfStore, sparql: &str) -> Vec<Vec<String>> {
-    let QueryResults::Solutions(rows) = store.query(sparql).expect("sparql SELECT")
-    else {
+    let QueryResults::Solutions(rows) = store.query(sparql).expect("sparql SELECT") else {
         panic!("expected SELECT result");
     };
     let mut out = Vec::new();
@@ -268,16 +274,20 @@ fn saved_conversation_reply_does_not_disturb_pipeline() {
     let suspicious: Vec<&String> = reply_emits
         .iter()
         .filter(|e| {
-            e.contains("carrier:GetSavedConversation") ||
-            e.contains("carrier:SendConversationMsg") ||
-            e.contains("carrier:SendMsg")
+            e.contains("carrier:GetSavedConversation")
+                || e.contains("carrier:SendConversationMsg")
+                || e.contains("carrier:SendMsg")
         })
         .collect();
     assert!(
         suspicious.is_empty(),
         "SavedConversation reply must not trigger further carrier sends in Cut D; \
          got:\n  {}",
-        suspicious.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n  "),
+        suspicious
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join("\n  "),
     );
 }
 
@@ -331,7 +341,11 @@ fn group_message_routing_does_not_disturb_pipeline() {
         on_conv_sends.is_empty(),
         "on-conv GroupMessage must not trigger any carrier:Send* emits in Cut D; \
          got:\n  {}",
-        on_conv_sends.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n  "),
+        on_conv_sends
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join("\n  "),
     );
 
     // Off-conv GroupMessage: dropped with a log, no state change.
@@ -352,7 +366,11 @@ fn group_message_routing_does_not_disturb_pipeline() {
     assert!(
         off_conv_sends.is_empty(),
         "off-conv GroupMessage must be a no-op; got:\n  {}",
-        off_conv_sends.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n  "),
+        off_conv_sends
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join("\n  "),
     );
 }
 
@@ -370,13 +388,21 @@ fn saved_tile_lands_in_inbox_level_after_resolve() {
 
     dispatch::dispatch(
         &account_ready_event(ALICE_ACCOUNT, ALICE_URI),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle_collect_emits(&dag, &store, &mut out, 30);
 
     dispatch::dispatch(
         &saved_conversation_event(ALICE_ACCOUNT, SAVED_CONV_ID),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle_collect_emits(&dag, &store, &mut out, 30);
 
@@ -398,8 +424,11 @@ fn saved_tile_lands_in_inbox_level_after_resolve() {
     // the rail (sortedContactList returns it before any peer). With
     // no live peers, only the saved tile appears under the CONTACTS
     // header.
-    let header_at = widget.find("value=CONTACTS").expect("CONTACTS header present");
-    let saved_at = widget.find("value=Saved Messages")
+    let header_at = widget
+        .find("value=CONTACTS")
+        .expect("CONTACTS header present");
+    let saved_at = widget
+        .find("value=Saved Messages")
         .expect("saved label present");
     assert!(
         header_at < saved_at,
@@ -429,7 +458,8 @@ fn saved_tile_lands_in_inbox_level_after_resolve() {
     assert!(
         scene_rows[0][0].contains("Saved Messages"),
         "saved vCard scenelabel should carry the Saved Messages display name; \
-         got {}", scene_rows[0][0],
+         got {}",
+        scene_rows[0][0],
     );
 }
 
@@ -444,19 +474,31 @@ fn saved_select_tap_swaps_right_pane_to_saved_chat() {
 
     dispatch::dispatch(
         &account_ready_event(ALICE_ACCOUNT, ALICE_URI),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle_collect_emits(&dag, &store, &mut out, 30);
 
     dispatch::dispatch(
         &saved_conversation_event(ALICE_ACCOUNT, SAVED_CONV_ID),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle_collect_emits(&dag, &store, &mut out, 30);
 
     dispatch::dispatch(
         &tap_event(SAVED_SELECT_TAP),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle_collect_emits(&dag, &store, &mut out, 30);
 
@@ -489,19 +531,31 @@ fn saved_text_send_emits_send_conv_msg_against_saved_conv() {
 
     dispatch::dispatch(
         &account_ready_event(ALICE_ACCOUNT, ALICE_URI),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle_collect_emits(&dag, &store, &mut out, 30);
 
     dispatch::dispatch(
         &saved_conversation_event(ALICE_ACCOUNT, SAVED_CONV_ID),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle_collect_emits(&dag, &store, &mut out, 30);
 
     dispatch::dispatch(
         &tap_event(SAVED_SELECT_TAP),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle_collect_emits(&dag, &store, &mut out, 30);
 
@@ -509,7 +563,11 @@ fn saved_text_send_emits_send_conv_msg_against_saved_conv() {
 
     dispatch::dispatch(
         &text_submitted_event("urn:msg2:msg-input", "first note"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     let send_emits = settle_collect_emits(&dag, &store, &mut out, 30);
 
@@ -540,8 +598,9 @@ fn saved_text_send_emits_send_conv_msg_against_saved_conv() {
     // matches would be 2 (preview + bubble); the bubble-shape count
     // isolates the chat-body cardinality.
     let widget_after_send = inbox_level_widget(&store);
-    let bubbles_after_send =
-        widget_after_send.matches("Container{color=msg-sent-bg").count();
+    let bubbles_after_send = widget_after_send
+        .matches("Container{color=msg-sent-bg")
+        .count();
     assert_eq!(
         bubbles_after_send, 1,
         "saved chat body should show one sent bubble after the local send; got:\n{widget_after_send}",
@@ -551,13 +610,18 @@ fn saved_text_send_emits_send_conv_msg_against_saved_conv() {
     // not double the bubble.
     dispatch::dispatch(
         &group_message_event(ALICE_ACCOUNT, SAVED_CONV_ID, "first note"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle_collect_emits(&dag, &store, &mut out, 30);
 
     let widget_after_replay = inbox_level_widget(&store);
-    let bubbles_after_replay =
-        widget_after_replay.matches("Container{color=msg-sent-bg").count();
+    let bubbles_after_replay = widget_after_replay
+        .matches("Container{color=msg-sent-bg")
+        .count();
     assert_eq!(
         bubbles_after_replay, 1,
         "GroupMessage replay must dedupe against the optimistic local row \

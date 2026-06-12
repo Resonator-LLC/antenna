@@ -457,11 +457,7 @@ impl Dag {
         let mut newly_dead = Vec::new();
         for handle in &self._threads {
             if handle.is_finished() {
-                let name = handle
-                    .thread()
-                    .name()
-                    .unwrap_or("unnamed")
-                    .to_string();
+                let name = handle.thread().name().unwrap_or("unnamed").to_string();
                 if self.reported_dead.insert(name.clone()) {
                     newly_dead.push(name);
                 }
@@ -807,8 +803,8 @@ fn short_uri(uri: &str) -> &str {
 mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
-    use tracing::{Event, Level, Metadata, Subscriber};
     use tracing::span::{Attributes, Id, Record};
+    use tracing::{Event, Level, Metadata, Subscriber};
 
     /// Minimal `tracing::Subscriber` that records (level, target) for every
     /// event so unit tests can assert on log levels. We avoid pulling in

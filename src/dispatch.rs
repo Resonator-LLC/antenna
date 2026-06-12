@@ -61,7 +61,9 @@ pub fn dispatch(
     } else if rdf_type.starts_with(CARRIER_NS) {
         match carrier {
             Some(c) => handle_carrier(line, &rdf_type, c, default_account, out),
-            None => tracing::warn!(target: "DISPATCH", %rdf_type, "carrier dispatch skipped (no handle)"),
+            None => {
+                tracing::warn!(target: "DISPATCH", %rdf_type, "carrier dispatch skipped (no handle)")
+            }
         }
     } else if rdf_type.starts_with(DESIGN_NS) {
         handle_design(&rdf_type, store, out);
@@ -112,7 +114,11 @@ fn handle_subscribe_blocklist(line: &str, store: &RdfStore, dag: &Dag, out: &mut
         }
         Err(e) => {
             tracing::warn!(target: "MODERATION", error = %e, "blocklist rejected");
-            let reason: String = e.to_string().chars().filter(|c| *c != '"' && *c != '\\').collect();
+            let reason: String = e
+                .to_string()
+                .chars()
+                .filter(|c| *c != '"' && *c != '\\')
+                .collect();
             let rej = format!("[] a antenna:BlocklistRejected ; antenna:reason \"{reason}\" .");
             insert_with_dag(&rej, store, dag, out);
         }
@@ -222,10 +228,7 @@ fn handle_spin(line: &str, rdf_type: &str, store: &RdfStore, out: &mut dyn Anten
                                 ));
                             }
                             if !parts.is_empty() {
-                                out.send(&format!(
-                                    "[] a antenna:Result ; {} .",
-                                    parts.join(" ; ")
-                                ));
+                                out.send(&format!("[] a antenna:Result ; {} .", parts.join(" ; ")));
                             }
                         }
                     }
@@ -1014,10 +1017,7 @@ mod tests {
     #[test]
     fn strip_directives_drops_chained_prefixes() {
         let line = "@prefix sp: <http://spinrdf.org/sp#> . @prefix antenna: <http://resonator.network/v2/antenna#> . [] a antenna:Bookmark .";
-        assert_eq!(
-            strip_leading_directives(line),
-            "[] a antenna:Bookmark ."
-        );
+        assert_eq!(strip_leading_directives(line), "[] a antenna:Bookmark .");
     }
 
     #[test]
@@ -1160,7 +1160,10 @@ mod tests {
         handle_spin(line, &format!("{}Select", SP_NS), &store, &mut out);
         let msgs = out.messages();
         assert!(!msgs.is_empty(), "should return at least one result");
-        assert!(msgs[0].contains("antenna:Result"), "should be a Result type");
+        assert!(
+            msgs[0].contains("antenna:Result"),
+            "should be a Result type"
+        );
         assert!(msgs[0].contains("hello"), "should contain the value");
     }
 
@@ -1328,8 +1331,8 @@ mod tests {
             "themes/voidline/voidline.ttl",
             "themes/voidline-cb-safe/voidline-cb-safe.ttl",
         ] {
-            let ttl = std::fs::read_to_string(workspace_root().join(path))
-                .expect("read theme file");
+            let ttl =
+                std::fs::read_to_string(workspace_root().join(path)).expect("read theme file");
             store
                 .insert_turtle_to_graph(&ttl, crate::theme::THEME_GRAPH)
                 .expect("insert theme into theme graph");
@@ -1356,10 +1359,9 @@ mod tests {
             ("rose-pine", "rosePine"),
             ("rose-pine-dawn", "rosePineDawn"),
         ] {
-            let ttl = std::fs::read_to_string(
-                workspace_root().join(format!("themes/{dir}/{dir}.ttl")),
-            )
-            .expect("read terminal theme");
+            let ttl =
+                std::fs::read_to_string(workspace_root().join(format!("themes/{dir}/{dir}.ttl")))
+                    .expect("read terminal theme");
             store
                 .insert_turtle_to_graph(&ttl, crate::theme::THEME_GRAPH)
                 .expect("insert terminal theme into theme graph");
@@ -1434,8 +1436,8 @@ mod tests {
                 }
             }
         }
-        let subj = copy_subject
-            .expect("post-swap bundle must include a design:name \"copy\" triple");
+        let subj =
+            copy_subject.expect("post-swap bundle must include a design:name \"copy\" triple");
         let mut svg_paired = false;
         for m in &msgs {
             if m.starts_with(subj) && m.contains("design#svgPath") {
@@ -1500,14 +1502,7 @@ mod tests {
         let store = RdfStore::open(None).unwrap();
         let dag = Dag::load(&store).unwrap();
         let mut out = TestOut::new();
-        dispatch(
-            "[] a design:Bogus .",
-            &store,
-            &dag,
-            None,
-            "",
-            &mut out,
-        );
+        dispatch("[] a design:Bogus .", &store, &dag, None, "", &mut out);
         let msgs = out.messages();
         assert_eq!(msgs.len(), 1);
         assert!(msgs[0].contains("Unknown design type"));

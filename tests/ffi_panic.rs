@@ -48,21 +48,31 @@ fn unique_dir(prefix: &str) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let path = format!("{}/{}-{}-{}", std::env::temp_dir().display(), prefix, pid, ts);
+    let path = format!(
+        "{}/{}-{}-{}",
+        std::env::temp_dir().display(),
+        prefix,
+        pid,
+        ts
+    );
     std::fs::create_dir_all(&path).expect("create temp dir");
     path
 }
 
-fn drain_until<F>(handle: *mut AntennaHandle, sink: &Sink, timeout: Duration, predicate: F) -> String
+fn drain_until<F>(
+    handle: *mut AntennaHandle,
+    sink: &Sink,
+    timeout: Duration,
+    predicate: F,
+) -> String
 where
     F: Fn(&str) -> bool,
 {
     let start = Instant::now();
     loop {
         // SAFETY: handle came from antenna_create and is still live.
-        let rc: c_int = unsafe {
-            antenna_drain(handle, Some(collect_cb), sink as *const Sink as *mut c_void)
-        };
+        let rc: c_int =
+            unsafe { antenna_drain(handle, Some(collect_cb), sink as *const Sink as *mut c_void) };
         assert!(rc >= 0, "antenna_drain returned {rc}");
 
         if let Ok(guard) = sink.lock() {

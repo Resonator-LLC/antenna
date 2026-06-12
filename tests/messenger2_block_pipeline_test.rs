@@ -52,7 +52,9 @@ struct CaptureOut {
 }
 impl CaptureOut {
     fn new() -> Self {
-        Self { messages: Vec::new() }
+        Self {
+            messages: Vec::new(),
+        }
     }
 }
 impl AntennaOut for CaptureOut {
@@ -68,13 +70,18 @@ fn build_messenger2_pipeline() -> (RdfStore, Dag) {
     let pipeline_ttl = pipeline_raw
         .replace("__NICK__", "alice")
         .replace("__FILES_DIR__", "/tmp/messenger2-test/files")
-        .replace("__AUTO_EXPORT_PATH__", "/tmp/messenger2-test/auto-export.gz");
+        .replace(
+            "__AUTO_EXPORT_PATH__",
+            "/tmp/messenger2-test/auto-export.gz",
+        );
     store
         .insert_turtle(&pipeline_ttl)
         .expect("insert messenger2 pipeline");
-    let seed_ttl = std::fs::read_to_string(rel("radios/messenger2/seed.ttl"))
-        .expect("read messenger2 seed");
-    store.insert_turtle(&seed_ttl).expect("insert messenger2 seed");
+    let seed_ttl =
+        std::fs::read_to_string(rel("radios/messenger2/seed.ttl")).expect("read messenger2 seed");
+    store
+        .insert_turtle(&seed_ttl)
+        .expect("insert messenger2 seed");
     let dag = Dag::load(&store).expect("load dag");
     (store, dag)
 }
@@ -235,11 +242,22 @@ fn blocking_a_peer_hides_their_messages() {
 
     // Peer comes online (auto-selected as the active thread) and sends a
     // message — it renders in the panel.
-    dispatch::dispatch(&contact_online_event(PEER_URI), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &contact_online_event(PEER_URI),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 30);
     dispatch::dispatch(
         &text_message_event(PEER_URI, "conv-1", "HELLO_BEFORE_BLOCK"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
 
@@ -251,7 +269,11 @@ fn blocking_a_peer_hides_their_messages() {
     // Block the peer from their vCard.
     dispatch::dispatch(
         &tap_event(&format!("urn:msg2:block:{PEER_URI}")),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
 
@@ -280,7 +302,11 @@ fn blocking_a_peer_hides_their_messages() {
     // A fresh message from the blocked peer is dropped — never rendered.
     dispatch::dispatch(
         &text_message_event(PEER_URI, "conv-1", "HELLO_AFTER_BLOCK"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
     assert!(
@@ -303,7 +329,11 @@ fn blocklist_survives_restart_via_carrier_rehydration() {
 
     dispatch::dispatch(
         &contact_restored_blocked_event(PEER_URI),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 40);
 
@@ -324,7 +354,11 @@ fn blocklist_survives_restart_via_carrier_rehydration() {
     // blocked peer is dropped and never reaches the rendered widget.
     dispatch::dispatch(
         &text_message_event(PEER_URI, "conv-1", "GHOST_AFTER_RESTART"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
     assert!(
@@ -339,7 +373,8 @@ fn blocklist_survives_restart_via_carrier_rehydration() {
         inbox_widget(&store).contains("(blocked)"),
         "the restored-blocked contact's rail tile must read as (blocked)",
     );
-    let vcard = vcard_widget(&store, PEER_URI).expect("blocked contact must still get a vCard scene");
+    let vcard =
+        vcard_widget(&store, PEER_URI).expect("blocked contact must still get a vCard scene");
     assert!(
         vcard.contains("You blocked this contact"),
         "the restored-blocked vCard must show the blocked notice; got:\n{vcard}",
@@ -373,7 +408,11 @@ fn blocklist_persists_across_restart() {
     // never stored.
     dispatch::dispatch(
         &text_message_event(PEER_URI, "conv-1", "GHOST_MESSAGE"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 40);
 
@@ -398,18 +437,33 @@ fn unblock_restores_message_delivery() {
     let (store, dag) = build_messenger2_pipeline();
     let mut out = CaptureOut::new();
 
-    dispatch::dispatch(&contact_online_event(PEER_URI), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &contact_online_event(PEER_URI),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 30);
     dispatch::dispatch(
         &tap_event(&format!("urn:msg2:block:{PEER_URI}")),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
 
     // Unblock from the vCard.
     dispatch::dispatch(
         &tap_event(&format!("urn:msg2:unblock:{PEER_URI}")),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
 
@@ -428,7 +482,11 @@ fn unblock_restores_message_delivery() {
     // Messages flow again.
     dispatch::dispatch(
         &text_message_event(PEER_URI, "conv-1", "HELLO_AFTER_UNBLOCK"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
     assert!(
@@ -444,12 +502,20 @@ fn eula_gate_blocks_account_creation_until_accepted() {
 
     dispatch::dispatch(
         "[] a antenna:OnboardingRequired ; antenna:reason \"no-account\" .",
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
     dispatch::dispatch(
         &text_changed_event("urn:msg2:onboarding:nick", "alice"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
 
@@ -457,7 +523,11 @@ fn eula_gate_blocks_account_creation_until_accepted() {
     // Terms — emitOnboardingCreate()'s EULA guard must refuse to mint.
     dispatch::dispatch(
         &tap_event("urn:msg2:onboarding:connect"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     let pre = settle_collect_emits(&dag, &store, &mut out, 30);
     assert!(
@@ -469,12 +539,20 @@ fn eula_gate_blocks_account_creation_until_accepted() {
     // Accept the Terms (the "I agree" turn), then connect works.
     dispatch::dispatch(
         &tap_event("urn:msg2:onboarding:agree"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
     dispatch::dispatch(
         &tap_event("urn:msg2:onboarding:connect"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     let post = settle_collect_emits(&dag, &store, &mut out, 30);
     assert!(
@@ -494,18 +572,33 @@ fn reporting_a_contact_composes_an_evidence_bundle_and_offers_block() {
     let mut out = CaptureOut::new();
 
     // A peer comes online and sends an objectionable message.
-    dispatch::dispatch(&contact_online_event(PEER_URI), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &contact_online_event(PEER_URI),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 30);
     dispatch::dispatch(
         &text_message_event(PEER_URI, "conv-1", "HELLO_OBJECTIONABLE_PAYLOAD"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
 
     // Tap Report on the peer's vCard.
     dispatch::dispatch(
         &tap_event(&format!("urn:msg2:report:{PEER_URI}")),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     let emits = settle_collect_emits(&dag, &store, &mut out, 30);
 
@@ -516,7 +609,12 @@ fn reporting_a_contact_composes_an_evidence_bundle_and_offers_block() {
     let mailto = emits
         .iter()
         .find(|e| e.contains("urn:msg:OpenExternal") && e.contains("mailto:"))
-        .unwrap_or_else(|| panic!("Report must emit an OpenExternal mailto; emits:\n  {}", emits.join("\n  ")));
+        .unwrap_or_else(|| {
+            panic!(
+                "Report must emit an OpenExternal mailto; emits:\n  {}",
+                emits.join("\n  ")
+            )
+        });
     assert!(
         mailto.contains("mailto:support@resonator.network"),
         "report must be addressed to the published support contact; got:\n{mailto}",
@@ -558,7 +656,10 @@ fn sign_blocklist(payload: &str) -> (String, String) {
     let key = SigningKey::from_bytes(&DEV_SEED);
     let sig = key.sign(payload.as_bytes());
     let engine = base64::engine::general_purpose::STANDARD;
-    (engine.encode(payload.as_bytes()), engine.encode(sig.to_bytes()))
+    (
+        engine.encode(payload.as_bytes()),
+        engine.encode(sig.to_bytes()),
+    )
 }
 
 fn subscribe_event(payload_b64: &str, sig_b64: &str) -> String {
@@ -585,14 +686,28 @@ fn subscribed_blocklist_applies_through_the_same_gate() {
     let mut out = CaptureOut::new();
 
     // The peer is a live contact whose messages render.
-    dispatch::dispatch(&contact_online_event(PEER_URI), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &contact_online_event(PEER_URI),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 30);
     dispatch::dispatch(
         &text_message_event(PEER_URI, "conv-1", "BEFORE_SUBSCRIPTION"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
-    assert!(inbox_widget(&store).contains("BEFORE_SUBSCRIPTION"), "pre-subscription message renders");
+    assert!(
+        inbox_widget(&store).contains("BEFORE_SUBSCRIPTION"),
+        "pre-subscription message renders"
+    );
 
     // A developer-signed list naming the peer is applied (antenna verifies the
     // signature, re-emits BlocklistApply, the pipeline blocks via the same path).
@@ -601,14 +716,24 @@ fn subscribed_blocklist_applies_through_the_same_gate() {
     settle(&dag, &store, &mut out, 40);
 
     // Same enforcement path as a manual block: blocklist graph + render gate.
-    assert!(peer_in_blocklist_graph(&store), "subscription must persist via the blocklist graph");
+    assert!(
+        peer_in_blocklist_graph(&store),
+        "subscription must persist via the blocklist graph"
+    );
     let vcard = vcard_widget(&store, PEER_URI).expect("vCard");
-    assert!(vcard.contains("You blocked this contact"), "subscribed entry blocks the vCard; got:\n{vcard}");
+    assert!(
+        vcard.contains("You blocked this contact"),
+        "subscribed entry blocks the vCard; got:\n{vcard}"
+    );
 
     // A later message from the now-blocked peer is dropped.
     dispatch::dispatch(
         &text_message_event(PEER_URI, "conv-1", "AFTER_SUBSCRIPTION"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
     assert!(
@@ -629,7 +754,14 @@ fn subscribed_blocklist_override_is_sticky() {
     let (store, dag) = build_messenger2_pipeline();
     let mut out = CaptureOut::new();
 
-    dispatch::dispatch(&contact_online_event(PEER_URI), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &contact_online_event(PEER_URI),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 30);
 
     let (p, s) = sign_blocklist(&format!("{PEER_URI}\n"));
@@ -640,10 +772,17 @@ fn subscribed_blocklist_override_is_sticky() {
     // The user overrides locally by unblocking the subscribed entry.
     dispatch::dispatch(
         &tap_event(&format!("urn:msg2:unblock:{PEER_URI}")),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
-    assert!(!peer_in_blocklist_graph(&store), "override must lift the block locally");
+    assert!(
+        !peer_in_blocklist_graph(&store),
+        "override must lift the block locally"
+    );
 
     // Re-applying the same signed list must NOT re-block the overridden entry.
     dispatch::dispatch(&subscribe_event(&p, &s), &store, &dag, None, "", &mut out);
@@ -659,16 +798,31 @@ fn tampered_blocklist_is_rejected_not_applied() {
     let (store, dag) = build_messenger2_pipeline();
     let mut out = CaptureOut::new();
 
-    dispatch::dispatch(&contact_online_event(PEER_URI), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &contact_online_event(PEER_URI),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 30);
 
     // Sign one list, then ship a DIFFERENT payload under that signature.
     let (_p, s) = sign_blocklist(&format!("{PEER_URI}\n"));
     let tampered = {
         use base64::Engine;
-        base64::engine::general_purpose::STANDARD.encode(b"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n")
+        base64::engine::general_purpose::STANDARD
+            .encode(b"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n")
     };
-    dispatch::dispatch(&subscribe_event(&tampered, &s), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &subscribe_event(&tampered, &s),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 40);
 
     assert!(
@@ -692,7 +846,14 @@ fn safe_mode_defaults_on_and_toggles_with_persistence() {
     let mut out = CaptureOut::new();
 
     // Trigger init + render of the self card.
-    dispatch::dispatch(&contact_online_event(PEER_URI), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &contact_online_event(PEER_URI),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 30);
 
     let self_card = vcard_widget(&store, "urn:msg2:saved").expect("self card");
@@ -708,7 +869,11 @@ fn safe_mode_defaults_on_and_toggles_with_persistence() {
     // Toggling OFF must persist the preference as the SafeModeOff marker.
     dispatch::dispatch(
         &tap_event("urn:msg2:safemode:toggle"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     let emits = settle_collect_emits(&dag, &store, &mut out, 30);
     assert!(

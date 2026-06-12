@@ -70,7 +70,9 @@ fn build_messenger2_pipeline() -> (RdfStore, Dag) {
 
     let seed_ttl =
         std::fs::read_to_string(rel("radios/messenger2/seed.ttl")).expect("read messenger2 seed");
-    store.insert_turtle(&seed_ttl).expect("insert messenger2 seed");
+    store
+        .insert_turtle(&seed_ttl)
+        .expect("insert messenger2 seed");
 
     let dag = Dag::load(&store).expect("load dag");
     (store, dag)
@@ -188,8 +190,7 @@ fn onboarding_required_renders_guide_greeting() {
     );
     // Tap-completable: step-0 quick replies are present.
     assert!(
-        widget.contains("urn:msg2:onboarding:more")
-            && widget.contains("urn:msg2:onboarding:skip"),
+        widget.contains("urn:msg2:onboarding:more") && widget.contains("urn:msg2:onboarding:skip"),
         "step 0 must offer the 'Tell me more' / 'Skip setup' quick replies; got: {widget}",
     );
 }
@@ -240,13 +241,20 @@ fn conversational_create_is_gated_on_consent_then_emits_create_account() {
 
     // Consent NOT given yet — nothing may have minted an account.
     assert!(
-        !pre_consent.iter().any(|e| e.contains("carrier:CreateAccount")),
+        !pre_consent
+            .iter()
+            .any(|e| e.contains("carrier:CreateAccount")),
         "carrier:CreateAccount must NOT be emitted before the connect tap; emits:\n  {}",
         pre_consent.join("\n  "),
     );
 
     // Accept Terms -> connect turn.
-    dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:agree"));
+    dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &tap_event("urn:msg2:onboarding:agree"),
+    );
     let connect_widget = onboarding_level_widget(&store);
     assert!(
         connect_widget.contains("urn:msg2:onboarding:connect")
@@ -255,8 +263,12 @@ fn conversational_create_is_gated_on_consent_then_emits_create_account() {
     );
 
     // Explicit connect consent -> account minted with the chosen name.
-    let connect_emits =
-        dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:connect"));
+    let connect_emits = dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &tap_event("urn:msg2:onboarding:connect"),
+    );
     let create = connect_emits
         .iter()
         .find(|e| e.contains("carrier:CreateAccount"))
@@ -279,11 +291,21 @@ fn terms_link_opens_document_without_advancing() {
 
     // Advance to the Terms turn via the tap-only path.
     dispatch_event(&dag, &store, &mut out, &onboarding_required_event());
-    dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:skip"));
+    dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &tap_event("urn:msg2:onboarding:skip"),
+    );
 
     // Tap "Read the Terms" (CMP-025): the hosted ToU/Community-Guidelines URL
     // opens externally so "the Terms" resolves to real text before acceptance.
-    let emits = dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:terms"));
+    let emits = dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &tap_event("urn:msg2:onboarding:terms"),
+    );
     assert!(
         emits
             .iter()
@@ -314,8 +336,18 @@ fn conversational_import_attaches_then_imports() {
 
     // Advance to the connect turn via the tap-only path (default name).
     dispatch_event(&dag, &store, &mut out, &onboarding_required_event());
-    dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:skip"));
-    dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:agree"));
+    dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &tap_event("urn:msg2:onboarding:skip"),
+    );
+    dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &tap_event("urn:msg2:onboarding:agree"),
+    );
 
     // Choose the import branch -> guide asks for an archive file.
     dispatch_event(
@@ -349,8 +381,12 @@ fn conversational_import_attaches_then_imports() {
     );
 
     // Import -> carrier:ImportAccount carrying the chosen archive path.
-    let import_emits =
-        dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:import"));
+    let import_emits = dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &tap_event("urn:msg2:onboarding:import"),
+    );
     let import = import_emits
         .iter()
         .find(|e| e.contains("carrier:ImportAccount"))

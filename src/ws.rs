@@ -200,8 +200,7 @@ pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(W
                                         match ws.send(Message::Text(msg)) {
                                             Ok(()) => {}
                                             Err(tungstenite::Error::Io(ref e))
-                                                if e.kind()
-                                                    == std::io::ErrorKind::WouldBlock =>
+                                                if e.kind() == std::io::ErrorKind::WouldBlock =>
                                             {
                                                 // Send buffer full — pause draining.
                                                 // The remaining per_client_rx items
@@ -226,8 +225,7 @@ pub fn start_ws_server(port: u16, greeting: Option<String>) -> anyhow::Result<(W
                                     match ws.flush() {
                                         Ok(()) => {}
                                         Err(tungstenite::Error::Io(ref e))
-                                            if e.kind()
-                                                == std::io::ErrorKind::WouldBlock => {}
+                                            if e.kind() == std::io::ErrorKind::WouldBlock => {}
                                         Err(e) => {
                                             tracing::warn!(target: "WS", %e, "flush error, dropping client");
                                             break 'client;

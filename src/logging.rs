@@ -38,16 +38,7 @@ use tracing_subscriber::EnvFilter;
 /// by the carrier shim ("JAMI", "SHIM"), antenna's own subsystems, and the
 /// catch-all ("CARRIER") all live here.
 pub const KNOWN_TAGS: &[&str] = &[
-    "JAMI",
-    "SHIM",
-    "CARRIER",
-    "DISPATCH",
-    "SPARQL",
-    "PIPELINE",
-    "SCRIPT",
-    "CHANNEL",
-    "LLM",
-    "WS",
+    "JAMI", "SHIM", "CARRIER", "DISPATCH", "SPARQL", "PIPELINE", "SCRIPT", "CHANNEL", "LLM", "WS",
     "STATION",
 ];
 
@@ -197,12 +188,11 @@ pub fn init(default_level: &str, tags: &str) -> Result<()> {
         Err(_) => {
             let root = default_level.to_string();
             let antenna = format!("antenna={}", default_level);
-            EnvFilter::new(root)
-                .add_directive(
-                    antenna
-                        .parse()
-                        .with_context(|| format!("invalid --log level '{}'", default_level))?,
-                )
+            EnvFilter::new(root).add_directive(
+                antenna
+                    .parse()
+                    .with_context(|| format!("invalid --log level '{}'", default_level))?,
+            )
         }
     };
 

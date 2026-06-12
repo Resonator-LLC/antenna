@@ -1,15 +1,15 @@
 #![cfg(feature = "llm-http")]
 
-///! Benchmark: SemanticRouter LLM backend with local Ollama (qwen2.5-coder:7b).
-///!
-///! Measures:
-///!   - Single request latency
-///!   - Token generation rate (from Ollama response metadata)
-///!   - Throughput (sequential requests/sec)
-///!   - Turtle validity rate
-///!
-///! Requires: Ollama running at localhost:11434 with the model pulled.
-///! Run:  cargo test --release --test llm_bench -- --nocapture --ignored
+//! Benchmark: SemanticRouter LLM backend with local Ollama (qwen2.5-coder:7b).
+//!
+//! Measures:
+//!   - Single request latency
+//!   - Token generation rate (from Ollama response metadata)
+//!   - Throughput (sequential requests/sec)
+//!   - Turtle validity rate
+//!
+//! Requires: Ollama running at localhost:11434 with the model pulled.
+//! Run:  cargo test --release --test llm_bench -- --nocapture --ignored
 use std::time::{Duration, Instant};
 
 const OLLAMA_ENDPOINT: &str = "http://localhost:11434";
@@ -55,7 +55,6 @@ struct OllamaResponse {
     prompt_eval_count: u64,
     eval_duration_ms: f64,
     prompt_eval_duration_ms: f64,
-    total_duration_ms: f64,
     done_reason: String,
 }
 
@@ -85,7 +84,6 @@ fn ollama_generate(system: &str, prompt: &str, max_tokens: u32) -> Result<Ollama
         prompt_eval_count: extract_json_number(&text, "prompt_eval_count"),
         eval_duration_ms: extract_json_number(&text, "eval_duration") as f64 / 1e6,
         prompt_eval_duration_ms: extract_json_number(&text, "prompt_eval_duration") as f64 / 1e6,
-        total_duration_ms: extract_json_number(&text, "total_duration") as f64 / 1e6,
         done_reason: extract_json_string(&text, "done_reason").unwrap_or_default(),
     })
 }
@@ -319,6 +317,7 @@ fn llm_bench_turtle_validity() {
 
     eprintln!("\n--- Validity ---");
     eprintln!("  Valid:       {} / {} ({:.0}%)", valid, n, rate);
+    eprintln!("  Invalid:     {} / {}", invalid, n);
     eprintln!("  Avg triples: {}", avg_triples);
 }
 

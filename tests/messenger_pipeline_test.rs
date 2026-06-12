@@ -52,7 +52,9 @@ struct CaptureOut {
 }
 impl CaptureOut {
     fn new() -> Self {
-        Self { messages: Vec::new() }
+        Self {
+            messages: Vec::new(),
+        }
     }
 }
 impl AntennaOut for CaptureOut {
@@ -89,8 +91,7 @@ fn build_messenger_pipeline_with_seeds(peer_uri: &str, peer_nick: &str) -> (RdfS
         .insert_turtle(&pipeline_ttl)
         .expect("insert messenger pipeline");
 
-    let seed_ttl =
-        std::fs::read_to_string(rel("radios/messenger/seed.ttl")).expect("read seed");
+    let seed_ttl = std::fs::read_to_string(rel("radios/messenger/seed.ttl")).expect("read seed");
     store.insert_turtle(&seed_ttl).expect("insert seed");
 
     let dag = Dag::load(&store).expect("load dag");
@@ -238,9 +239,10 @@ fn self_id_event(self_uri: &str) -> String {
 /// `carrier/src/turtle_emit.c:275-292` — conversationId / contactUri /
 /// messageId / fileId (quoted strings), filename (quoted), size (raw
 /// integer literal). Wrapped as antenna:Test so dispatch routes the line
-/// through the script's beforeInsert broadcast (the same trick reaction_event
-/// + contact_online_event use), letting the carrier:FileRecv else-if branch
-/// in pipeline.ttl pick it up via substring match.
+/// through the script's beforeInsert broadcast (the same trick that
+/// reaction_event and contact_online_event use), letting the
+/// carrier:FileRecv else-if branch in pipeline.ttl pick it up via
+/// substring match.
 fn file_recv_event(
     conv_id: &str,
     sender_uri: &str,
@@ -399,9 +401,7 @@ fn lod_fill_mode_at(store: &RdfStore, obj_uri: &str, below: f64) -> Option<Strin
 /// bubble with reactions emits 3 (tier 1/2/3); a bubble without reactions
 /// emits 1 (compact single-tier mirror of the M1-C Path A baseline).
 fn lod_count(store: &RdfStore, obj_uri: &str) -> usize {
-    let q = format!(
-        "SELECT (COUNT(?l) AS ?c) WHERE {{ <{obj_uri}> <{ANTENNA_NS}lod> ?l }}"
-    );
+    let q = format!("SELECT (COUNT(?l) AS ?c) WHERE {{ <{obj_uri}> <{ANTENNA_NS}lod> ?l }}");
     let Ok(QueryResults::Solutions(solutions)) = store.query(&q) else {
         return 0;
     };
@@ -492,7 +492,11 @@ fn bubble_tier1_chip_wraps_in_button_for_quick_add_tap() {
 
     dispatch::dispatch(
         &text_message_event("did:tox:peer", MID, "hello"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
@@ -500,7 +504,11 @@ fn bubble_tier1_chip_wraps_in_button_for_quick_add_tap() {
     // each bubble's tier widgets with the inline chip wrapped in Button.
     dispatch::dispatch(
         &reaction_event(MID, "did:test:user1", EMOJI_THUMBS),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
 
@@ -528,14 +536,22 @@ fn bubble_tier3_renders_distinct_reactor_fingerprints() {
 
     dispatch::dispatch(
         &text_message_event("did:tox:peer", MID, "hello"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     for u in ["did:test:user1", "did:test:user2", "did:test:user3"] {
         dispatch::dispatch(
             &reaction_event(MID, u, EMOJI_THUMBS),
-            &store, &dag, None, "", &mut out,
+            &store,
+            &dag,
+            None,
+            "",
+            &mut out,
         );
         settle(&dag, &store, &mut out, 10);
     }
@@ -701,17 +717,29 @@ fn bubble_tier3_renders_presence_dot_and_display_name() {
     // Alice — online, named via ContactName. Reacts first.
     dispatch::dispatch(
         &contact_online_event("did:test:alice"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 5);
     dispatch::dispatch(
         &contact_name_event("did:test:alice", "Alice"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 5);
     dispatch::dispatch(
         &reaction_event(MID, "did:test:alice", EMOJI_THUMBS),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
@@ -719,17 +747,29 @@ fn bubble_tier3_renders_presence_dot_and_display_name() {
     // peer-cache row exists, but ContactOffline has set online=false).
     dispatch::dispatch(
         &contact_online_event("did:test:bob"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 5);
     dispatch::dispatch(
         &contact_offline_event("did:test:bob"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 5);
     dispatch::dispatch(
         &reaction_event(MID, "did:test:bob", EMOJI_THUMBS),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
@@ -769,7 +809,7 @@ fn bubble_tier3_renders_presence_dot_and_display_name() {
     // reacted later. The check looks at the byte offset of each name in
     // the rendered widget string.
     let alice_pos = widget.find("Text{value=Alice,").expect("alice row");
-    let bob_pos   = widget.find("Text{value=bob,").expect("bob row");
+    let bob_pos = widget.find("Text{value=bob,").expect("bob row");
     assert!(
         alice_pos < bob_pos,
         "tier-3 must order online reactors before offline (alice@{alice_pos} bob@{bob_pos}) — got: {widget}",
@@ -852,12 +892,20 @@ fn bubbles_emit_as_per_message_placed_objects() {
     // the bubble takes the M1-D three-tier shape.
     dispatch::dispatch(
         &text_message_event("did:tox:peer", MID, "hello"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         &reaction_event(MID, "did:test:user1", EMOJI_THUMBS),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
@@ -904,9 +952,7 @@ fn bubbles_emit_as_per_message_placed_objects() {
     );
     for &below in &[BUBBLE_TIER1_BELOW, BUBBLE_TIER2_BELOW, BUBBLE_TIER3_BELOW] {
         let lod = lod_widget_at(&store, &burl, below).unwrap_or_else(|| {
-            panic!(
-                "bubble must carry an antenna:lod block at antenna:below={below}"
-            )
+            panic!("bubble must carry an antenna:lod block at antenna:below={below}")
         });
         assert!(
             lod.contains(&format!("urn:msg:bubble:{MID}")),
@@ -935,8 +981,8 @@ fn bubbles_emit_as_per_message_placed_objects() {
     // tier-4 placeholder doesn't carry any per-bubble URNs by design.
     // Tier-1 bubble-area-not-inlined coverage is in the dedicated
     // chat_panel_tier1_preserves_existing_chatbody test below.
-    let chat_lod = lod_widget_at(&store, "urn:msg:chat", 99999.0)
-        .expect("chat panel widget must still emit");
+    let chat_lod =
+        lod_widget_at(&store, "urn:msg:chat", 99999.0).expect("chat panel widget must still emit");
     assert!(
         !chat_lod.contains(&format!("urn:msg:bubble:{MID}")),
         "Path A: bubble must NOT also appear inside the chat panel widget — got: {chat_lod}"
@@ -966,12 +1012,20 @@ fn bubble_widget_dsl_contains_reactions_inline() {
     settle(&dag, &store, &mut out, 5);
     dispatch::dispatch(
         &text_message_event("did:tox:peer", MID, "hello"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         &reaction_event(MID, "did:test:user1", EMOJI_THUMBS),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
@@ -1029,7 +1083,11 @@ fn bubble_lod_tiers_grow_with_reactions() {
     settle(&dag, &store, &mut out, 5);
     dispatch::dispatch(
         &text_message_event("did:tox:peer", MID, "hello"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
     // Inject 3 distinct reactors so the tier-3 reactor block has multiple
@@ -1037,7 +1095,11 @@ fn bubble_lod_tiers_grow_with_reactions() {
     for u in ["did:test:user1", "did:test:user2", "did:test:user3"] {
         dispatch::dispatch(
             &reaction_event(MID, u, EMOJI_THUMBS),
-            &store, &dag, None, "", &mut out,
+            &store,
+            &dag,
+            None,
+            "",
+            &mut out,
         );
         settle(&dag, &store, &mut out, 10);
     }
@@ -1075,7 +1137,11 @@ fn bubble_with_no_reactions_stays_compact() {
     settle(&dag, &store, &mut out, 5);
     dispatch::dispatch(
         &text_message_event("did:tox:peer", MID, "hello"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
@@ -1204,18 +1270,33 @@ fn composer_tier1_is_real_textfield_when_input_enabled() {
     // (sets peerUri) + ConversationReady (sets conversationId) flips the
     // gate; SelfId seeds globalThis.selfUri so the rebuildChat path runs
     // through cleanly.
-    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &self_id_event("did:tox:self"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         &contact_online_event("did:tox:peer"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         "[] a antenna:Test ; carrier:ConversationReady \"_\" ; \
          carrier:contactUri \"did:tox:peer\" ; \
          carrier:conversationId \"conv-m2a-test\" .",
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 20);
 
@@ -1276,7 +1357,9 @@ fn composer_tier1_shows_swarm_not_ready_guard_before_ready() {
     // the same chrome shape the inputEnabled branch uses, so the boot
     // screenshot reads as a designed card whether or not swarm is ready.
     assert!(
-        tier1.contains("Container{color=surface-standard,borderColor=border-faint,borderRadius=4,padding=6}"),
+        tier1.contains(
+            "Container{color=surface-standard,borderColor=border-faint,borderRadius=4,padding=6}"
+        ),
         "ISSUE-089 cut 3: composer tier 1 muted-state must wrap in the chrome card — got: {tier1}"
     );
     assert!(
@@ -1301,18 +1384,33 @@ fn issue_098_composer_tier1_carries_inline_send_glyph_when_input_enabled() {
 
     dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
     settle(&dag, &store, &mut out, 20);
-    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &self_id_event("did:tox:self"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         &contact_online_event("did:tox:peer"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         "[] a antenna:Test ; carrier:ConversationReady \"_\" ; \
          carrier:contactUri \"did:tox:peer\" ; \
          carrier:conversationId \"conv-098-test\" .",
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 20);
 
@@ -1346,9 +1444,7 @@ fn issue_098_composer_tier1_carries_inline_send_glyph_when_input_enabled() {
     // identical to the pre-fix shape so existing send-on-Enter behavior
     // is preserved verbatim.
     assert!(
-        tier1.contains(
-            "TextField{hint=Press Enter to send,target=urn:msg:chatinput,key=input}"
-        ),
+        tier1.contains("TextField{hint=Press Enter to send,target=urn:msg:chatinput,key=input}"),
         "ISSUE-098: tier-1 TextField wire (target/key/hint) must remain \
          intact — got: {tier1}"
     );
@@ -1390,18 +1486,33 @@ fn settle_input_enabled(store: &RdfStore, dag: &Dag) {
     let mut out = CaptureOut::new();
     dispatch::dispatch("[] a <urn:msg:WhoAmI> .", store, dag, None, "", &mut out);
     settle(dag, store, &mut out, 20);
-    dispatch::dispatch(&self_id_event("did:tox:self"), store, dag, None, "", &mut out);
+    dispatch::dispatch(
+        &self_id_event("did:tox:self"),
+        store,
+        dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(dag, store, &mut out, 10);
     dispatch::dispatch(
         &contact_online_event("did:tox:peer"),
-        store, dag, None, "", &mut out,
+        store,
+        dag,
+        None,
+        "",
+        &mut out,
     );
     settle(dag, store, &mut out, 10);
     dispatch::dispatch(
         "[] a antenna:Test ; carrier:ConversationReady \"_\" ; \
          carrier:contactUri \"did:tox:peer\" ; \
          carrier:conversationId \"conv-m2b-test\" .",
-        store, dag, None, "", &mut out,
+        store,
+        dag,
+        None,
+        "",
+        &mut out,
     );
     settle(dag, store, &mut out, 20);
 }
@@ -1458,7 +1569,7 @@ fn composer_tier2_emits_tool_row_above_singleline_textfield() {
     let tier2_h = lod_world_height_at(&store, COMPOSER_URI, COMPOSER_TIER2_BELOW)
         .expect("M2-B tier 2 must carry an antenna:worldHeight override");
     assert!(
-        tier2_h >= 50.0 && tier2_h <= 80.0,
+        (50.0..=80.0).contains(&tier2_h),
         "M2-B tier 2 worldHeight should be ~60 px (tool row + single line) — got: {tier2_h}"
     );
 }
@@ -1516,7 +1627,7 @@ fn composer_tier3_emits_multiline_textfield_with_send_button() {
     let tier3_h = lod_world_height_at(&store, COMPOSER_URI, COMPOSER_TIER3_BELOW)
         .expect("M2-B tier 3 must carry an antenna:worldHeight override");
     assert!(
-        tier3_h >= 100.0 && tier3_h <= 200.0,
+        (100.0..=200.0).contains(&tier3_h),
         "M2-B tier 3 worldHeight should be ~140 px (4-line field + send row) — got: {tier3_h}"
     );
 
@@ -1527,9 +1638,8 @@ fn composer_tier3_emits_multiline_textfield_with_send_button() {
     // worldHeight=140 × scale rect (e.g. 630 px tall at scale 4.5) → most
     // of the rect renders empty. With it, `Column[mainAxisSize=max]` +
     // `Expanded[TextField]` stretch the field to the full rect height.
-    let fill_mode =
-        lod_fill_mode_at(&store, COMPOSER_URI, COMPOSER_TIER3_BELOW)
-            .expect("M2-B tier 3 must carry antenna:fillMode \"fill\"");
+    let fill_mode = lod_fill_mode_at(&store, COMPOSER_URI, COMPOSER_TIER3_BELOW)
+        .expect("M2-B tier 3 must carry antenna:fillMode \"fill\"");
     assert_eq!(
         fill_mode, "fill",
         "M2-B tier 3 fillMode must be the literal string \"fill\" — got: {fill_mode}"
@@ -1656,7 +1766,11 @@ fn tier4_widget_renders_split_with_preview_pseudo_bubble() {
     // The peer uri matches settle_input_enabled's contact_online_event.
     dispatch::dispatch(
         &text_message_event("did:tox:peer", "preview-test-mid-1", "yo"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
@@ -1666,7 +1780,11 @@ fn tier4_widget_renders_split_with_preview_pseudo_bubble() {
     // pseudo-bubble. No ClockTick needed (and no 250 ms wait).
     dispatch::dispatch(
         &text_changed_event("urn:msg:chatinput", "hello world"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
@@ -1836,18 +1954,33 @@ fn chat_panel_no_longer_hosts_inline_composer() {
     settle(&dag, &store, &mut out, 20);
     // Flip inputEnabled true so we exercise the path that USED to inline
     // a TextField — proving extraction holds in both states.
-    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &self_id_event("did:tox:self"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         &contact_online_event("did:tox:peer"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         "[] a antenna:Test ; carrier:ConversationReady \"_\" ; \
          carrier:contactUri \"did:tox:peer\" ; \
          carrier:conversationId \"conv-m2a-extract\" .",
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 20);
 
@@ -1857,8 +1990,8 @@ fn chat_panel_no_longer_hosts_inline_composer() {
     // never inlines TextField / chatinput / swarm-not-ready — those live
     // in the composer's own placed-object LOD ladder. Tier-1 chrome
     // fidelity has its own dedicated test below.
-    let chat_lod = lod_widget_at(&store, "urn:msg:chat", 99999.0)
-        .expect("chat panel widget must still emit");
+    let chat_lod =
+        lod_widget_at(&store, "urn:msg:chat", 99999.0).expect("chat panel widget must still emit");
     assert!(
         !chat_lod.contains("TextField{"),
         "M2-A: chat panel must NOT inline a TextField — composer owns that now. got: {chat_lod}"
@@ -1965,7 +2098,11 @@ fn draft_persists_after_textchanged_plus_debounce_and_clock_tick() {
 
     dispatch::dispatch(
         &text_changed_event("urn:msg:chatinput", "hey there"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     // Let the script consume the TextChanged broadcast and set pendingDraft.
     settle(&dag, &store, &mut out, 1);
@@ -2003,7 +2140,11 @@ fn empty_textchanged_drops_persisted_draft_on_next_tick() {
 
     dispatch::dispatch(
         &text_changed_event("urn:msg:chatinput", "to be erased"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 1);
     std::thread::sleep(Duration::from_millis(280));
@@ -2018,7 +2159,11 @@ fn empty_textchanged_drops_persisted_draft_on_next_tick() {
     // Now erase. Same target URN, empty value.
     dispatch::dispatch(
         &text_changed_event("urn:msg:chatinput", ""),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 1);
     std::thread::sleep(Duration::from_millis(280));
@@ -2045,7 +2190,11 @@ fn textsubmitted_clears_persisted_draft_for_conversation() {
 
     dispatch::dispatch(
         &text_changed_event("urn:msg:chatinput", "draft body"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 1);
     std::thread::sleep(Duration::from_millis(280));
@@ -2062,7 +2211,11 @@ fn textsubmitted_clears_persisted_draft_for_conversation() {
         "[] a <http://resonator.network/v2/antenna#TextSubmitted> ; \
          <http://resonator.network/v2/antenna#target> <urn:msg:chatinput> ; \
          <http://resonator.network/v2/antenna#value> \"final message\" .",
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 8);
 
@@ -2092,7 +2245,11 @@ fn tier3_widget_renders_draft_card_with_restore_props() {
     // break the widget-DSL split-on-comma parser.
     dispatch::dispatch(
         &text_changed_event("urn:msg:chatinput", "hey, world"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 1);
     std::thread::sleep(Duration::from_millis(280));
@@ -2143,13 +2300,20 @@ fn restore_draft_tap_clears_pending_draft() {
     // Type "first" → flush.
     dispatch::dispatch(
         &text_changed_event("urn:msg:chatinput", "first"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 1);
     std::thread::sleep(Duration::from_millis(280));
     tick_clock(&dag);
     settle(&dag, &store, &mut out, 8);
-    assert_eq!(draft_body(&store, "conv-m2b-test").as_deref(), Some("first"));
+    assert_eq!(
+        draft_body(&store, "conv-m2b-test").as_deref(),
+        Some("first")
+    );
 
     // Type "in-flight" but DON'T wait for the flush — pendingDraft is
     // dirty. Then tap restoreDraft for this conv. The router branch
@@ -2157,14 +2321,22 @@ fn restore_draft_tap_clears_pending_draft() {
     // produces no flush and the persisted body remains "first".
     dispatch::dispatch(
         &text_changed_event("urn:msg:chatinput", "in-flight"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 1);
     dispatch::dispatch(
         "[] a <http://resonator.network/v2/antenna#TapEvent> ; \
          <http://resonator.network/v2/antenna#target> \
          <urn:msg:restoreDraft:conv-m2b-test> .",
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 1);
 
@@ -2210,10 +2382,10 @@ fn tier3_widget_renders_format_toolbar_with_four_buttons() {
     // still URL-encodes them for the parsing-path uniformity rationale
     // documented in the FORMAT_BUTTONS comment block.
     for (urn, prefix_enc, suffix_enc) in [
-        ("urn:composer:bold",   "**",       "**"),
-        ("urn:composer:italic", "*",        "*"),
-        ("urn:composer:code",   "%60",      "%60"),    // "`" → %60
-        ("urn:composer:quote",  "%3E%20",   ""),       // "> " → %3E%20
+        ("urn:composer:bold", "**", "**"),
+        ("urn:composer:italic", "*", "*"),
+        ("urn:composer:code", "%60", "%60"),  // "`" → %60
+        ("urn:composer:quote", "%3E%20", ""), // "> " → %3E%20
     ] {
         let needle = format!(
             "Button{{onTap={urn},wrapSelectKey=input,prefix={prefix_enc},suffix={suffix_enc}",
@@ -2271,7 +2443,9 @@ fn tier3_widget_renders_format_toolbar_with_four_buttons() {
     // distinct affordance against the chrome. Pinned so a future
     // refactor can't silently re-flatten the contrast.
     assert!(
-        tier3.contains("Container{color=select-bg,padding=8,borderRadius=4,borderColor=border-active}"),
+        tier3.contains(
+            "Container{color=select-bg,padding=8,borderRadius=4,borderColor=border-active}"
+        ),
         "tier 3 format-toolbar chips must declare \
          `color=select-bg` + `borderColor=border-active` (not the \
          original `surface-muted` + `border-faint`) so each chip reads \
@@ -2426,7 +2600,11 @@ fn tap_on_send_button_routes_through_pipeline_without_duplicate_send() {
         "[] a <http://resonator.network/v2/antenna#TapEvent> ; \
          <http://resonator.network/v2/antenna#target> \
          <urn:msg:send:conv-m2b-test> .",
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 8);
 
@@ -2436,7 +2614,8 @@ fn tap_on_send_button_routes_through_pipeline_without_duplicate_send() {
         .filter(|m| m.contains("carrier:SendMsg"))
         .count();
     assert_eq!(
-        send_msg_count, 0,
+        send_msg_count,
+        0,
         "tap on urn:msg:send:<conv> must NOT emit carrier:SendMsg — the \
          tap is a breadcrumb, the actual send fires via submitKey=input → \
          TextSubmitted. Captured emits (filtered for carrier:SendMsg): \
@@ -2531,18 +2710,33 @@ fn chat_panel_tier1_preserves_existing_chatbody() {
 
     dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
     settle(&dag, &store, &mut out, 20);
-    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &self_id_event("did:tox:self"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         &contact_online_event("did:tox:peer"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         "[] a antenna:Test ; carrier:ConversationReady \"_\" ; \
          carrier:contactUri \"did:tox:peer\" ; \
          carrier:conversationId \"conv-m3a-tier1\" .",
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 20);
 
@@ -2582,9 +2776,7 @@ fn chat_panel_tier1_preserves_existing_chatbody() {
     // single line instead of soft-wrapping mid-string when the chat panel
     // width can't fit the full row. Both monospace name slots carry it —
     // count the joint suffix to assert both ends.
-    let maxlines_count = tier1
-        .matches(",fontFamily=monospace,maxLines=1}")
-        .count();
+    let maxlines_count = tier1.matches(",fontFamily=monospace,maxLines=1}").count();
     assert!(
         maxlines_count >= 2,
         "tier 1 statusRow must apply maxLines=1 to both the nick and the recipient \
@@ -2695,9 +2887,8 @@ fn chat_panel_tiers_2_3_carry_chrome_around_inner_area() {
              Column{{mainAxisSize=max,mainAxisAlignment=center}} so the \
              chrome centers vertically in the bounded rect — got: {widget}"
         );
-        let fill_mode = lod_fill_mode_at(&store, CHAT_URI, below).unwrap_or_else(|| {
-            panic!("tier at below={below} must carry antenna:fillMode 'fill'")
-        });
+        let fill_mode = lod_fill_mode_at(&store, CHAT_URI, below)
+            .unwrap_or_else(|| panic!("tier at below={below} must carry antenna:fillMode 'fill'"));
         assert_eq!(
             fill_mode, "fill",
             "tier at below={below} fillMode must be the literal string 'fill' — got: {fill_mode}"
@@ -2722,14 +2913,22 @@ fn chat_panel_tier4_carries_real_sparkline_with_chrome() {
     // mainAxisAlignment=center, CHAT header, statusRow) are unchanged.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3d-chrome");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3d-chrome",
+    );
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "tier4-1", "ping");
 
     let widget = lod_widget_at(&store, CHAT_URI, CHAT_TIER4_BELOW)
         .expect("chat panel tier 4 (week-sparkline) must emit a widget literal");
 
     assert!(
-        widget.contains("Container{color=surface-standard,borderColor=border-faint,borderRadius=6}"),
+        widget
+            .contains("Container{color=surface-standard,borderColor=border-faint,borderRadius=6}"),
         "tier 4 must wrap in the new surface-standard + border-faint chrome — got: {widget}"
     );
     assert!(
@@ -2918,9 +3117,7 @@ fn day_buckets(store: &RdfStore) -> Vec<DayBucketRow> {
                 _ => None,
             })
         };
-        let count: i64 = lit("count")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let count: i64 = lit("count").and_then(|s| s.parse().ok()).unwrap_or(0);
         out.push(DayBucketRow {
             uri: lit("b").unwrap_or_default(),
             conversation_id: lit("conv").unwrap_or_default(),
@@ -2935,9 +3132,7 @@ fn day_buckets(store: &RdfStore) -> Vec<DayBucketRow> {
 
 /// Pull all messenger:participants URIs for a given DayBucket URI.
 fn bucket_participants(store: &RdfStore, bucket_uri: &str) -> Vec<String> {
-    let q = format!(
-        "SELECT ?p WHERE {{ <{bucket_uri}> <{MSG_NS}participants> ?p }}"
-    );
+    let q = format!("SELECT ?p WHERE {{ <{bucket_uri}> <{MSG_NS}participants> ?p }}");
     let mut out = Vec::new();
     let Ok(QueryResults::Solutions(solutions)) = store.query(&q) else {
         return out;
@@ -2959,10 +3154,24 @@ fn day_buckets_aggregate_correctly_from_rolling_buffer() {
     // participants=[did:tox:peer] (sender of the inbound TextMessages).
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3b-agg");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3b-agg",
+    );
 
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "m1", "morning");
-    send_text_message(&store, &dag, &mut out, "did:tox:peer", "m2", "midday update");
+    send_text_message(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:peer",
+        "m2",
+        "midday update",
+    );
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "m3", "evening");
 
     let buckets = day_buckets(&store);
@@ -2972,7 +3181,10 @@ fn day_buckets_aggregate_correctly_from_rolling_buffer() {
         "single-day fixture must yield exactly one messenger:DayBucket — got {} \
          (conversation buckets: {:?})",
         buckets.len(),
-        buckets.iter().map(|b| (&b.date, b.message_count)).collect::<Vec<_>>()
+        buckets
+            .iter()
+            .map(|b| (&b.date, b.message_count))
+            .collect::<Vec<_>>()
     );
     let b = &buckets[0];
     assert_eq!(b.conversation_id, "conv-m3b-agg");
@@ -3000,7 +3212,14 @@ fn day_buckets_carry_multi_valued_participants_predicate() {
     // messenger:participants triples on the same bucket.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3b-parts");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3b-parts",
+    );
 
     // Drive a name event for the peer first, otherwise the from-field is
     // a shortUri fingerprint and the participants list reads the JS
@@ -3034,7 +3253,14 @@ fn day_bucket_urns_scope_by_conversation() {
     // for the same reason.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3b-scoped");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3b-scoped",
+    );
 
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "s1", "scoped");
 
@@ -3068,7 +3294,14 @@ fn flushdaybuckets_deletes_stale_buckets_on_rebuild() {
     // the INSERT for the new pass — no accumulation.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3b-stale");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3b-stale",
+    );
 
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "s1", "first");
     let buckets1 = day_buckets(&store);
@@ -3082,9 +3315,15 @@ fn flushdaybuckets_deletes_stale_buckets_on_rebuild() {
         1,
         "second message must not double-create the day bucket — got {} buckets, {:?}",
         buckets2.len(),
-        buckets2.iter().map(|b| (&b.date, b.message_count)).collect::<Vec<_>>()
+        buckets2
+            .iter()
+            .map(|b| (&b.date, b.message_count))
+            .collect::<Vec<_>>()
     );
-    assert_eq!(buckets2[0].message_count, 2, "count must reflect both messages");
+    assert_eq!(
+        buckets2[0].message_count, 2,
+        "count must reflect both messages"
+    );
     assert_eq!(buckets2[0].first_snippet, "first");
     assert_eq!(buckets2[0].last_snippet, "second");
 }
@@ -3100,7 +3339,14 @@ fn day_bucket_snippet_truncates_at_24_chars() {
     // store literal.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3b-trunc");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3b-trunc",
+    );
 
     let long = "this is a very long message that exceeds twenty four chars";
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "long-1", long);
@@ -3166,9 +3412,7 @@ fn hour_buckets(store: &RdfStore) -> Vec<HourBucketRow> {
                 _ => None,
             })
         };
-        let count: i64 = lit("count")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let count: i64 = lit("count").and_then(|s| s.parse().ok()).unwrap_or(0);
         out.push(HourBucketRow {
             uri: lit("b").unwrap_or_default(),
             conversation_id: lit("conv").unwrap_or_default(),
@@ -3190,10 +3434,24 @@ fn hour_buckets_aggregate_correctly_from_rolling_buffer() {
     // hour granularity.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3c-agg");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3c-agg",
+    );
 
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "h1", "morning");
-    send_text_message(&store, &dag, &mut out, "did:tox:peer", "h2", "midday update");
+    send_text_message(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:peer",
+        "h2",
+        "midday update",
+    );
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "h3", "evening");
 
     let buckets = hour_buckets(&store);
@@ -3203,7 +3461,10 @@ fn hour_buckets_aggregate_correctly_from_rolling_buffer() {
         "single-hour fixture must yield exactly one messenger:HourBucket — got {} \
          (conversation buckets: {:?})",
         buckets.len(),
-        buckets.iter().map(|b| (&b.hour, b.message_count)).collect::<Vec<_>>()
+        buckets
+            .iter()
+            .map(|b| (&b.hour, b.message_count))
+            .collect::<Vec<_>>()
     );
     let b = &buckets[0];
     assert_eq!(b.conversation_id, "conv-m3c-agg");
@@ -3238,7 +3499,14 @@ fn hour_bucket_urns_scope_by_conversation() {
     // for the same reason.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3c-scoped");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3c-scoped",
+    );
 
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "s1", "scoped");
 
@@ -3271,7 +3539,14 @@ fn flushhourbuckets_deletes_stale_buckets_on_rebuild() {
     // the INSERT for the new pass — no accumulation.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3c-stale");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3c-stale",
+    );
 
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "s1", "first");
     let buckets1 = hour_buckets(&store);
@@ -3285,9 +3560,15 @@ fn flushhourbuckets_deletes_stale_buckets_on_rebuild() {
         1,
         "second message must not double-create the hour bucket — got {} buckets, {:?}",
         buckets2.len(),
-        buckets2.iter().map(|b| (&b.hour, b.message_count)).collect::<Vec<_>>()
+        buckets2
+            .iter()
+            .map(|b| (&b.hour, b.message_count))
+            .collect::<Vec<_>>()
     );
-    assert_eq!(buckets2[0].message_count, 2, "count must reflect both messages");
+    assert_eq!(
+        buckets2[0].message_count, 2,
+        "count must reflect both messages"
+    );
     assert_eq!(buckets2[0].first_snippet, "first");
     assert_eq!(buckets2[0].last_snippet, "second");
 }
@@ -3305,7 +3586,14 @@ fn hour_bucket_snippet_truncates_at_24_chars() {
     // rendered widget DSL.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3c-trunc");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3c-trunc",
+    );
 
     let long = "this is a very long message that exceeds twenty four chars";
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "long-1", long);
@@ -3337,9 +3625,23 @@ fn day_bucket_snippet_does_not_double_escape_quotes() {
     // by-construction (not `"`, not `\`).
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3c-escape");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3c-escape",
+    );
 
-    send_text_message(&store, &dag, &mut out, "did:tox:peer", "esc-1", "hello world");
+    send_text_message(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:peer",
+        "esc-1",
+        "hello world",
+    );
 
     let widget = lod_widget_at(&store, CHAT_URI, CHAT_TIER3_BELOW)
         .expect("tier-3 widget literal must exist");
@@ -3392,7 +3694,14 @@ fn day_bucket_emit_skips_empty_iri_participant() {
     // that strips down to empty. Assert that contract directly.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3c-empty-iri");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3c-empty-iri",
+    );
 
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "e1", "ping");
 
@@ -3406,7 +3715,10 @@ fn day_bucket_emit_skips_empty_iri_participant() {
         );
         // A stripped form would also be invalid — the guard at the
         // emit site checks pUri after the bracket strip.
-        let stripped: String = p.chars().filter(|c| !matches!(c, '<' | '>' | '"')).collect();
+        let stripped: String = p
+            .chars()
+            .filter(|c| !matches!(c, '<' | '>' | '"'))
+            .collect();
         assert!(
             !stripped.is_empty(),
             "messenger:participants must not strip down to empty (task #10 regression) — got: {p:?}"
@@ -3425,7 +3737,14 @@ fn tier2_renders_inline_bubbles_with_chrome() {
     // reusing the tier-1 helper rather than duplicating render logic.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3b-tier2");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3b-tier2",
+    );
 
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "t2-1", "alpha");
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "t2-2", "beta");
@@ -3454,7 +3773,8 @@ fn tier2_renders_inline_bubbles_with_chrome() {
     }
     // Chrome continuity holds (ISSUE-089 cut 3 shape).
     assert!(
-        widget.contains("Container{color=surface-standard,borderColor=border-faint,borderRadius=6}"),
+        widget
+            .contains("Container{color=surface-standard,borderColor=border-faint,borderRadius=6}"),
         "tier 2 must keep the chat-panel chrome (surface-standard outer) — got: {widget}"
     );
     assert!(
@@ -3476,7 +3796,14 @@ fn tier3_renders_row_per_day_with_count_and_snippets() {
     // actual camera move).
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3b-tier3");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3b-tier3",
+    );
 
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "t3-1", "first");
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "t3-2", "second");
@@ -3528,7 +3855,14 @@ fn tier3_emits_teleport_urn_on_each_row() {
     // in pipeline.ttl logs `[MSG] teleport-day <key>` for now.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3b-teleport");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3b-teleport",
+    );
 
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "tp-1", "ping");
 
@@ -3563,8 +3897,8 @@ fn tier2_and_tier3_render_empty_state_when_no_messages() {
     settle(&dag, &store, &mut out, 20);
 
     for below in [CHAT_TIER2_BELOW, CHAT_TIER3_BELOW] {
-        let widget = lod_widget_at(&store, CHAT_URI, below)
-            .expect("tier widget literal must exist");
+        let widget =
+            lod_widget_at(&store, CHAT_URI, below).expect("tier widget literal must exist");
         // Empty-state text is the same as tier 1's empty-conversation
         // copy ("no peer URI configured" before peer + conversationId
         // are set).
@@ -3601,7 +3935,14 @@ fn aggregation_runs_under_5ms_for_60_message_buffer() {
 
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3b-perf");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3b-perf",
+    );
 
     // Fill the rolling-60 buffer.
     for i in 0..60 {
@@ -3669,7 +4010,14 @@ fn tier4_renders_60_day_sparkline_column() {
     // with the synthetic zero-tick (1-px floor per UC2.9).
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3d-60");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3d-60",
+    );
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "tick-1", "ping");
 
     let widget = lod_widget_at(&store, CHAT_URI, CHAT_TIER4_BELOW)
@@ -3697,11 +4045,25 @@ fn sparkline_tick_height_proportional_to_message_count() {
     // rendered tick is the busiest tick (height=28, the cap).
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3d-h");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3d-h",
+    );
 
     // 5 messages from peer — single bucket with count=5.
     for i in 0..5 {
-        send_text_message(&store, &dag, &mut out, "did:tox:peer", &format!("h-{i}"), "msg");
+        send_text_message(
+            &store,
+            &dag,
+            &mut out,
+            "did:tox:peer",
+            &format!("h-{i}"),
+            "msg",
+        );
     }
 
     let widget = lod_widget_at(&store, CHAT_URI, CHAT_TIER4_BELOW)
@@ -3760,12 +4122,10 @@ fn sparkline_tick_color_reflects_participant_diversity() {
         // self-id event so `globalThis.greeted` short-circuits via the
         // missing peerUri/selfUri (`maybeGreet` early-returns when
         // peerUri is empty).
-        let conv_event = format!(
-            "[] a antenna:Test ; carrier:ConversationReady \"_\" ; \
+        let conv_event = "[] a antenna:Test ; carrier:ConversationReady \"_\" ; \
              carrier:contactUri \"did:tox:peer-only\" ; \
-             carrier:conversationId \"conv-m3d-c1\" ."
-        );
-        dispatch::dispatch(&conv_event, &store, &dag, None, "", &mut out);
+             carrier:conversationId \"conv-m3d-c1\" .";
+        dispatch::dispatch(conv_event, &store, &dag, None, "", &mut out);
         settle(&dag, &store, &mut out, 20);
 
         // Inject a peer message — the participants list now contains a
@@ -3801,7 +4161,14 @@ fn sparkline_tick_color_reflects_participant_diversity() {
     {
         let (store, dag) = build_messenger_pipeline();
         let mut out = CaptureOut::new();
-        drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3d-c2");
+        drive_to_ready(
+            &store,
+            &dag,
+            &mut out,
+            "did:tox:self",
+            "did:tox:peer",
+            "conv-m3d-c2",
+        );
         send_text_message(&store, &dag, &mut out, "did:tox:peer", "c2-1", "back");
         send_text_message(&store, &dag, &mut out, "did:tox:peer-bob", "c2-2", "me too");
 
@@ -3822,7 +4189,14 @@ fn sparkline_zero_message_day_renders_minimal_tick() {
     // and assert the OTHER 59 days are zero-floor (1-px) ticks.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3d-z");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3d-z",
+    );
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "z-1", "ping");
 
     let widget = lod_widget_at(&store, CHAT_URI, CHAT_TIER4_BELOW)
@@ -3848,7 +4222,14 @@ fn sparkline_tick_emits_teleport_urn() {
     // teleportToDayFirstMessage handles both.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3d-urn");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3d-urn",
+    );
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "u-1", "ping");
 
     let widget = lod_widget_at(&store, CHAT_URI, CHAT_TIER4_BELOW)
@@ -3888,7 +4269,14 @@ fn teleport_urn_handler_emits_antenna_teleport() {
     // through insert_with_dag which calls out.send.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3d-tp");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3d-tp",
+    );
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "tp-1", "ping");
 
     let buckets = day_buckets(&store);
@@ -3914,7 +4302,8 @@ fn teleport_urn_handler_emits_antenna_teleport() {
     // arrive in either prefix-form or full-IRI form depending on the
     // emit path's serializer.
     let teleport = post_tap.iter().find(|m| {
-        m.contains("a antenna:Teleport") || m.contains("a <http://resonator.network/v2/antenna#Teleport>")
+        m.contains("a antenna:Teleport")
+            || m.contains("a <http://resonator.network/v2/antenna#Teleport>")
     });
     let teleport = teleport.unwrap_or_else(|| {
         panic!(
@@ -4040,7 +4429,11 @@ fn file_recv_mints_attachment_placed_object_and_emits_accept() {
     let parent_mid = "mid-with-file-1234567890";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "here is the spec"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
@@ -4057,7 +4450,11 @@ fn file_recv_mints_attachment_placed_object_and_emits_accept() {
             ATTACH_FILENAME,
             500_000,
         ),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle_capturing_emits(&dag, &store, &mut out, &mut raw_emits, 20);
 
@@ -4104,10 +4501,16 @@ fn file_recv_mints_attachment_placed_object_and_emits_accept() {
     let auri = attach_uri(ATTACH_FILE_ID);
     let geom = placed_geom(&store, &auri)
         .expect("messenger:Attachment placed object must emit with x/y/worldWidth/worldHeight");
-    assert!(geom.w > 0.0 && geom.w < 200.0,
-        "attachment worldWidth must be ~90 — got: {}", geom.w);
-    assert!(geom.h > 0.0 && geom.h < 50.0,
-        "attachment worldHeight must be tier-1 row height — got: {}", geom.h);
+    assert!(
+        geom.w > 0.0 && geom.w < 200.0,
+        "attachment worldWidth must be ~90 — got: {}",
+        geom.w
+    );
+    assert!(
+        geom.h > 0.0 && geom.h < 50.0,
+        "attachment worldHeight must be tier-1 row height — got: {}",
+        geom.h
+    );
 
     // 4 LOD blocks (icon / thumbnail / provenance / preview).
     assert_eq!(
@@ -4130,7 +4533,10 @@ fn file_recv_mints_attachment_placed_object_and_emits_accept() {
     );
     match store.query(&q_state).expect("ASK state") {
         QueryResults::Boolean(b) => {
-            assert!(b, "fresh attachment must be in `pending` state immediately after FileRecv");
+            assert!(
+                b,
+                "fresh attachment must be in `pending` state immediately after FileRecv"
+            );
         }
         _ => panic!("ASK must return boolean"),
     }
@@ -4140,15 +4546,17 @@ fn file_recv_mints_attachment_placed_object_and_emits_accept() {
     );
     match store.query(&q_bubble_ref).expect("ASK bubbleRef") {
         QueryResults::Boolean(b) => {
-            assert!(b, "messenger:bubbleRef must point at urn:msg:bubble:<parent_mid>");
+            assert!(
+                b,
+                "messenger:bubbleRef must point at urn:msg:bubble:<parent_mid>"
+            );
         }
         _ => panic!("ASK must return boolean"),
     }
 
     // Type triple: a antenna:Object , messenger:Attachment.
-    let q_type = format!(
-        "ASK WHERE {{ <{auri}> a <http://resonator.network/v2/messenger#Attachment> }}"
-    );
+    let q_type =
+        format!("ASK WHERE {{ <{auri}> a <http://resonator.network/v2/messenger#Attachment> }}");
     match store.query(&q_type).expect("ASK Attachment type") {
         QueryResults::Boolean(b) => {
             assert!(b, "attachment must be typed messenger:Attachment");
@@ -4164,8 +4572,8 @@ fn file_recv_mints_attachment_placed_object_and_emits_accept() {
         widget.contains(ATTACH_FILENAME),
         "tier-1 widget DSL must contain filename literal — got: {widget}"
     );
-    let tier_label = lod_tier_label_at(&store, &auri, 60.0)
-        .expect("tier-1 LOD must carry tierLabel");
+    let tier_label =
+        lod_tier_label_at(&store, &auri, 60.0).expect("tier-1 LOD must carry tierLabel");
     assert_eq!(tier_label, "icon", "tier-1 label must be `icon`");
 }
 
@@ -4191,19 +4599,38 @@ fn file_complete_settles_attachment_state_to_complete() {
     let parent_mid = "mid-complete-12345";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "ack"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     dispatch::dispatch(
-        &file_recv_event(conv_id, "did:tox:peer", parent_mid, "fid-complete", "doc.txt", 1024),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            "fid-complete",
+            "doc.txt",
+            1024,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 20);
 
     dispatch::dispatch(
         &file_complete_event(conv_id, "fid-complete", "finished"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 20);
 
@@ -4245,20 +4672,35 @@ fn file_recv_attachment_positioned_right_of_received_bubble() {
     let parent_mid = "mid-positioning-12345";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "with file"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     dispatch::dispatch(
-        &file_recv_event(conv_id, "did:tox:peer", parent_mid, "fid-pos", "img.jpg", 4096),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            "fid-pos",
+            "img.jpg",
+            4096,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 20);
 
-    let bub_geom = placed_geom(&store, &bubble_uri(parent_mid))
-        .expect("parent bubble must have geometry");
-    let att_geom = placed_geom(&store, &attach_uri("fid-pos"))
-        .expect("attachment must have geometry");
+    let bub_geom =
+        placed_geom(&store, &bubble_uri(parent_mid)).expect("parent bubble must have geometry");
+    let att_geom =
+        placed_geom(&store, &attach_uri("fid-pos")).expect("attachment must have geometry");
 
     let bubble_right_edge = bub_geom.x + bub_geom.w / 2.0;
     let att_left_edge = att_geom.x - att_geom.w / 2.0;
@@ -4270,7 +4712,8 @@ fn file_recv_attachment_positioned_right_of_received_bubble() {
     assert!(
         (att_geom.y - bub_geom.y).abs() < 0.01,
         "attachment Y must match bubble center Y — bubble.y={} att.y={}",
-        bub_geom.y, att_geom.y
+        bub_geom.y,
+        att_geom.y
     );
 }
 
@@ -4300,14 +4743,29 @@ fn file_recv_tier2_image_widget_uses_image_file_path_primitive() {
     let parent_mid = "mid-img-tier2";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "with image"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     let file_id = "fid-img-tier2";
     dispatch::dispatch(
-        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "snap.jpg", 81_920),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            file_id,
+            "snap.jpg",
+            81_920,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
 
@@ -4315,7 +4773,11 @@ fn file_recv_tier2_image_widget_uses_image_file_path_primitive() {
     // generic-icon branch (no live bytes yet on disk).
     dispatch::dispatch(
         &file_complete_event(conv_id, file_id, "finished"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
 
@@ -4348,8 +4810,7 @@ fn file_recv_tier2_image_widget_uses_image_file_path_primitive() {
     );
 
     // (3) tierLabel is `thumbnail`, matching M4-A's LOD ladder labels.
-    let label = lod_tier_label_at(&store, &auri, 200.0)
-        .expect("tier-2 LOD must carry tierLabel");
+    let label = lod_tier_label_at(&store, &auri, 200.0).expect("tier-2 LOD must carry tierLabel");
     assert_eq!(label, "thumbnail", "tier-2 label must be `thumbnail`");
 
     // (4) Per-tier worldWidth/worldHeight grew to 150 × 96 so Station's
@@ -4398,25 +4859,44 @@ fn file_recv_tier2_non_image_widget_falls_back_to_glyph_and_extension_badge() {
     let parent_mid = "mid-zip-tier2";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "binary"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     let file_id = "fid-zip-tier2";
     dispatch::dispatch(
-        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "drop.zip", 4_096),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            file_id,
+            "drop.zip",
+            4_096,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
     dispatch::dispatch(
         &file_complete_event(conv_id, file_id, "finished"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
 
     let auri = attach_uri(file_id);
-    let widget = lod_widget_at(&store, &auri, 200.0)
-        .expect("tier-2 LOD must carry a widget literal");
+    let widget =
+        lod_widget_at(&store, &auri, 200.0).expect("tier-2 LOD must carry a widget literal");
 
     // (1) NO Image{} primitive — non-image branch must not invoke the
     //     file-backed image render.
@@ -4468,14 +4948,29 @@ fn file_recv_tier2_pre_complete_image_falls_back_to_glyph() {
     let parent_mid = "mid-img-pending";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "incoming"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     let file_id = "fid-img-pending";
     dispatch::dispatch(
-        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "midflight.jpg", 250_000),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            file_id,
+            "midflight.jpg",
+            250_000,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     // No FileComplete — state stays `pending`.
     settle(&dag, &store, &mut out, 15);
@@ -4502,7 +4997,14 @@ fn out_of_buffer_teleport_day_logs_noop_no_emit() {
     // bubble; the handler logs a breadcrumb and returns.
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m3d-oob");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m3d-oob",
+    );
     send_text_message(&store, &dag, &mut out, "did:tox:peer", "oob-1", "ping");
 
     let baseline = out.messages.len();
@@ -4569,23 +5071,39 @@ fn file_only_filerecv_mints_synthetic_bubble_and_paints_attachment() {
     let parent_mid = "mid-fileonly-1234567890";
     let file_id = "fid-fileonly";
     dispatch::dispatch(
-        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "lone.jpg", 8192),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            file_id,
+            "lone.jpg",
+            8192,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 20);
 
     // (a) Synthetic bubble at the file's messageId. The placed object's
     // URI is bubble_uri(parent_mid) — same shape as a TextMessage-driven
     // bubble; the consumer (Station) cannot distinguish.
-    let bub_geom = placed_geom(&store, &bubble_uri(parent_mid))
-        .expect("file-only FileRecv must mint a synthetic bubble at the file's messageId — \
-                 without it bubbleAnchor lookup misses and the attachment is skipped");
+    let bub_geom = placed_geom(&store, &bubble_uri(parent_mid)).expect(
+        "file-only FileRecv must mint a synthetic bubble at the file's messageId — \
+                 without it bubbleAnchor lookup misses and the attachment is skipped",
+    );
 
     // (b) Attachment placed object exists with geometry.
     let att_geom = placed_geom(&store, &attach_uri(file_id))
         .expect("attachment placed object must paint when the synthetic bubble is in place");
-    assert!(att_geom.w > 0.0 && att_geom.h > 0.0,
-        "attachment must have non-zero geometry — got w={}, h={}", att_geom.w, att_geom.h);
+    assert!(
+        att_geom.w > 0.0 && att_geom.h > 0.0,
+        "attachment must have non-zero geometry — got w={}, h={}",
+        att_geom.w,
+        att_geom.h
+    );
 
     // (c) Attachment positioned to the right of the synthetic bubble
     // at the same Y (received message → bubble on the left, attachment
@@ -4601,7 +5119,8 @@ fn file_only_filerecv_mints_synthetic_bubble_and_paints_attachment() {
         (att_geom.y - bub_geom.y).abs() < 0.01,
         "attachment Y must match the synthetic bubble's anchor Y — \
          bubble.y={}, attachment.y={}",
-        bub_geom.y, att_geom.y
+        bub_geom.y,
+        att_geom.y
     );
 
     // (d) The bubbleRef on the attachment points at the synthetic bubble.
@@ -4609,13 +5128,15 @@ fn file_only_filerecv_mints_synthetic_bubble_and_paints_attachment() {
     // TextMessage-driven path; ensure the synthetic-bubble path
     // produces the same store shape.
     let auri = attach_uri(file_id);
-    let q_bubble_ref = format!(
-        "ASK WHERE {{ <{auri}> <{MESSENGER_NS}bubbleRef> <urn:msg:bubble:{parent_mid}> }}"
-    );
+    let q_bubble_ref =
+        format!("ASK WHERE {{ <{auri}> <{MESSENGER_NS}bubbleRef> <urn:msg:bubble:{parent_mid}> }}");
     match store.query(&q_bubble_ref).expect("ASK bubbleRef") {
         QueryResults::Boolean(b) => {
-            assert!(b, "messenger:bubbleRef must point at urn:msg:bubble:<mid> — \
-                     same shape regardless of whether the bubble is real or synthetic");
+            assert!(
+                b,
+                "messenger:bubbleRef must point at urn:msg:bubble:<mid> — \
+                     same shape regardless of whether the bubble is real or synthetic"
+            );
         }
         _ => panic!("ASK must return boolean"),
     }
@@ -4651,8 +5172,19 @@ fn file_only_filerecv_then_textmessage_does_not_double_register_bubble() {
     let parent_mid = "mid-fileonly-late-text";
     let file_id = "fid-fileonly-late";
     dispatch::dispatch(
-        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "doc.txt", 1024),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            file_id,
+            "doc.txt",
+            1024,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
 
@@ -4663,7 +5195,11 @@ fn file_only_filerecv_then_textmessage_does_not_double_register_bubble() {
     // Late TextMessage at the same mid lands.
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "here it is"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
 
@@ -4677,10 +5213,12 @@ fn file_only_filerecv_then_textmessage_does_not_double_register_bubble() {
         for sol in solutions.flatten() {
             if let Some(oxigraph::model::Term::Literal(lit)) = sol.get("n") {
                 let n: i64 = lit.value().parse().unwrap_or(0);
-                assert_eq!(n, 1,
+                assert_eq!(
+                    n, 1,
                     "exactly one bubble placed object must exist for parent_mid={parent_mid} \
                      after both FileRecv (synthetic mint) and TextMessage (late real bubble) — \
-                     got count={n}");
+                     got count={n}"
+                );
             }
         }
     }
@@ -4715,7 +5253,14 @@ fn day_bucket_wraps_bare_hex_participant_uri_in_synthetic_scheme() {
     let mut out = CaptureOut::new();
 
     let bare_hex = "abcdef0123456789abcdef0123456789abcdef01"; // 40 hex chars, no scheme
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", bare_hex, "conv-m4bfix-bare");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        bare_hex,
+        "conv-m4bfix-bare",
+    );
 
     // Send a TextMessage from the bare-hex peer. logMsg pushes the
     // entry with fromUri=bare_hex, then rebuildChat → flushDayBuckets
@@ -4772,7 +5317,14 @@ fn day_bucket_preserves_existing_scheme_on_participant_uri() {
     let mut out = CaptureOut::new();
 
     let scheme_uri = "did:tox:peerWithScheme";
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", scheme_uri, "conv-m4bfix-scheme");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        scheme_uri,
+        "conv-m4bfix-scheme",
+    );
     send_text_message(&store, &dag, &mut out, scheme_uri, "mid-scheme-1", "hi");
 
     let q_parts = format!(
@@ -4790,9 +5342,11 @@ fn day_bucket_preserves_existing_scheme_on_participant_uri() {
             }
         }
     }
-    assert!(found_scheme,
+    assert!(
+        found_scheme,
         "scheme-bearing participant URI ({scheme_uri}) must be emitted \
-         verbatim — the M4-Bfix wrap must only fire on scheme-less values");
+         verbatim — the M4-Bfix wrap must only fire on scheme-less values"
+    );
 }
 
 // ── M4-C — UC4 Tier 3 (provenance card + Quote-in-reply) ─────────────────
@@ -4833,20 +5387,39 @@ fn attachment_tier3_widget_carries_provenance_field_labels_and_buttons() {
     let parent_mid = "mid-m4c-tier3-shape";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "with file"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     let file_id = "fid-m4c-tier3";
     let filename = "secret.pdf";
     dispatch::dispatch(
-        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, filename, 1_234_567),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            file_id,
+            filename,
+            1_234_567,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
     dispatch::dispatch(
         &file_complete_event(conv_id, file_id, "finished"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
 
@@ -4944,14 +5517,29 @@ fn attachment_tier3_pending_state_shows_computing_and_pending_labels() {
     let parent_mid = "mid-m4c-pending";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "incoming"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     let file_id = "fid-m4c-pending";
     dispatch::dispatch(
-        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "midflight.bin", 4096),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            file_id,
+            "midflight.bin",
+            4096,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     // No FileComplete — state stays `pending`, sha3sum stays empty.
     settle(&dag, &store, &mut out, 15);
@@ -4993,20 +5581,42 @@ fn quote_in_reply_tap_appends_file_reference_to_conversation_draft() {
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
 
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m4c-quote");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m4c-quote",
+    );
 
     let parent_mid = "mid-m4c-quote";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "have a look"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     let file_id = "fid-m4c-quote";
     let filename = "image.jpg";
     dispatch::dispatch(
-        &file_recv_event("conv-m4c-quote", "did:tox:peer", parent_mid, file_id, filename, 65_536),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            "conv-m4c-quote",
+            "did:tox:peer",
+            parent_mid,
+            file_id,
+            filename,
+            65_536,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 20);
 
@@ -5052,27 +5662,53 @@ fn quote_in_reply_appends_to_existing_draft_with_leading_space() {
     let (store, dag) = build_messenger_pipeline();
     let mut out = CaptureOut::new();
 
-    drive_to_ready(&store, &dag, &mut out, "did:tox:self", "did:tox:peer", "conv-m4c-append");
+    drive_to_ready(
+        &store,
+        &dag,
+        &mut out,
+        "did:tox:self",
+        "did:tox:peer",
+        "conv-m4c-append",
+    );
 
     let parent_mid = "mid-m4c-append";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "ack"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     let file_id = "fid-m4c-append";
     let filename = "report.pdf";
     dispatch::dispatch(
-        &file_recv_event("conv-m4c-append", "did:tox:peer", parent_mid, file_id, filename, 8192),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            "conv-m4c-append",
+            "did:tox:peer",
+            parent_mid,
+            file_id,
+            filename,
+            8192,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
 
     // Seed a typed draft body via TextChanged + debounce + ClockTick.
     dispatch::dispatch(
         &text_changed_event("urn:msg:chatinput", "see attached"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 1);
     std::thread::sleep(Duration::from_millis(280));
@@ -5093,9 +5729,8 @@ fn quote_in_reply_appends_to_existing_draft_with_leading_space() {
     dispatch::dispatch(&tap_event, &store, &dag, None, "", &mut out);
     settle(&dag, &store, &mut out, 20);
 
-    let body = draft_body(&store, "conv-m4c-append").expect(
-        "draft must remain after Quote-in-reply (append, not drop)",
-    );
+    let body = draft_body(&store, "conv-m4c-append")
+        .expect("draft must remain after Quote-in-reply (append, not drop)");
     let expected = format!("see attached <file:{filename}>");
     assert_eq!(
         body, expected,
@@ -5149,19 +5784,38 @@ fn attachment_tier4_image_widget_uses_image_file_path_with_fit_contain() {
     let parent_mid = "mid-m4d-tier4-image";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "with image"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     let file_id = "fid-m4d-tier4-img";
     dispatch::dispatch(
-        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "snap.jpg", 524_288),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            file_id,
+            "snap.jpg",
+            524_288,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
     dispatch::dispatch(
         &file_complete_event(conv_id, file_id, "finished"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
 
@@ -5250,19 +5904,38 @@ fn attachment_tier4_non_image_widget_uses_hex_dump() {
     let parent_mid = "mid-m4d-tier4-zip";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "binary"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     let file_id = "fid-m4d-tier4-zip";
     dispatch::dispatch(
-        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "drop.zip", 4_096),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            file_id,
+            "drop.zip",
+            4_096,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
     dispatch::dispatch(
         &file_complete_event(conv_id, file_id, "finished"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 15);
 
@@ -5354,14 +6027,29 @@ fn attachment_tier4_pre_complete_image_falls_back_to_hex_dump() {
     let parent_mid = "mid-m4d-tier4-pending";
     dispatch::dispatch(
         &text_message_event("did:tox:peer", parent_mid, "incoming"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
     let file_id = "fid-m4d-tier4-pending";
     dispatch::dispatch(
-        &file_recv_event(conv_id, "did:tox:peer", parent_mid, file_id, "midflight.jpg", 250_000),
-        &store, &dag, None, "", &mut out,
+        &file_recv_event(
+            conv_id,
+            "did:tox:peer",
+            parent_mid,
+            file_id,
+            "midflight.jpg",
+            250_000,
+        ),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     // No FileComplete — state stays `pending`, savePath set but file
     // is partial-on-disk (or absent if libjami hasn't started writing).
@@ -5431,9 +6119,7 @@ fn synthetic_conversation_seed_loads() {
     //     integer literals as `"3"^^<…XMLSchema#integer>` and digit-
     //     filtering on `to_string()` picks up the schema URL's "2001"
     //     and falsely inflates the count.
-    let row_query = format!(
-        "SELECT ?c WHERE {{ ?c a <{MESSENGER_NS}Conversation> }}"
-    );
+    let row_query = format!("SELECT ?c WHERE {{ ?c a <{MESSENGER_NS}Conversation> }}");
     let mut total = 0usize;
     if let Ok(QueryResults::Solutions(sols)) = store.query(&row_query) {
         for _ in sols.flatten() {
@@ -5484,9 +6170,7 @@ fn synthetic_conversation_seed_loads() {
                 "M5-A seed query for `{expected_id}` returned a non-boolean \
                  result; ASK should always be Boolean"
             ),
-            Err(e) => panic!(
-                "M5-A seed ASK query for `{expected_id}` errored: {e}"
-            ),
+            Err(e) => panic!("M5-A seed ASK query for `{expected_id}` errored: {e}"),
         }
     }
 }
@@ -5513,11 +6197,22 @@ fn synthetic_conversation_send_is_dropped_at_pipeline_guard() {
     // the contract).
     dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
     settle(&dag, &store, &mut out, 20);
-    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &self_id_event("did:tox:self"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         &contact_online_event("did:tox:peer"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
@@ -5527,7 +6222,11 @@ fn synthetic_conversation_send_is_dropped_at_pipeline_guard() {
         "[] a antenna:Test ; carrier:ConversationReady \"_\" ; \
          carrier:contactUri \"did:tox:peer\" ; \
          carrier:conversationId \"synth:carol\" .",
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 20);
 
@@ -5543,7 +6242,11 @@ fn synthetic_conversation_send_is_dropped_at_pipeline_guard() {
         "[] a <http://resonator.network/v2/antenna#TextSubmitted> ; \
          <http://resonator.network/v2/antenna#target> <urn:msg:chatinput> ; \
          <http://resonator.network/v2/antenna#value> \"hi carol\" .",
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle_capturing_emits(&dag, &store, &mut out, &mut raw, 10);
 
@@ -5579,7 +6282,11 @@ fn real_conversation_send_still_emits() {
         "[] a <http://resonator.network/v2/antenna#TextSubmitted> ; \
          <http://resonator.network/v2/antenna#target> <urn:msg:chatinput> ; \
          <http://resonator.network/v2/antenna#value> \"hello real conv\" .",
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle_capturing_emits(&dag, &store, &mut out, &mut raw, 10);
 
@@ -5635,10 +6342,10 @@ fn level_and_scene_vocab_parse_in_store() {
             antenna:enterPinchProgress "0.4"^^xsd:double ;
             antenna:widget "Container{width=200,height=100}[Text{value=Dave}]" .
     "#;
-    store
-        .insert_turtle(turtle)
-        .expect("M5-A Level + Scene vocab must parse — \
-                 see arch/ontology/antenna.ttl");
+    store.insert_turtle(turtle).expect(
+        "M5-A Level + Scene vocab must parse — \
+                 see arch/ontology/antenna.ttl",
+    );
 
     // (1) Scene round-trip: select label + padding by URI.
     let scene_q = format!(
@@ -5667,9 +6374,7 @@ fn level_and_scene_vocab_parse_in_store() {
     //     as `"2"^^<…XMLSchema#integer>` and `to_string()`-then-filter-
     //     digits picks up the schema URL's digits ("2001") and falsely
     //     inflates the count.
-    let level_q_all = format!(
-        "SELECT ?l WHERE {{ ?l a <{ANTENNA_NS}Level> }}"
-    );
+    let level_q_all = format!("SELECT ?l WHERE {{ ?l a <{ANTENNA_NS}Level> }}");
     let mut level_total = 0usize;
     if let Ok(QueryResults::Solutions(sols)) = store.query(&level_q_all) {
         for _ in sols.flatten() {
@@ -5710,11 +6415,13 @@ fn level_and_scene_vocab_parse_in_store() {
         "antenna:Level must round-trip antenna:enterPinchProgress — got {got_prog:?}"
     );
     assert!(
-        got_widget.as_deref().unwrap_or("").contains("Text{value=Carol}"),
+        got_widget
+            .as_deref()
+            .unwrap_or("")
+            .contains("Text{value=Carol}"),
         "antenna:Level must round-trip antenna:widget DSL string verbatim — got {got_widget:?}"
     );
 }
-
 
 // ── M5-D-α — Conversation tile Scene/Level/Object emit ──────────────────
 //
@@ -5758,11 +6465,22 @@ fn build_pipeline_with_inbox_settled() -> (RdfStore, Dag) {
     let mut out = CaptureOut::new();
     dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
     settle(&dag, &store, &mut out, 20);
-    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &self_id_event("did:tox:self"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         &contact_online_event("did:tox:peer"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
     let conv_ready = format!(
@@ -5806,9 +6524,9 @@ fn m5d_inbox_emits_one_scene_per_conversation_with_four_levels() {
         let q = format!("ASK {{ <{uri}> a <{ANTENNA_NS}Scene> }}");
         match store.query(&q) {
             Ok(QueryResults::Boolean(true)) => {}
-            Ok(QueryResults::Boolean(false)) => panic!(
-                "M5-D-α rebuildInbox must declare <{uri}> a antenna:Scene"
-            ),
+            Ok(QueryResults::Boolean(false)) => {
+                panic!("M5-D-α rebuildInbox must declare <{uri}> a antenna:Scene")
+            }
             Ok(_) => panic!("M5-D-α scene ASK returned non-boolean"),
             Err(e) => panic!("M5-D-α scene <{uri}> ASK errored: {e}"),
         }
@@ -5846,7 +6564,8 @@ fn m5d_inbox_emits_one_scene_per_conversation_with_four_levels() {
             }
         }
         assert_eq!(
-            rows.len(), 4,
+            rows.len(),
+            4,
             "M5-D-α Scene <{scene_uri}> must list EXACTLY 4 children — got {rows:?}"
         );
         rows.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -5862,7 +6581,8 @@ fn m5d_inbox_emits_one_scene_per_conversation_with_four_levels() {
                 rows[idx].0.ends_with(&expected_suffix),
                 "M5-D-α Scene <{scene_uri}> tier-ordered child[{idx}] (prog={}) \
                  must end with `:{expected_tier}>` — got {:?}",
-                rows[idx].1, rows[idx].0
+                rows[idx].1,
+                rows[idx].0
             );
             assert!(
                 (rows[idx].1 - expected_prog).abs() < 1e-9,
@@ -5901,16 +6621,16 @@ fn m5d_inbox_levels_carry_required_properties_per_tier() {
     // (which would couple the test to incidental whitespace shifts).
     let (store, _dag) = build_pipeline_with_inbox_settled();
 
-    let conv_id = "synth:dave";   // Dave: online=true, unread=2 — exercises both.
-    // ISSUE-089 cut 2 — the compact and chip tiers now wrap their unread
-    // count in a `msg-unread` pill badge (Container{color=msg-unread,
-    // borderRadius=r-pill,padding=3}[Text{value=N}]) instead of bare
-    // "(N)" error-coloured text. The marker tracks that swap.
+    let conv_id = "synth:dave"; // Dave: online=true, unread=2 — exercises both.
+                                // ISSUE-089 cut 2 — the compact and chip tiers now wrap their unread
+                                // count in a `msg-unread` pill badge (Container{color=msg-unread,
+                                // borderRadius=r-pill,padding=3}[Text{value=N}]) instead of bare
+                                // "(N)" error-coloured text. The marker tracks that swap.
     let cases: &[(&str, &str, &str)] = &[
-        ("chip",    "0.0",  "StatusDot"),
-        ("compact", "0.25", "color=msg-unread"),  // pill badge for dave's unread=2
-        ("card",    "0.5",  "borderRadius=8"),
-        ("tile",    "0.75", "[Open conversation]"),
+        ("chip", "0.0", "StatusDot"),
+        ("compact", "0.25", "color=msg-unread"), // pill badge for dave's unread=2
+        ("card", "0.5", "borderRadius=8"),
+        ("tile", "0.75", "[Open conversation]"),
     ];
     for (tier, expected_progress, marker) in cases.iter() {
         let level_uri = format!("urn:msg:tile:level:{conv_id}:{tier}");
@@ -5947,7 +6667,11 @@ fn m5d_inbox_levels_carry_required_properties_per_tier() {
             "M5-D-α Level <{level_uri}> antenna:label must equal {tier:?} — \
              got {got_label:?}"
         );
-        let prog_val = got_prog.as_deref().unwrap_or("").parse::<f64>().unwrap_or(-1.0);
+        let prog_val = got_prog
+            .as_deref()
+            .unwrap_or("")
+            .parse::<f64>()
+            .unwrap_or(-1.0);
         let expected_val: f64 = expected_progress.parse().unwrap();
         assert!(
             (prog_val - expected_val).abs() < 1e-9,
@@ -5979,12 +6703,10 @@ fn m5d_inbox_chip_and_compact_widgets_wrap_in_border_faint_chrome() {
     // exercises the no-badge branch.
     fn level_widget(store: &RdfStore, conv_id: &str, tier: &str) -> String {
         let level_uri = format!("urn:msg:tile:level:{conv_id}:{tier}");
-        let q = format!(
-            "SELECT ?w WHERE {{ <{level_uri}> <{ANTENNA_NS}widget> ?w }}"
-        );
-        first_string_solution(store, &q).unwrap_or_else(|| panic!(
-            "ISSUE-089 cut 2: Level <{level_uri}> must carry antenna:widget"
-        ))
+        let q = format!("SELECT ?w WHERE {{ <{level_uri}> <{ANTENNA_NS}widget> ?w }}");
+        first_string_solution(store, &q).unwrap_or_else(|| {
+            panic!("ISSUE-089 cut 2: Level <{level_uri}> must carry antenna:widget")
+        })
     }
 
     // Outer chrome envelope — borderColor=border-faint, borderRadius=4,
@@ -6013,10 +6735,7 @@ fn m5d_inbox_chip_and_compact_widgets_wrap_in_border_faint_chrome() {
     // any `color=msg-unread` substring (the badge subtree is omitted).
     for tier in ["chip", "compact"] {
         let dave_widget = level_widget(&store, "synth:dave", tier);
-        for marker in [
-            "color=msg-unread",
-            "borderRadius=r-pill",
-        ] {
+        for marker in ["color=msg-unread", "borderRadius=r-pill"] {
             assert!(
                 dave_widget.contains(marker),
                 "ISSUE-089 cut 2: synth:dave (unread=2) {tier} widget must carry \
@@ -6075,7 +6794,9 @@ fn m5d_inbox_chip_and_compact_widgets_wrap_in_border_faint_chrome() {
     // monospace Text (not split across two Texts via a wrap workaround).
     let trio_chip = level_widget(&store, "synth:trio", "chip");
     assert!(
-        trio_chip.contains("Text{value=Dock Crew,fontSize=11,color=text-code,fontFamily=monospace,maxLines=1}"),
+        trio_chip.contains(
+            "Text{value=Dock Crew,fontSize=11,color=text-code,fontFamily=monospace,maxLines=1}"
+        ),
         "ISSUE-093: synth:trio chip must render \"Dock Crew\" in a single \
          monospace Text with maxLines=1 — got: {trio_chip}"
     );
@@ -6100,17 +6821,19 @@ fn m5d_inbox_objects_match_grid_formula() {
     let (store, _dag) = build_pipeline_with_inbox_settled();
 
     let expected: &[(&str, f64, f64)] = &[
-        ("synth:trio",   -112.0, 120.0),
-        ("synth:dave",   112.0,  120.0),
-        ("synth:carol",  -112.0, 264.0),
-        (REAL_CONV_ID,   112.0,  264.0),
+        ("synth:trio", -112.0, 120.0),
+        ("synth:dave", 112.0, 120.0),
+        ("synth:carol", -112.0, 264.0),
+        (REAL_CONV_ID, 112.0, 264.0),
     ];
     for (conv_id, expected_x, expected_y) in expected.iter() {
         let obj_uri = format!("urn:msg:tile:obj:{conv_id}");
-        let geom = placed_geom(&store, &obj_uri).unwrap_or_else(|| panic!(
-            "M5-D-α rebuildInbox must emit a placed antenna:Object at \
+        let geom = placed_geom(&store, &obj_uri).unwrap_or_else(|| {
+            panic!(
+                "M5-D-α rebuildInbox must emit a placed antenna:Object at \
              <{obj_uri}> with x/y/worldWidth/worldHeight"
-        ));
+            )
+        });
         assert!(
             (geom.x - expected_x).abs() < 1e-9,
             "M5-D-α tile <{obj_uri}> antenna:x must equal {expected_x} \
@@ -6173,9 +6896,7 @@ fn m5d_tile_object_carries_direct_levelcontainer_widget() {
     // lod-bound, one direct), which the parser tolerates via the
     // `obj.lods.isEmpty` guard but would still represent a regression
     // in the authoring shape.
-    let lod_q = format!(
-        "ASK {{ <{obj_uri}> <{ANTENNA_NS}lod> ?lod }}"
-    );
+    let lod_q = format!("ASK {{ <{obj_uri}> <{ANTENNA_NS}lod> ?lod }}");
     match store.query(&lod_q) {
         Ok(QueryResults::Boolean(false)) => {}
         Ok(QueryResults::Boolean(true)) => panic!(
@@ -6220,8 +6941,7 @@ fn m5d_inbox_re_emits_when_lastmessage_changes() {
              <{ANTENNA_NS}widget> ?w \
          }}"
     );
-    let widget_before = first_string_solution(&store, &real_tile_widget_q)
-        .unwrap_or_default();
+    let widget_before = first_string_solution(&store, &real_tile_widget_q).unwrap_or_default();
     assert!(
         !widget_before.is_empty(),
         "Pre-condition: real-conversation tile-tier widget DSL must be \
@@ -6241,12 +6961,15 @@ fn m5d_inbox_re_emits_when_lastmessage_changes() {
     let mut out = CaptureOut::new();
     dispatch::dispatch(
         &text_message_event("did:tox:peer", mid, unique_marker),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
 
-    let widget_after = first_string_solution(&store, &real_tile_widget_q)
-        .unwrap_or_default();
+    let widget_after = first_string_solution(&store, &real_tile_widget_q).unwrap_or_default();
     assert!(
         widget_after.contains(unique_marker),
         "M5-D-α rebuildInbox must re-emit the real conversation's tile-tier \
@@ -6283,7 +7006,14 @@ fn m5d_inbox_emits_no_carrier_send_traffic_for_synthetic_tiles() {
 
     dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
     settle_capturing_emits(&dag, &store, &mut out, &mut raw, 20);
-    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &self_id_event("did:tox:self"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle_capturing_emits(&dag, &store, &mut out, &mut raw, 10);
 
     let synth_send_emits: Vec<&String> = raw
@@ -6316,9 +7046,9 @@ fn m5d_inbox_emits_no_carrier_send_traffic_for_synthetic_tiles() {
     let tile_scene_emits = raw
         .iter()
         .filter(|m| {
-            m.contains("urn:msg:tile:scene:") &&
-            (m.contains("antenna:Scene") ||
-             m.contains("http://resonator.network/v2/antenna#Scene"))
+            m.contains("urn:msg:tile:scene:")
+                && (m.contains("antenna:Scene")
+                    || m.contains("http://resonator.network/v2/antenna#Scene"))
         })
         .count();
     assert!(
@@ -6495,9 +7225,7 @@ fn m5e_real_conversation_populates_last_message_after_text_message() {
     // boot path — emitRealConversation fired at ConversationReady with
     // globalThis.messages empty, so neither lastMessage nor lastMessageAt
     // landed on the triple.
-    let pre_msg_q = format!(
-        "ASK {{ <{conv_uri}> <{MSG_NS}lastMessage> ?w }}"
-    );
+    let pre_msg_q = format!("ASK {{ <{conv_uri}> <{MSG_NS}lastMessage> ?w }}");
     assert!(
         matches!(store.query(&pre_msg_q), Ok(QueryResults::Boolean(false))),
         "Sanity: pre-TextMessage, messenger:lastMessage triple MUST NOT exist \
@@ -6522,9 +7250,7 @@ fn m5e_real_conversation_populates_last_message_after_text_message() {
     // Post-condition (a): messenger:lastMessage matches the inbound text
     // verbatim (no truncation at emit-site — the renderer-side
     // _formatTileSnippet does the 60-char clamp).
-    let last_q = format!(
-        "SELECT ?w WHERE {{ <{conv_uri}> <{MSG_NS}lastMessage> ?w }}"
-    );
+    let last_q = format!("SELECT ?w WHERE {{ <{conv_uri}> <{MSG_NS}lastMessage> ?w }}");
     let last_msg = first_string_solution(&store, &last_q);
     assert_eq!(
         last_msg.as_deref(),
@@ -6537,9 +7263,7 @@ fn m5e_real_conversation_populates_last_message_after_text_message() {
     // xsd:dateTime literal. Don't pin the exact value (Date.now() is
     // wall-clock); just assert the predicate exists with a literal value
     // shaped like an ISO-8601 timestamp.
-    let ts_q = format!(
-        "SELECT ?w WHERE {{ <{conv_uri}> <{MSG_NS}lastMessageAt> ?w }}"
-    );
+    let ts_q = format!("SELECT ?w WHERE {{ <{conv_uri}> <{MSG_NS}lastMessageAt> ?w }}");
     let last_ts = first_string_solution(&store, &ts_q);
     let ts_str = last_ts.expect(
         "M5-E-β: TextMessage must populate messenger:lastMessageAt on the \
@@ -6565,12 +7289,8 @@ fn m5e_real_conversation_no_last_message_when_history_is_empty() {
     let (store, _dag) = build_pipeline_with_inbox_settled();
 
     let conv_uri = format!("urn:msg:conv:{REAL_CONV_ID}");
-    let last_msg_q = format!(
-        "ASK {{ <{conv_uri}> <{MSG_NS}lastMessage> ?w }}"
-    );
-    let last_ts_q = format!(
-        "ASK {{ <{conv_uri}> <{MSG_NS}lastMessageAt> ?w }}"
-    );
+    let last_msg_q = format!("ASK {{ <{conv_uri}> <{MSG_NS}lastMessage> ?w }}");
+    let last_ts_q = format!("ASK {{ <{conv_uri}> <{MSG_NS}lastMessageAt> ?w }}");
     assert!(
         matches!(store.query(&last_msg_q), Ok(QueryResults::Boolean(false))),
         "M5-E-β: empty globalThis.messages must leave messenger:lastMessage \
@@ -6642,9 +7362,7 @@ fn m5d_real_conversation_wraps_bare_hex_peer_uri_in_synthetic_scheme() {
          }}"
     );
     let mut found_peer: Option<String> = None;
-    if let QueryResults::Solutions(sols) =
-        store.query(&peers_q).expect("peerUris query")
-    {
+    if let QueryResults::Solutions(sols) = store.query(&peers_q).expect("peerUris query") {
         for sol in sols.flatten() {
             if let Some(oxigraph::model::Term::NamedNode(n)) = sol.get("p") {
                 found_peer = Some(n.as_str().to_string());
@@ -6692,9 +7410,7 @@ fn m5d_real_conversation_preserves_existing_scheme_on_peer_uri() {
          }}"
     );
     let mut found_scheme = false;
-    if let QueryResults::Solutions(sols) =
-        store.query(&peers_q).expect("peerUris query")
-    {
+    if let QueryResults::Solutions(sols) = store.query(&peers_q).expect("peerUris query") {
         for sol in sols.flatten() {
             if let Some(oxigraph::model::Term::NamedNode(n)) = sol.get("p") {
                 if n.as_str() == scheme_uri {
@@ -6725,12 +7441,17 @@ fn m5d_inbox_no_emit_when_zero_conversations() {
     let mut out = CaptureOut::new();
     dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
     settle(&dag, &store, &mut out, 20);
-    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &self_id_event("did:tox:self"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 30);
 
-    let inbox_q = format!(
-        "ASK WHERE {{ <urn:msg:scene:inbox> a <{ANTENNA_NS}Scene> }}"
-    );
+    let inbox_q = format!("ASK WHERE {{ <urn:msg:scene:inbox> a <{ANTENNA_NS}Scene> }}");
     let inbox_exists = matches!(store.query(&inbox_q), Ok(QueryResults::Boolean(true)));
     assert!(
         !inbox_exists,
@@ -6771,14 +7492,22 @@ fn m5d_empty_placeholder_clears_when_conversation_lands() {
     let mut out = CaptureOut::new();
     dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
     settle(&dag, &store, &mut out, 20);
-    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &self_id_event("did:tox:self"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 30);
 
-    let placeholder_ask = format!(
-        "ASK {{ <urn:msg:tile:placeholder> a <{ANTENNA_NS}Object> }}"
-    );
+    let placeholder_ask = format!("ASK {{ <urn:msg:tile:placeholder> a <{ANTENNA_NS}Object> }}");
     assert!(
-        matches!(store.query(&placeholder_ask), Ok(QueryResults::Boolean(true))),
+        matches!(
+            store.query(&placeholder_ask),
+            Ok(QueryResults::Boolean(true))
+        ),
         "M5-D-γ: placeholder MUST exist while inbox is empty"
     );
 
@@ -6786,7 +7515,11 @@ fn m5d_empty_placeholder_clears_when_conversation_lands() {
     // lands.
     dispatch::dispatch(
         &contact_online_event("did:tox:peer"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
     let conv_ready = format!(
@@ -6799,12 +7532,13 @@ fn m5d_empty_placeholder_clears_when_conversation_lands() {
     settle(&dag, &store, &mut out, 30);
 
     assert!(
-        matches!(store.query(&placeholder_ask), Ok(QueryResults::Boolean(false))),
+        matches!(
+            store.query(&placeholder_ask),
+            Ok(QueryResults::Boolean(false))
+        ),
         "M5-D-γ: placeholder MUST be cleared once a conversation lands"
     );
-    let tile_ask = format!(
-        "ASK {{ <urn:msg:tile:obj:{REAL_CONV_ID}> a <{ANTENNA_NS}Object> }}"
-    );
+    let tile_ask = format!("ASK {{ <urn:msg:tile:obj:{REAL_CONV_ID}> a <{ANTENNA_NS}Object> }}");
     assert!(
         matches!(store.query(&tile_ask), Ok(QueryResults::Boolean(true))),
         "M5-D-γ: real-conversation tile Object MUST exist after \
@@ -6829,11 +7563,22 @@ fn boot_inbox_with_seed(peer_nick: &str) -> (RdfStore, Dag) {
     let mut out = CaptureOut::new();
     dispatch::dispatch("[] a <urn:msg:WhoAmI> .", &store, &dag, None, "", &mut out);
     settle(&dag, &store, &mut out, 20);
-    dispatch::dispatch(&self_id_event("did:tox:self"), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &self_id_event("did:tox:self"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 10);
     dispatch::dispatch(
         &contact_online_event("did:tox:peer"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
     let conv_ready = format!(
@@ -6859,9 +7604,7 @@ fn m5e_real_conv_seeded_displayname_renders_capitalized_friend_nick() {
     let (store, _dag) = boot_inbox_with_seed("bob");
 
     let conv_uri = format!("urn:msg:conv:{REAL_CONV_ID}");
-    let q = format!(
-        "SELECT ?w WHERE {{ <{conv_uri}> <{MSG_NS}displayName> ?w }}"
-    );
+    let q = format!("SELECT ?w WHERE {{ <{conv_uri}> <{MSG_NS}displayName> ?w }}");
     let name = first_string_solution(&store, &q);
     assert_eq!(
         name.as_deref(),
@@ -6883,9 +7626,7 @@ fn m5e_real_conv_displayname_falls_back_to_pending_peer_when_seed_empty() {
     let (store, _dag) = boot_inbox_with_seed("");
 
     let conv_uri = format!("urn:msg:conv:{REAL_CONV_ID}");
-    let q = format!(
-        "SELECT ?w WHERE {{ <{conv_uri}> <{MSG_NS}displayName> ?w }}"
-    );
+    let q = format!("SELECT ?w WHERE {{ <{conv_uri}> <{MSG_NS}displayName> ?w }}");
     let name = first_string_solution(&store, &q);
     assert_eq!(
         name.as_deref(),
@@ -6976,9 +7717,7 @@ fn issue_096_chat_panel_header_recipient_reads_pending_peer() {
     let (store, _dag) = boot_inbox_with_seed("");
     for tier in 1..=4 {
         let lod_uri = format!("urn:msg:chat:lod:{tier}");
-        let q = format!(
-            "SELECT ?w WHERE {{ <{lod_uri}> <{ANTENNA_NS}widget> ?w }}"
-        );
+        let q = format!("SELECT ?w WHERE {{ <{lod_uri}> <{ANTENNA_NS}widget> ?w }}");
         let widget = first_string_solution(&store, &q).unwrap_or_else(|| {
             panic!("ISSUE-096: chat panel <{lod_uri}> must carry antenna:widget")
         });
@@ -7017,7 +7756,11 @@ fn issue_097_bubble_timestamp_renders_relative_now_for_recent_message() {
     settle(&dag, &store, &mut out, 5);
     dispatch::dispatch(
         &text_message_event("did:tox:peer", MID, "hello"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
@@ -7045,7 +7788,11 @@ fn issue_097_bubble_does_not_emit_legacy_24_hour_timestamp() {
     settle(&dag, &store, &mut out, 5);
     dispatch::dispatch(
         &text_message_event("did:tox:peer", MID, "hello"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 10);
 
@@ -7054,9 +7801,7 @@ fn issue_097_bubble_does_not_emit_legacy_24_hour_timestamp() {
         .expect("ISSUE-097: no-reactions bubble must carry single LOD at below=99999");
     for hh in 0u8..=23 {
         for mm in 0u8..=59 {
-            let legacy = format!(
-                "Text{{value={hh:02}:{mm:02},fontSize=11,color=text-muted}}"
-            );
+            let legacy = format!("Text{{value={hh:02}:{mm:02},fontSize=11,color=text-muted}}");
             assert!(
                 !lod.contains(&legacy),
                 "ISSUE-097: bubble must NOT carry the legacy formatTime \
@@ -7081,7 +7826,11 @@ fn issue_097_tile_history_row_renders_relative_now_for_recent_message() {
     // active conv carries content.
     dispatch::dispatch(
         &text_message_event("did:tox:peer", "mid-097-tile", "tile-history-recent"),
-        &store, &dag, None, "", &mut out,
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
     );
     settle(&dag, &store, &mut out, 30);
 
@@ -7128,7 +7877,8 @@ fn m5e_open_conv_tap_emits_teleport_to_chat_panel() {
 
     let post_tap: Vec<&String> = out.messages.iter().skip(baseline).collect();
     let teleport = post_tap.iter().find(|m| {
-        m.contains("a antenna:Teleport") || m.contains("a <http://resonator.network/v2/antenna#Teleport>")
+        m.contains("a antenna:Teleport")
+            || m.contains("a <http://resonator.network/v2/antenna#Teleport>")
     });
     let teleport = teleport.unwrap_or_else(|| {
         panic!(
@@ -7187,7 +7937,8 @@ fn m5e_open_conv_tap_synth_conv_no_op() {
 
     let post_tap: Vec<&String> = out.messages.iter().skip(baseline).collect();
     let stray_teleport = post_tap.iter().find(|m| {
-        m.contains("a antenna:Teleport") || m.contains("a <http://resonator.network/v2/antenna#Teleport>")
+        m.contains("a antenna:Teleport")
+            || m.contains("a <http://resonator.network/v2/antenna#Teleport>")
     });
     assert!(
         stray_teleport.is_none(),

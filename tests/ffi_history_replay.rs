@@ -55,7 +55,13 @@ fn unique_dir(prefix: &str) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let path = format!("{}/{}-{}-{}", std::env::temp_dir().display(), prefix, pid, ts);
+    let path = format!(
+        "{}/{}-{}-{}",
+        std::env::temp_dir().display(),
+        prefix,
+        pid,
+        ts
+    );
     std::fs::create_dir_all(&path).expect("create temp dir");
     path
 }
@@ -73,13 +79,8 @@ where
     let start = Instant::now();
     loop {
         // SAFETY: handle came from antenna_create and is still live.
-        let rc: c_int = unsafe {
-            antenna_drain(
-                handle,
-                Some(collect_cb),
-                sink as *const Sink as *mut c_void,
-            )
-        };
+        let rc: c_int =
+            unsafe { antenna_drain(handle, Some(collect_cb), sink as *const Sink as *mut c_void) };
         assert!(rc >= 0, "antenna_drain returned {rc}");
 
         {
@@ -118,13 +119,8 @@ fn drain_idle(handle: *mut AntennaHandle, sink: &Sink, idle: Duration) {
     let mut last_change = Instant::now();
     let deadline = Instant::now() + Duration::from_secs(10);
     while Instant::now() < deadline {
-        let rc = unsafe {
-            antenna_drain(
-                handle,
-                Some(collect_cb),
-                sink as *const Sink as *mut c_void,
-            )
-        };
+        let rc =
+            unsafe { antenna_drain(handle, Some(collect_cb), sink as *const Sink as *mut c_void) };
         assert!(rc >= 0, "antenna_drain returned {rc}");
         let now_len = sink.lock().unwrap().len();
         if now_len != last_len {
@@ -181,15 +177,17 @@ fn load_conversation_messages_replays_own_commits_as_group_messages() {
 
     // Mint a fresh account.
     let create = br#"[] a carrier:CreateAccount ; carrier:displayName "alice" ."#;
-    let send_rc =
-        unsafe { antenna_send(handle, create.as_ptr() as *const c_char, create.len()) };
+    let send_rc = unsafe { antenna_send(handle, create.as_ptr() as *const c_char, create.len()) };
     assert_eq!(send_rc, 0);
 
     let (_ready, cursor) = drain_until(handle, &sink, 0, Duration::from_secs(60), |s| {
         s.contains("carrier:AccountReady")
     });
     let account = read_account_id(handle);
-    assert!(!account.is_empty(), "account id should populate after AccountReady");
+    assert!(
+        !account.is_empty(),
+        "account id should populate after AccountReady"
+    );
 
     // Mint Saved Messages (the multi-party self swarm that messenger2 uses).
     let req = format!(
@@ -203,7 +201,8 @@ fn load_conversation_messages_replays_own_commits_as_group_messages() {
     let (saved_line, cursor) = drain_until(handle, &sink, cursor, Duration::from_secs(15), |s| {
         s.contains("carrier:SavedConversation")
     });
-    let saved_conv = extract_conv_id(&saved_line).expect("SavedConversation must carry conversationId");
+    let saved_conv =
+        extract_conv_id(&saved_line).expect("SavedConversation must carry conversationId");
 
     // Commit two text messages to the saved swarm. Live SwarmMessageReceived
     // collapses own commits into MessageSent (carries the id but no body) —
@@ -284,12 +283,16 @@ fn load_conversation_messages_replays_own_commits_as_group_messages() {
         .collect();
 
     assert!(
-        replayed.iter().any(|s| s.contains(r#"carrier:text "hello self""#)),
+        replayed
+            .iter()
+            .any(|s| s.contains(r#"carrier:text "hello self""#)),
         "replay must surface 'hello self' as a GroupMessage; got:\n  {}",
         replayed.join("\n  ")
     );
     assert!(
-        replayed.iter().any(|s| s.contains(r#"carrier:text "second note""#)),
+        replayed
+            .iter()
+            .any(|s| s.contains(r#"carrier:text "second note""#)),
         "replay must surface 'second note' as a GroupMessage; got:\n  {}",
         replayed.join("\n  ")
     );

@@ -37,7 +37,13 @@ fn unique_dir(prefix: &str) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let path = format!("{}/{}-{}-{}", std::env::temp_dir().display(), prefix, pid, ts);
+    let path = format!(
+        "{}/{}-{}-{}",
+        std::env::temp_dir().display(),
+        prefix,
+        pid,
+        ts
+    );
     std::fs::create_dir_all(&path).expect("create temp dir");
     path
 }
@@ -57,13 +63,8 @@ where
     let start = Instant::now();
     loop {
         // SAFETY: handle came from antenna_create and is still live.
-        let rc: c_int = unsafe {
-            antenna_drain(
-                handle,
-                Some(collect_cb),
-                sink as *const Sink as *mut c_void,
-            )
-        };
+        let rc: c_int =
+            unsafe { antenna_drain(handle, Some(collect_cb), sink as *const Sink as *mut c_void) };
         assert!(rc >= 0, "antenna_drain returned {rc}");
 
         {
@@ -131,17 +132,22 @@ fn get_saved_conversation_mints_then_returns_same_id_idempotently() {
 
     // Mint a fresh account so libjami has something to attach the swarm to.
     let create = br#"[] a carrier:CreateAccount ; carrier:displayName "alice" ."#;
-    let send_rc =
-        unsafe { antenna_send(handle, create.as_ptr() as *const c_char, create.len()) };
+    let send_rc = unsafe { antenna_send(handle, create.as_ptr() as *const c_char, create.len()) };
     assert_eq!(send_rc, 0);
 
     let (ready_line, cursor) = drain_until(handle, &sink, 0, Duration::from_secs(60), |s| {
         s.contains("carrier:AccountReady")
     });
-    assert!(ready_line.contains("carrier:account"), "AccountReady missing account");
+    assert!(
+        ready_line.contains("carrier:account"),
+        "AccountReady missing account"
+    );
 
     let account = read_account_id(handle);
-    assert!(!account.is_empty(), "account id should populate after AccountReady");
+    assert!(
+        !account.is_empty(),
+        "account id should populate after AccountReady"
+    );
 
     // ---- First call: mints the swarm. ----
     let req1 = format!(
@@ -156,11 +162,17 @@ fn get_saved_conversation_mints_then_returns_same_id_idempotently() {
     let (saved1, cursor) = drain_until(handle, &sink, cursor, Duration::from_secs(15), |s| {
         s.contains("carrier:SavedConversation")
     });
-    let conv1 = extract_conv_id(&saved1)
-        .expect("SavedConversation must carry carrier:conversationId");
-    assert_eq!(conv1.len(), 40, "conversationId must be 40-hex; got {conv1:?}");
+    let conv1 =
+        extract_conv_id(&saved1).expect("SavedConversation must carry carrier:conversationId");
+    assert_eq!(
+        conv1.len(),
+        40,
+        "conversationId must be 40-hex; got {conv1:?}"
+    );
     assert!(
-        conv1.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+        conv1
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
         "conversationId must be lower-hex; got {conv1:?}",
     );
 

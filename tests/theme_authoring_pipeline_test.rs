@@ -39,7 +39,9 @@ struct CaptureOut {
 }
 impl CaptureOut {
     fn new() -> Self {
-        Self { messages: Vec::new() }
+        Self {
+            messages: Vec::new(),
+        }
     }
 }
 impl AntennaOut for CaptureOut {
@@ -77,9 +79,7 @@ fn build_pipeline() -> (RdfStore, Dag) {
 
     let pipeline_ttl = std::fs::read_to_string(rel("radios/theme-authoring/pipeline.ttl"))
         .expect("read theme-authoring pipeline");
-    store
-        .insert_turtle(&pipeline_ttl)
-        .expect("insert pipeline");
+    store.insert_turtle(&pipeline_ttl).expect("insert pipeline");
 
     // Cut C: the seed declares the editor objects whose LOD widgets the
     // script rebuilds on each mutation. Earlier cuts didn't need it because
@@ -180,7 +180,9 @@ fn slider_mutates_resonance_cyan_and_rebroadcasts_bundle() {
     );
 
     assert!(
-        out.messages.iter().any(|m| m.contains("ThemeBundleComplete")),
+        out.messages
+            .iter()
+            .any(|m| m.contains("ThemeBundleComplete")),
         "expected design:ThemeBundleComplete in output: {:?}",
         out.messages,
     );
@@ -247,9 +249,8 @@ fn reset_button_restores_authored_hex() {
     settle(&dag, &store, &mut out, 20);
     assert_eq!(current_hex(&store, &cyan_iri).as_deref(), Some("#00E0E0"));
 
-    let reset = format!(
-        "[] a <{ANTENNA_NS}TapEvent> ; <{ANTENNA_NS}target> <urn:ta:reset-cyan> .",
-    );
+    let reset =
+        format!("[] a <{ANTENNA_NS}TapEvent> ; <{ANTENNA_NS}target> <urn:ta:reset-cyan> .",);
     dispatch::dispatch(&reset, &store, &dag, None, "", &mut out);
     settle(&dag, &store, &mut out, 20);
 

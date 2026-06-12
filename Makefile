@@ -15,7 +15,7 @@ fmt-check:
 	cargo fmt --check
 
 clippy:
-	cargo clippy -- -D warnings
+	cargo clippy --all-targets -- -D warnings
 
 bench:
 	cargo test --release --test llm_bench -- --nocapture --ignored

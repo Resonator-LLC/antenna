@@ -56,8 +56,7 @@ fn test_ws_server_sends_greeting() {
 fn test_ws_client_to_server() {
     let port = free_port();
 
-    let (mut ws_in, _ws_out) =
-        start_ws_server(port, None).expect("server should start");
+    let (mut ws_in, _ws_out) = start_ws_server(port, None).expect("server should start");
 
     thread::sleep(Duration::from_millis(50));
 
@@ -79,8 +78,7 @@ fn test_ws_client_to_server() {
 fn test_ws_server_to_client() {
     let port = free_port();
 
-    let (_ws_in, mut ws_out) =
-        start_ws_server(port, None).expect("server should start");
+    let (_ws_in, mut ws_out) = start_ws_server(port, None).expect("server should start");
 
     thread::sleep(Duration::from_millis(50));
 
@@ -126,8 +124,7 @@ fn test_ws_server_to_client() {
 #[test]
 fn test_ws_burst_does_not_drop_client_on_wouldblock() {
     let port = free_port();
-    let (_ws_in, mut ws_out) =
-        start_ws_server(port, None).expect("server should start");
+    let (_ws_in, mut ws_out) = start_ws_server(port, None).expect("server should start");
     thread::sleep(Duration::from_millis(50));
 
     let (mut client, _response) =
@@ -208,8 +205,7 @@ fn test_ws_burst_does_not_drop_client_on_wouldblock() {
 #[test]
 fn test_ws_first_message_after_connect_is_delivered() {
     let port = free_port();
-    let (_ws_in, mut ws_out) =
-        start_ws_server(port, None).expect("server should start");
+    let (_ws_in, mut ws_out) = start_ws_server(port, None).expect("server should start");
     thread::sleep(Duration::from_millis(50));
 
     let (mut client, _response) =
@@ -225,7 +221,9 @@ fn test_ws_first_message_after_connect_is_delivered() {
     let turtle = "<http://example.org/s> <http://example.org/p> \"first\" .";
     ws_out.send(turtle);
 
-    let msg = client.read().expect("first message should arrive without warmup");
+    let msg = client
+        .read()
+        .expect("first message should arrive without warmup");
     match msg {
         Message::Text(text) => assert_eq!(text, turtle),
         other => panic!("expected Text message, got {:?}", other),
@@ -238,8 +236,7 @@ fn test_ws_first_message_after_connect_is_delivered() {
 fn test_ws_client_disconnect() {
     let port = free_port();
 
-    let (_ws_in, _ws_out) =
-        start_ws_server(port, None).expect("server should start");
+    let (_ws_in, _ws_out) = start_ws_server(port, None).expect("server should start");
 
     thread::sleep(Duration::from_millis(50));
 
@@ -262,8 +259,8 @@ fn test_ws_client_disconnect() {
     thread::sleep(Duration::from_millis(200));
 
     // Second client should be able to connect
-    let (mut client2, _response) =
-        connect(format!("ws://127.0.0.1:{}", port)).expect("second client should connect after first disconnects");
+    let (mut client2, _response) = connect(format!("ws://127.0.0.1:{}", port))
+        .expect("second client should connect after first disconnects");
 
     // Verify the second connection is functional by sending a message
     client2

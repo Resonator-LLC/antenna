@@ -64,5 +64,10 @@ fn bench_cross_thread_channel(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_ring_buffer_push_pop, bench_ring_buffer_throughput, bench_cross_thread_channel);
+criterion_group!(
+    benches,
+    bench_ring_buffer_push_pop,
+    bench_ring_buffer_throughput,
+    bench_cross_thread_channel
+);
 criterion_main!(benches);

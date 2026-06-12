@@ -55,8 +55,7 @@ pub const RESOLVER_QUERIES: &[&str] = &[
 /// (e.g. a pre-fix `?token ?tProp ?tVal` query) would linger and `fetch_query_text`
 /// could pick it up — silently reintroducing the default-graph scan.
 pub fn load_resolver(store: &RdfStore, path: &Path) -> Result<()> {
-    let ttl =
-        std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    let ttl = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     store.insert_turtle_to_graph(&ttl, THEME_GRAPH)?;
     Ok(())
 }
@@ -238,9 +237,7 @@ mod tests {
     /// RocksDB perf probe populate identically.
     fn populate_themes(store: &RdfStore) {
         let bundles: Vec<String> = std::iter::once("arch/ontology/design.ttl".to_string())
-            .chain(std::iter::once(
-                "themes/voidline/voidline.ttl".to_string(),
-            ))
+            .chain(std::iter::once("themes/voidline/voidline.ttl".to_string()))
             .chain(std::iter::once(
                 "themes/voidline-cb-safe/voidline-cb-safe.ttl".to_string(),
             ))
@@ -256,8 +253,7 @@ mod tests {
                 .insert_turtle_to_graph(&ttl, THEME_GRAPH)
                 .expect("insert theme into theme graph");
         }
-        load_resolver(store, &rel("antenna/spin/theme_resolver.spin.ttl"))
-            .expect("load resolver");
+        load_resolver(store, &rel("antenna/spin/theme_resolver.spin.ttl")).expect("load resolver");
     }
 
     /// Build a fresh in-memory store with vocab, every shipped theme, and
@@ -273,16 +269,16 @@ mod tests {
     /// role completeness en masse below so a typo in any new bundle surfaces
     /// in CI.
     const TERMINAL_THEMES: &[(&str, &str)] = &[
-        ("tokyo-night",      "tokyoNight"),
-        ("tokyo-night-day",  "tokyoNightDay"),
+        ("tokyo-night", "tokyoNight"),
+        ("tokyo-night-day", "tokyoNightDay"),
         ("catppuccin-mocha", "catppuccinMocha"),
         ("catppuccin-latte", "catppuccinLatte"),
-        ("dracula",          "dracula"),
-        ("dracula-light",    "draculaLight"),
-        ("nord",             "nord"),
-        ("nord-light",       "nordLight"),
-        ("rose-pine",        "rosePine"),
-        ("rose-pine-dawn",   "rosePineDawn"),
+        ("dracula", "dracula"),
+        ("dracula-light", "draculaLight"),
+        ("nord", "nord"),
+        ("nord-light", "nordLight"),
+        ("rose-pine", "rosePine"),
+        ("rose-pine-dawn", "rosePineDawn"),
     ];
 
     fn activate(store: &RdfStore, theme_iri: &str) {
@@ -313,15 +309,17 @@ mod tests {
             .collect()
     }
 
-    /// Find the first triple matching (subject, predicate).
+    /// Find the first triple matching (subject, predicate), both given as
+    /// bare IRIs (no N-Triples angle brackets).
     fn find_triple<'a>(
         triples: &'a [Triple],
         subject: &str,
         predicate: &str,
     ) -> Option<&'a Triple> {
-        triples
-            .iter()
-            .find(|t| t.subject.to_string() == subject && t.predicate.to_string() == predicate)
+        triples.iter().find(|t| {
+            matches!(&t.subject, oxigraph::model::NamedOrBlankNode::NamedNode(n) if n.as_str() == subject)
+                && t.predicate.as_str() == predicate
+        })
     }
 
     // ---- canonical voidline -------------------------------------------------
@@ -374,8 +372,8 @@ mod tests {
         activate(&store, &format!("{VOIDLINE_NS}voidline"));
         let triples = resolve_active_theme(&store).expect("resolve");
 
-        let cyan = iri(VOIDLINE_NS, "resonanceCyan");
-        let hex_pred = format!("<{DESIGN_NS}hex>");
+        let cyan = format!("{VOIDLINE_NS}resonanceCyan");
+        let hex_pred = format!("{DESIGN_NS}hex");
         let hex_triple = find_triple(&triples, &cyan, &hex_pred)
             .expect("resonanceCyan design:hex triple in resolved output");
         assert!(
@@ -480,8 +478,8 @@ mod tests {
             ("pulseMagentaCb", "#FF4F8B"),
             ("statusOnlineCb", "#5CD8FF"),
         ] {
-            let token_iri = iri(CB_NS, token);
-            let hex_pred = format!("<{DESIGN_NS}hex>");
+            let token_iri = format!("{CB_NS}{token}");
+            let hex_pred = format!("{DESIGN_NS}hex");
             let triple = find_triple(&triples, &token_iri, &hex_pred)
                 .unwrap_or_else(|| panic!("{token} hex triple emitted"));
             assert!(
@@ -508,9 +506,16 @@ mod tests {
             .collect();
 
         for needle in [
-            "\"r0\"", "\"r2\"", "\"r3\"", "\"rPill\"", // radii
-            "\"s1\"", "\"s4\"", "\"s12\"",             // spacing
-            "\"home\"", "\"lock\"", "\"send\"",         // icons
+            "\"r0\"",
+            "\"r2\"",
+            "\"r3\"",
+            "\"rPill\"", // radii
+            "\"s1\"",
+            "\"s4\"",
+            "\"s12\"", // spacing
+            "\"home\"",
+            "\"lock\"",
+            "\"send\"", // icons
         ] {
             assert!(
                 names.iter().any(|n| n.contains(needle)),
@@ -544,10 +549,10 @@ mod tests {
         activate(&store, &format!("{CB_NS}voidlineCbSafe"));
         let triples = resolve_active_theme(&store).expect("resolve");
 
-        let pred = format!("<{DESIGN_NS}strokeWidth>");
-        let cb_iri = iri(CB_NS, "voidlineCbSafe");
-        let triple = find_triple(&triples, &cb_iri, &pred)
-            .expect("strokeWidth resolved for active theme");
+        let pred = format!("{DESIGN_NS}strokeWidth");
+        let cb_iri = format!("{CB_NS}voidlineCbSafe");
+        let triple =
+            find_triple(&triples, &cb_iri, &pred).expect("strokeWidth resolved for active theme");
         assert!(
             triple.object.to_string().contains("1.5"),
             "strokeWidth 1.5 inherited from voidline; got {}",
@@ -836,7 +841,7 @@ mod tests {
             let theme_iri = format!("{ns}{local}");
             activate(&store, &theme_iri);
             let triples =
-                resolve_active_theme(&store).expect(&format!("resolve {local}"));
+                resolve_active_theme(&store).unwrap_or_else(|e| panic!("resolve {local}: {e}"));
             let roles = role_map(&triples);
             assert_eq!(
                 roles.len(),
@@ -886,7 +891,7 @@ mod tests {
             let theme_iri = format!("{ns}{local}");
             activate(&store, &theme_iri);
             let triples =
-                resolve_active_theme(&store).expect(&format!("resolve {local}"));
+                resolve_active_theme(&store).unwrap_or_else(|e| panic!("resolve {local}: {e}"));
 
             let svg_pred = format!("<{DESIGN_NS}svgPath>");
             let name_pred = format!("<{DESIGN_NS}name>");
@@ -932,7 +937,10 @@ mod tests {
     fn radio_has_theme_swap_resolves_inherited_icons() {
         let store = build_store();
         // Mimic the messenger seed: radio starts on voidline.
-        set_radio_theme(&store, "http://resonator.network/v2/themes/voidline#voidline");
+        set_radio_theme(
+            &store,
+            "http://resonator.network/v2/themes/voidline#voidline",
+        );
 
         // The exact SPARQL the Station picker emits, parametrised on the
         // target theme. Mirrors station/lib/ui/components/theme_picker.dart.
@@ -954,10 +962,9 @@ mod tests {
                 && t.object.to_string().trim_matches('"') == "copy"
             {
                 let subject = t.subject.to_string();
-                if triples
-                    .iter()
-                    .any(|u| u.subject.to_string() == subject && u.predicate.to_string() == svg_pred)
-                {
+                if triples.iter().any(|u| {
+                    u.subject.to_string() == subject && u.predicate.to_string() == svg_pred
+                }) {
                     copy_seen = true;
                     break;
                 }
@@ -992,7 +999,7 @@ mod tests {
             let theme_iri = format!("{ns}{local}");
             activate(&store, &theme_iri);
             let triples =
-                resolve_active_theme(&store).expect(&format!("resolve {local}"));
+                resolve_active_theme(&store).unwrap_or_else(|e| panic!("resolve {local}: {e}"));
             let roles = role_map(&triples);
             let canvas = roles
                 .get(&iri(DESIGN_NS, "canvas"))
@@ -1048,7 +1055,10 @@ mod tests {
         let (mem_ms, mem_n) = timed(|| resolve_active_theme(&mem).unwrap().len());
         let (rocks_ms, rocks_n) = timed(|| resolve_active_theme(&rocks).unwrap().len());
 
-        eprintln!("\n=== RESOLVE PERF PROBE (optimized={}) ===", !cfg!(debug_assertions));
+        eprintln!(
+            "\n=== RESOLVE PERF PROBE (optimized={}) ===",
+            !cfg!(debug_assertions)
+        );
         eprintln!("  in-memory backend: {mem_ms:>6} ms  ({mem_n} triples)");
         eprintln!("  RocksDB backend:   {rocks_ms:>6} ms  ({rocks_n} triples)");
         eprintln!("  -> backends ~equal; build profile (release vs debug) is the ~10x lever.");
