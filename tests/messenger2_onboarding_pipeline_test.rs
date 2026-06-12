@@ -233,6 +233,10 @@ fn conversational_create_is_gated_on_consent_then_emits_create_account() {
             && terms_widget.contains("urn:msg2:onboarding:agree"),
         "the Terms turn (CMP-002) must render with an 'I agree' action; got: {terms_widget}",
     );
+    assert!(
+        terms_widget.contains("urn:msg2:onboarding:terms"),
+        "the Terms turn (CMP-025) must offer a 'Read the Terms' link; got: {terms_widget}",
+    );
 
     // Consent NOT given yet — nothing may have minted an account.
     assert!(
@@ -265,6 +269,41 @@ fn conversational_create_is_gated_on_consent_then_emits_create_account() {
     assert!(
         create.contains("carrier:displayName \"Reviewer\""),
         "CreateAccount must carry the chosen display name; got: {create}",
+    );
+}
+
+#[test]
+fn terms_link_opens_document_without_advancing() {
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+
+    // Advance to the Terms turn via the tap-only path.
+    dispatch_event(&dag, &store, &mut out, &onboarding_required_event());
+    dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:skip"));
+
+    // Tap "Read the Terms" (CMP-025): the hosted ToU/Community-Guidelines URL
+    // opens externally so "the Terms" resolves to real text before acceptance.
+    let emits = dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:terms"));
+    assert!(
+        emits
+            .iter()
+            .any(|e| e.contains("urn:msg:OpenExternal")
+                && e.contains("https://resonator.network/terms")),
+        "tapping 'Read the Terms' must open the hosted ToU via urn:msg:OpenExternal; emits:\n  {}",
+        emits.join("\n  "),
+    );
+    // Reading the Terms is not accepting them: no account minting, and the
+    // turn still offers (and requires) the explicit "I agree" action.
+    assert!(
+        !emits.iter().any(|e| e.contains("carrier:CreateAccount")),
+        "reading the Terms must not mint an account; emits:\n  {}",
+        emits.join("\n  "),
+    );
+    let widget = onboarding_level_widget(&store);
+    assert!(
+        widget.contains("urn:msg2:onboarding:agree")
+            && !widget.contains("urn:msg2:onboarding:connect"),
+        "the Terms turn must remain current (not advanced) after the link tap; got: {widget}",
     );
 }
 
