@@ -19,6 +19,11 @@ default:
   before_script:
     # Shell executor inherits a minimal launchd PATH.
     - export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
+    # launchd services default to a 256 soft fd limit (hard: unlimited) —
+    # nowhere near enough for the pipeline DAG's per-node self-pipes under
+    # cargo's parallel test threads ("Too many open files", 47 failures on
+    # the first CI run). Interactive shells run at ~1M.
+    - ulimit -n 4096
 
 variables:
   # carrier (+ nested serd) and quickjs; all public https URLs.
