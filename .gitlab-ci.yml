@@ -1,0 +1,61 @@
+# CI for antenna (CUT-T3, control/plan/test-quality/PLAN.md in the workspace).
+#
+# Runs on the workspace Mac (instance runner #1, shell executor, tag `macos`)
+# — the canonical CI home for antenna. A GitHub-hosted workflow was tried
+# first and abandoned: antenna embeds Turtle from the PRIVATE siblings at
+# compile time (src/lib.rs include_str! of ../arch/ontology/*.ttl and
+# ../themes/*/*.ttl), so a standalone public checkout cannot build. Here the
+# job clones every needed sibling via CI_JOB_TOKEN (each sibling project
+# must allow antenna in Settings → CI/CD → Job token permissions), which
+# also lets the radios-dependent pipeline-smoke tests run — full coverage,
+# nothing excluded.
+
+stages:
+  - test
+
+default:
+  tags:
+    - macos
+  before_script:
+    # Shell executor inherits a minimal launchd PATH.
+    - export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
+
+variables:
+  # carrier (+ nested serd) and quickjs; all public https URLs.
+  GIT_SUBMODULE_STRATEGY: recursive
+
+test:
+  stage: test
+  interruptible: true
+  # cargo test can hang forever in libjami fini (ISSUE-131); without a
+  # per-step timeout, bound the whole job instead of eating the 1h default.
+  timeout: 30m
+  script:
+    # Siblings used at compile time (arch, themes) and by the pipeline-smoke
+    # tests (radios). Cloned NEXT TO the antenna checkout — include_str!
+    # paths are ../-relative — and re-cloned fresh each job (the shell
+    # runner's builds dir persists, and only the project dir is git-cleaned).
+    - |
+      for sib in arch themes radios; do
+        rm -rf "../$sib"
+        git clone --depth 1 "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/resonator/$sib.git" "../$sib"
+      done
+    # Pre-built libjami prefix (no-op when already staged in ~/.cache, ~30s
+    # to fetch otherwise) + the kernel-versioned pjsip/srtp/yuv names
+    # build.rs links against (the prefix stages kernel-version-free names).
+    - make -C third_party/carrier libjami
+    - |
+      sha="$(tr -d '[:space:]' < third_party/carrier/JAMI_VERSION)"
+      cd "${XDG_CACHE_HOME:-$HOME/.cache}/resonator/libjami/$sha/lib"
+      for f in lib*-apple-darwin.a; do
+        ln -sf "$f" "${f%.a}$(uname -r).a"
+      done
+      cd "$CI_PROJECT_DIR"
+    - make -C third_party/carrier
+    # Persistent target dir: the builds checkout is fresh every job, and a
+    # cold antenna build is 10+ min; this host is the only runner, so a
+    # host-local cache dir keeps CI runs incremental.
+    - export CARGO_TARGET_DIR="$HOME/.cache/resonator/ci-target/antenna"
+    - cargo fmt --check
+    - cargo clippy --all-targets -- -D warnings
+    - cargo test
