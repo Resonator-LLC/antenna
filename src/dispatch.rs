@@ -1532,4 +1532,203 @@ mod tests {
         assert!(msgs[0].contains("design:ThemeBundleComplete"));
         assert!(msgs[0].contains("design:bundleSize 0"));
     }
+
+    // -----------------------------------------------------------------------
+    // CUT-T4 — cross-seam contract fixtures (control/plan/test-quality).
+    //
+    // The goldens in radios/fixtures/ are the agreed wire shapes Station
+    // parses. These tests assert that Antenna's LIVE output for each shape
+    // uses ONLY the vocabulary (predicate IRIs + rdf:type objects) the golden
+    // documents — i.e. the golden never names a predicate Antenna doesn't
+    // emit. Station's suite feeds the SAME files through its real consumers
+    // (ThemeStore / ResultDecoder), so a fixture vocabulary drift fails both
+    // suites at once. See radios/fixtures/README.md.
+    // -----------------------------------------------------------------------
+
+    /// Prefixes prepended to a live OUT-message dump so Oxigraph can parse it
+    /// standalone — wire frames carry no `@prefix` directives.
+    const STD_PREFIXES: &str = "@prefix antenna: <http://resonator.network/v2/antenna#> .\n\
+         @prefix design: <http://resonator.network/v2/design#> .\n\
+         @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\
+         @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n";
+
+    /// Read a `radios/fixtures/<name>` golden, or None when the radios sibling
+    /// is absent (mirrors Station's graceful skip — antenna CI clones it).
+    fn fixture(name: &str) -> Option<String> {
+        std::fs::read_to_string(workspace_root().join("radios/fixtures").join(name)).ok()
+    }
+
+    /// The vocabulary of a Turtle document: every predicate IRI plus every
+    /// rdf:type object IRI.
+    fn rdf_vocab(doc: &str) -> std::collections::BTreeSet<String> {
+        use oxigraph::io::{RdfFormat, RdfParser};
+        use oxigraph::model::Term;
+        const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+        let parser = RdfParser::from_format(RdfFormat::Turtle);
+        let mut set = std::collections::BTreeSet::new();
+        for quad in parser.for_reader(doc.as_bytes()) {
+            let quad = quad.expect("turtle parses");
+            set.insert(quad.predicate.as_str().to_string());
+            if quad.predicate.as_str() == RDF_TYPE {
+                if let Term::NamedNode(n) = &quad.object {
+                    set.insert(n.as_str().to_string());
+                }
+            }
+        }
+        set
+    }
+
+    /// Assert every term the fixture names is one Antenna actually emits.
+    fn assert_fixture_vocab_emitted(fixture_doc: &str, live_messages: &[String], ctx: &str) {
+        let fixture_vocab = rdf_vocab(fixture_doc);
+        let live_doc = format!("{STD_PREFIXES}{}", live_messages.join("\n"));
+        let live_vocab = rdf_vocab(&live_doc);
+        let missing: Vec<_> = fixture_vocab.difference(&live_vocab).cloned().collect();
+        assert!(
+            missing.is_empty(),
+            "{ctx}: golden names vocabulary Antenna never emits: {missing:?}\n\
+             (a renamed predicate/type in the fixture, or a drift in Antenna's \
+             output — Station parses this same file)\nlive vocab: {live_vocab:?}",
+        );
+        assert!(
+            !fixture_vocab.is_empty(),
+            "{ctx}: fixture parsed to an empty vocabulary",
+        );
+    }
+
+    fn run_select(store: &RdfStore, sparql: &str) -> Vec<String> {
+        let mut out = TestOut::new();
+        handle_spin(
+            &format!("[] a sp:Select ; sp:text \"{sparql}\" ."),
+            &format!("{}Select", SP_NS),
+            store,
+            &mut out,
+        );
+        out.messages()
+    }
+
+    #[test]
+    fn theme_bundle_fixture_vocab_matches_live_dispatch() {
+        let Some(golden) = fixture("theme_bundle.ttl") else {
+            eprintln!("skip: no radios/fixtures checkout");
+            return;
+        };
+        // Live: the exact bundle Station's ThemeStore consumes on connect.
+        let store = store_with_voidline();
+        let dag = Dag::load(&store).unwrap();
+        let mut out = TestOut::new();
+        dispatch(
+            "[] a design:ResolveActiveTheme .",
+            &store,
+            &dag,
+            None,
+            "",
+            &mut out,
+        );
+        assert_fixture_vocab_emitted(&golden, &out.messages(), "theme_bundle.ttl");
+        // The contract terms must actually be present (guards a hollow golden).
+        let vocab = rdf_vocab(&golden);
+        for term in [
+            "http://resonator.network/v2/design#resolvesTo",
+            "http://resonator.network/v2/design#hex",
+            "http://resonator.network/v2/design#ThemeBundleComplete",
+        ] {
+            assert!(vocab.contains(term), "golden missing contract term {term}");
+        }
+    }
+
+    #[test]
+    fn viewport_row_fixture_vocab_matches_live_select() {
+        let Some(golden) = fixture("viewport_result_rows.ttl") else {
+            eprintln!("skip: no radios/fixtures checkout");
+            return;
+        };
+        let store = RdfStore::open(None).unwrap();
+        store
+            .insert_turtle(
+                "@prefix antenna: <http://resonator.network/v2/antenna#> .\n\
+                 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n\
+                 <urn:fix:obj:chat> a antenna:Object ;\n\
+                   antenna:x \"12.0\"^^xsd:double ;\n\
+                   antenna:y \"-8.0\"^^xsd:double ;\n\
+                   antenna:worldWidth \"300.0\"^^xsd:double ;\n\
+                   antenna:worldHeight \"280.0\"^^xsd:double ;\n\
+                   antenna:lod [ antenna:below \"99999.0\"^^xsd:double ;\n\
+                                 antenna:widget \"Text{value=hello bob}\" ;\n\
+                                 antenna:tierLabel \"detail\" ;\n\
+                                 antenna:worldWidth \"300.0\"^^xsd:double ;\n\
+                                 antenna:worldHeight \"280.0\"^^xsd:double ] .",
+            )
+            .unwrap();
+        // Both frames Station's queryViewport fires: the data SELECT + the
+        // `?done` sentinel.
+        let mut live = run_select(
+            &store,
+            "PREFIX antenna: <http://resonator.network/v2/antenna#> \
+             SELECT ?uri ?x ?y ?w ?h ?below ?widget ?tierLabel ?lodW ?lodH ?fillMode ?directWidget WHERE { \
+             ?uri a antenna:Object ; antenna:x ?x ; antenna:y ?y ; antenna:worldWidth ?w ; antenna:worldHeight ?h . \
+             FILTER (?x + ?w / 2 >= -1000.0 && ?x - ?w / 2 <= 1000.0) \
+             FILTER (?y + ?h / 2 >= -1000.0 && ?y - ?h / 2 <= 1000.0) \
+             OPTIONAL { ?uri antenna:lod ?lod . ?lod antenna:below ?below ; antenna:widget ?widget . \
+             OPTIONAL { ?lod antenna:tierLabel ?tierLabel . } \
+             OPTIONAL { ?lod antenna:worldWidth ?lodW . } \
+             OPTIONAL { ?lod antenna:worldHeight ?lodH . } \
+             OPTIONAL { ?lod antenna:fillMode ?fillMode . } } \
+             OPTIONAL { ?uri antenna:widget ?directWidget . } }",
+        );
+        live.extend(run_select(
+            &store,
+            "SELECT (1 AS ?done) WHERE { BIND(1 AS ?x) }",
+        ));
+        assert_fixture_vocab_emitted(&golden, &live, "viewport_result_rows.ttl");
+    }
+
+    #[test]
+    fn scene_row_fixture_vocab_matches_live_select() {
+        let Some(golden) = fixture("scene_result_rows.ttl") else {
+            eprintln!("skip: no radios/fixtures checkout");
+            return;
+        };
+        let store = RdfStore::open(None).unwrap();
+        store
+            .insert_turtle(
+                "@prefix antenna: <http://resonator.network/v2/antenna#> .\n\
+                 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n\
+                 <urn:fix:scene:inbox> a antenna:Scene ;\n\
+                   antenna:scenelabel \"Inbox\" ;\n\
+                   antenna:padding \"24.0\"^^xsd:double ;\n\
+                   antenna:children ( <urn:fix:level:compose> <urn:fix:scene:thread> ) .\n\
+                 <urn:fix:level:compose> a antenna:Level ;\n\
+                   antenna:label \"Compose\" ;\n\
+                   antenna:enterPinchProgress \"0.0\"^^xsd:double ;\n\
+                   antenna:widget \"Button{onTap=urn:fix:send}[Text{value=Send}]\" .\n\
+                 <urn:fix:scene:thread> a antenna:Scene ;\n\
+                   antenna:scenelabel \"Thread\" .",
+            )
+            .unwrap();
+        let rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+        let mut live = run_select(
+            &store,
+            &format!(
+                "PREFIX antenna: <http://resonator.network/v2/antenna#> PREFIX rdf: <{rdf}> \
+                 SELECT ?scene ?scenelabel ?padding ?level ?label ?enterPinchProgress ?widget ?childSceneLabel ?childKind WHERE {{ \
+                 ?scene a antenna:Scene . \
+                 OPTIONAL {{ ?scene antenna:scenelabel ?scenelabel . }} \
+                 OPTIONAL {{ ?scene antenna:padding ?padding . }} \
+                 ?scene antenna:children ?head . ?head (rdf:rest)* ?cell . ?cell rdf:first ?level . \
+                 OPTIONAL {{ ?level a antenna:Level ; antenna:widget ?widget . \
+                 OPTIONAL {{ ?level antenna:label ?label . }} \
+                 OPTIONAL {{ ?level antenna:enterPinchProgress ?enterPinchProgress . }} \
+                 BIND('level' AS ?childKind) }} \
+                 OPTIONAL {{ ?level a antenna:Scene . \
+                 OPTIONAL {{ ?level antenna:scenelabel ?childSceneLabel . }} \
+                 BIND('scene' AS ?childKind) }} }}"
+            ),
+        );
+        live.extend(run_select(
+            &store,
+            "SELECT (1 AS ?sceneDone) WHERE { BIND(1 AS ?x) }",
+        ));
+        assert_fixture_vocab_emitted(&golden, &live, "scene_result_rows.ttl");
+    }
 }
