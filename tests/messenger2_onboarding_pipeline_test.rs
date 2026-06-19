@@ -140,9 +140,47 @@ fn onboarding_level_widget(store: &RdfStore) -> String {
     rows[0][0].clone()
 }
 
+/// The rendered messenger panel lives in the inbox Scene's Level widget DSL
+/// (`urn:msg2:inbox:level` `antenna:widget`). The header's self-name
+/// (`Text{value=<nick>,…}`) is built from `globalThis.nick`, so this is where
+/// ISSUE-132's self-name regression is observable. Only present once the
+/// pipeline has left onboarding (AccountReady cleared `onboardingActive`).
+fn inbox_level_widget(store: &RdfStore) -> String {
+    let rows = select_rows(
+        store,
+        "PREFIX ant: <http://resonator.network/v2/antenna#> \
+         SELECT ?w WHERE { <urn:msg2:inbox:level> a ant:Level ; ant:widget ?w }",
+    );
+    assert_eq!(
+        rows.len(),
+        1,
+        "expected exactly one inbox-Level widget binding, got {rows:?}",
+    );
+    rows[0][0].clone()
+}
+
 fn onboarding_required_event() -> String {
     "[] a antenna:Test ; antenna:OnboardingRequired \"_\" ; antenna:reason \"no-account\" ."
         .to_string()
+}
+
+/// Mirror the carrier's `carrier:AccountReady` wire shape (see
+/// `antenna/src/carrier.rs` AccountReady mapping): it carries the account, the
+/// 40-hex selfUri, and the account's persisted `Account.displayName`. The
+/// pipeline must treat this displayName as the source of truth for the
+/// self-name shown in the UI (ISSUE-132).
+fn account_ready_event(self_uri: &str, display_name: &str) -> String {
+    // Typed `antenna:Test` (not `carrier:AccountReady`) so dispatch broadcasts
+    // it to the script instead of routing it to the carrier FFI as a command;
+    // the carrier event rides as a predicate so the pipeline's substring match
+    // (`indexOf('carrier:AccountReady')`) still fires. Mirrors the synthetic
+    // carrier-event shape used across the messenger2 pipeline tests.
+    format!(
+        "[] a antenna:Test ; carrier:AccountReady \"_\" ; \
+         carrier:account \"acct-test\" ; \
+         carrier:selfUri \"{self_uri}\" ; \
+         carrier:displayName \"{display_name}\" ."
+    )
 }
 
 fn tap_event(target: &str) -> String {
@@ -399,5 +437,172 @@ fn conversational_import_attaches_then_imports() {
     assert!(
         import.contains("carrier:archivePath \"/tmp/resonator-archive.gz\""),
         "ImportAccount must carry the chosen archive path; got: {import}",
+    );
+}
+
+/// ISSUE-132 — the chosen display name must show up as the self-name in the
+/// messenger UI once the account is ready. `CreateAccount` already carries the
+/// chosen name (asserted above); the regression is that the rendered self-name
+/// stayed the radio-default `__NICK__` (`alice` in these fixtures) because the
+/// pipeline never read it back. After the fix, `carrier:AccountReady`'s
+/// `carrier:displayName` reconciles `globalThis.nick`, so the inbox header
+/// renders the chosen name and the vCard-publishing `SetNick` carries it too.
+#[test]
+fn account_ready_reconciles_self_name_from_chosen_display_name() {
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+
+    // Walk the conversational create path with a chosen name.
+    dispatch_event(&dag, &store, &mut out, &onboarding_required_event());
+    dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:more"));
+    dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &text_changed_event("urn:msg2:onboarding:nick", "Reviewer"),
+    );
+    dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &tap_event("urn:msg2:onboarding:name-continue"),
+    );
+    dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:agree"));
+    dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:connect"));
+
+    // The carrier mints the account and reports back AccountReady carrying the
+    // persisted Account.displayName (= the chosen name CreateAccount set).
+    let ready_emits = dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &account_ready_event("abcdef0123456789abcdef0123456789abcdef01", "Reviewer"),
+    );
+
+    // The header self-name (Text{value=<nick>,…}) must be the chosen name, not
+    // the radio default.
+    let widget = inbox_level_widget(&store);
+    assert!(
+        widget.contains("value=Reviewer"),
+        "the messenger header must render the chosen self-name 'Reviewer'; got: {widget}",
+    );
+    assert!(
+        !widget.contains("value=alice"),
+        "the radio-default self-name must NOT leak into the header after onboarding; got: {widget}",
+    );
+
+    // The vCard-publishing SetNick (so peers learn the FN) must carry the
+    // chosen name, not the radio default.
+    let set_nick = ready_emits
+        .iter()
+        .find(|e| e.contains("carrier:SetNick"))
+        .unwrap_or_else(|| {
+            panic!(
+                "AccountReady during onboarding must publish the vCard via SetNick; emits:\n  {}",
+                ready_emits.join("\n  "),
+            )
+        });
+    assert!(
+        set_nick.contains("carrier:displayName \"Reviewer\""),
+        "SetNick must publish the chosen name 'Reviewer', not the radio default; got: {set_nick}",
+    );
+}
+
+/// ISSUE-132 — on a cold boot against an account that already has a persisted
+/// name, the pipeline must (a) render that persisted name and (b) NOT re-emit
+/// `carrier:SetNick` with the radio default — the latter previously clobbered
+/// `Account.displayName` on every relaunch, silently renaming the user back to
+/// the radio default.
+#[test]
+fn cold_boot_renders_persisted_name_without_clobbering_set_nick() {
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+
+    // First input is NOT OnboardingRequired -> the init block takes its
+    // cold-boot (account-present) branch, then the AccountReady handler runs.
+    let emits = dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &account_ready_event("0123456789abcdef0123456789abcdef01234567", "Zelda"),
+    );
+
+    let widget = inbox_level_widget(&store);
+    assert!(
+        widget.contains("value=Zelda"),
+        "cold boot must render the persisted self-name 'Zelda' in the header; got: {widget}",
+    );
+    assert!(
+        !widget.contains("value=alice"),
+        "the radio default must NOT override the persisted name on cold boot; got: {widget}",
+    );
+
+    assert!(
+        !emits.iter().any(|e| e.contains("carrier:SetNick")),
+        "cold boot must NOT emit carrier:SetNick (it would clobber the persisted \
+         Account.displayName with the radio default); emits:\n  {}",
+        emits.join("\n  "),
+    );
+}
+
+/// ISSUE-132 — importing an existing account must preserve that account's
+/// restored name. The carrier reports the restored name on AccountReady; the
+/// onboarding SetNick that publishes the vCard must re-publish THAT name, not
+/// the radio default (which previously overwrote the imported identity).
+#[test]
+fn import_preserves_restored_name_in_set_nick() {
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+
+    // Tap-only path to the connect turn, then choose import and attach an
+    // archive (no display name is ever typed in the import flow).
+    dispatch_event(&dag, &store, &mut out, &onboarding_required_event());
+    dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:skip"));
+    dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:agree"));
+    dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &tap_event("urn:msg2:onboarding:import-start"),
+    );
+    dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &text_changed_event("urn:msg2:onboarding:archive-path", "/tmp/resonator-archive.gz"),
+    );
+    dispatch_event(&dag, &store, &mut out, &tap_event("urn:msg2:onboarding:import"));
+
+    // The carrier restores the archive and reports its persisted name.
+    let ready_emits = dispatch_event(
+        &dag,
+        &store,
+        &mut out,
+        &account_ready_event("fedcba9876543210fedcba9876543210fedcba98", "RestoredBob"),
+    );
+
+    let set_nick = ready_emits
+        .iter()
+        .find(|e| e.contains("carrier:SetNick"))
+        .unwrap_or_else(|| {
+            panic!(
+                "AccountReady after import must (re)publish the vCard via SetNick; emits:\n  {}",
+                ready_emits.join("\n  "),
+            )
+        });
+    assert!(
+        set_nick.contains("carrier:displayName \"RestoredBob\""),
+        "import must re-publish the restored name 'RestoredBob', not the radio default; \
+         got: {set_nick}",
+    );
+    assert!(
+        !set_nick.contains("carrier:displayName \"alice\""),
+        "the radio default must NOT clobber the imported account's restored name; got: {set_nick}",
+    );
+
+    let widget = inbox_level_widget(&store);
+    assert!(
+        widget.contains("value=RestoredBob"),
+        "the header must render the imported account's restored name; got: {widget}",
     );
 }
