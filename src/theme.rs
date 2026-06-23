@@ -75,37 +75,36 @@ pub fn load_resolver_str(store: &RdfStore, ttl: &str) -> Result<()> {
 /// strokeWidth — as a single concatenated vector. The caller is
 /// responsible for serializing them to wire format if needed.
 pub fn resolve_active_theme(store: &RdfStore) -> Result<Vec<Triple>> {
-    // Resolve the active theme IRI up front, then pin it into each CONSTRUCT as
-    // `VALUES ?activeTheme { <iri> }`. Three scoping disciplines keep resolution
-    // O(theme-graph) regardless of Swarm size (see the .spin.ttl header for the
-    // failure this prevents):
-    //   1. The theme-definition walk lives in GRAPH <urn:design:theme>.
-    //   2. ?activeTheme is bound to a constant (not joined cross-graph).
-    //   3. Token properties are emitted via `?tProp a rdf:Property ; ?token
-    //      ?tProp ?tVal` — the predicate is BOUND (to declared design
-    //      properties), never the catch-all `?token ?tProp ?tVal`, whose
-    //      unbound predicate defeats Oxigraph's GRAPH scoping and scans the
-    //      default graph.
+    // Resolve the active theme IRI, then precompute its `design:extends` chain
+    // ONCE and feed it to each CONSTRUCT as a ground `(?ancestor ?depth)` table
+    // (@@CHAIN@@) plus the active IRI (@@ACTIVE@@). See the .spin.ttl header.
+    //
+    // Why precompute instead of walking the chain in SPARQL: the previous
+    // version walked `design:extends*` inside a per-solution `FILTER NOT EXISTS`.
+    // Oxigraph re-evaluates those property paths for every candidate solution and
+    // never hoists them, so resolution was O(solutions × path-walk) — ~17s in a
+    // debug build, ~12s of it in the has-token query alone (measured: deleting
+    // the NOT EXISTS dropped that query from ~12000ms to ~2ms). The chain is
+    // linear (single inheritance), so a few one-hop SELECTs reproduce the full
+    // `extends*` ancestor set with stable depths; the queries then run path-free
+    // and resolution drops to well under a second in debug, with byte-identical
+    // output. This is NOT a build-profile cost — it was an algorithmic property-
+    // path blow-up.
+    //
+    // Two scoping disciplines still keep resolution O(theme-graph) regardless of
+    // Swarm size: (1) the walk lives in GRAPH <urn:design:theme>; (2) token
+    // properties are emitted with a GROUND `?tProp` VALUES list, never the
+    // catch-all `?token ?tProp ?tVal` (an unbound predicate defeats Oxigraph's
+    // GRAPH scoping and scans the default graph).
     let active = match active_theme_iri(store)? {
         Some(iri) => iri,
         None => return Ok(Vec::new()),
     };
-    // Performance note: the CONSTRUCTs run directly against `store`. The cost is
-    // dominated by the `design:extends*` property-path walk over all loaded
-    // themes — ~1.4s in a release build, ~13s in a debug/unoptimized build —
-    // and is essentially INDEPENDENT of the store backend (in-memory ≈ RocksDB;
-    // see the `resolve_in_memory_vs_rocksdb` probe). The embedded Station builds
-    // antenna unoptimized for Flutter's debug config, so `flutter run` shows a
-    // ~13s themed-gate delay; `flutter run --release` boots in ~1.4s. An earlier
-    // attempt to mirror THEME_GRAPH into an in-memory store was reverted because
-    // it gave no real speedup once measured on equal footing (the original "14s
-    // RocksDB vs 1s in-memory" was a debug-vs-release comparison, not a backend
-    // one). The named-graph isolation in `theme_resolver.spin.ttl` is what keeps
-    // this O(theme-graph) rather than O(whole-store).
+    let chain = ancestor_chain_values(store, &active)?;
     let mut out = Vec::new();
     for q_iri in RESOLVER_QUERIES {
         let text = fetch_query_text(store, q_iri)?;
-        run_construct(store, &bind_active_theme(&text, &active), &mut out)?;
+        run_construct(store, &bind_query(&text, &active, &chain), &mut out)?;
     }
     Ok(out)
 }
@@ -141,16 +140,48 @@ fn first_binding(store: &RdfStore, sparql: &str, var: &str) -> Result<Option<Str
     Ok(None)
 }
 
-/// Inject `VALUES ?activeTheme { <iri> }` immediately after the query's top
-/// `WHERE {` so the theme walk runs with the active theme pinned to a constant.
-/// `iri_display` is already in term form (`<…>`), as produced by Oxigraph's
-/// `Term::to_string`.
-fn bind_active_theme(query: &str, iri_display: &str) -> String {
-    query.replacen(
-        "WHERE {",
-        &format!("WHERE {{ VALUES ?activeTheme {{ {iri_display} }}"),
-        1,
-    )
+/// Substitute the resolver's two placeholders into a query text:
+///   `@@ACTIVE@@` -> the active theme IRI in `<iri>` form (CONSTRUCT templates),
+///   `@@CHAIN@@`  -> the ground `(?ancestor ?depth)` table rows.
+/// Both appear more than once per query, so replace every occurrence. A query
+/// is invalid SPARQL until substituted, so a missed placeholder fails loudly at
+/// parse time rather than silently resolving nothing.
+fn bind_query(query: &str, active_display: &str, chain_values: &str) -> String {
+    query
+        .replace("@@ACTIVE@@", active_display)
+        .replace("@@CHAIN@@", chain_values)
+}
+
+/// Walk the single-inheritance `design:extends` chain from `active_display`
+/// (already in `<iri>` form), most-derived first, and render it as VALUES rows
+/// `(<iri> depth)` for the resolver's ground `(?ancestor ?depth)` table.
+///
+/// Single inheritance: each theme `design:extends` at most one parent, so a
+/// one-hop walk reproduces the full `design:extends*` ancestor set with a stable
+/// depth (0 = the active theme itself). The `contains` guard makes a malformed
+/// cyclic chain terminate at the repeat rather than loop forever. A
+/// `radio:hasTheme` pointing at a non-theme URI yields a single-row table
+/// `(<uri> 0)` — the queries then find no bindsRole/hasToken and emit nothing,
+/// matching the prior `extends*` behaviour.
+fn ancestor_chain_values(store: &RdfStore, active_display: &str) -> Result<String> {
+    let mut chain: Vec<String> = vec![active_display.to_string()];
+    loop {
+        let cur = chain.last().expect("chain is non-empty").clone();
+        let q = format!(
+            "PREFIX design: <{DESIGN_NS}> \
+             SELECT ?p WHERE {{ GRAPH <{THEME_GRAPH}> {{ {cur} design:extends ?p }} }} LIMIT 1"
+        );
+        match first_binding(store, &q, "p")? {
+            Some(parent) if !chain.contains(&parent) => chain.push(parent),
+            _ => break,
+        }
+    }
+    Ok(chain
+        .iter()
+        .enumerate()
+        .map(|(depth, iri)| format!("({iri} {depth})"))
+        .collect::<Vec<_>>()
+        .join(" "))
 }
 
 /// Look up the `sp:text` literal of a resolver query by its IRI. Scoped to
@@ -1018,15 +1049,21 @@ mod tests {
     /// an in-memory store and a RocksDB store — and reports whether the build is
     /// optimized.
     ///
-    /// The lesson it preserves: resolve cost is dominated by the
-    /// `design:extends*` walk and is ~equal across backends (in-memory ≈
-    /// RocksDB). What swings it ~10x is the BUILD PROFILE: ≈1.4s release vs ≈13s
-    /// debug. The original "14s RocksDB vs 1s in-memory" was a debug-vs-release
-    /// comparison, NOT a backend one — so do NOT reintroduce an in-memory mirror
-    /// on that false premise. The embedded Station builds antenna unoptimized for
-    /// Flutter's debug config (hence the slow `flutter run` boot); `--release`
-    /// boots fast. Named-graph isolation (theme_resolver.spin.ttl) is the real
-    /// scaling fix — it keeps this O(theme-graph), not O(whole-store).
+    /// The lesson it preserves: resolve cost is ~equal across backends
+    /// (in-memory ≈ RocksDB), so do NOT reintroduce an in-memory mirror to
+    /// "speed it up" (the original "14s RocksDB vs 1s in-memory" was a
+    /// debug-vs-release comparison, not a backend one).
+    ///
+    /// HISTORY: the real ~17s-debug cost was NOT the build profile — it was an
+    /// algorithmic property-path blow-up. The resolver walked `design:extends*`
+    /// inside a per-solution `FILTER NOT EXISTS`, which Oxigraph re-evaluated for
+    /// every candidate solution (O(solutions × path-walk)); the has-token query
+    /// alone was ~12s, and deleting its NOT EXISTS dropped it to ~2ms. The chain
+    /// is now precomputed in Rust (single inheritance → linear walk) and injected
+    /// as a ground `(?ancestor ?depth)` table, so the queries run path-free and
+    /// resolution is sub-second in debug regardless of backend. Named-graph
+    /// isolation (theme_resolver.spin.ttl) additionally keeps it O(theme-graph),
+    /// not O(whole-store).
     ///
     /// Run optimized to mirror the shipped app:
     ///   cargo test --release --lib resolve_in_memory_vs_rocksdb \

@@ -410,11 +410,14 @@ fn main() {
         let thin_dir = out_dir.join("jami-thin");
         let present = thin_archives_for_arch(&jami_src_lib_dir, &lipo_arch, &thin_dir);
         (thin_dir, Some(present))
-    } else if target_os() == "android" {
+    } else if target_os() == "android" || is_ios_device() {
         // Android's contrib set isn't identical to the host's (a few packages
-        // are gated on HAVE_MACOSX / HAVE_IOS upstream). Rather than hardcode
-        // the delta, scan the prefix and drop link directives for archives that
-        // weren't produced — same defensive approach as the iOS-sim thinned set.
+        // are gated on HAVE_MACOSX / HAVE_IOS upstream). The iOS device slice
+        // likewise omits archives gated on HAVE_IOS — notably libz.a (the SDK's
+        // libz.tbd is linked dynamically below). Rather than hardcode the delta,
+        // scan the prefix and drop link directives for archives that weren't
+        // produced — same defensive approach as the iOS-sim thinned set. (Device
+        // archives are already single-arch arm64, so no lipo-thinning needed.)
         (
             jami_src_lib_dir.clone(),
             Some(present_lib_stems(&jami_src_lib_dir)),

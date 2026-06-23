@@ -10,39 +10,54 @@
 # Active-theme selection (Decision VV, WW) happens in Rust, NOT here:
 # `theme::resolve_active_theme` resolves the active theme IRI
 #   1. `?_ radio:hasTheme ?t` (default graph) wins, else
-#   2. `?t a design:Theme ; design:active true` (theme graph) fallback,
-# then injects `VALUES ?activeTheme { <iri> }` at the top of each WHERE before
-# running it, so the walk runs with the theme pinned to a constant rather than
-# joined from a cross-graph `radio:hasTheme` binding.
+#   2. `?t a design:Theme ; design:active true` (theme graph) fallback.
 #
-# Token properties are emitted with the PREDICATE pinned to a ground VALUES
-# list (`VALUES ?tProp { design:hex … } ?token ?tProp ?tVal`), never the
-# catch-all `?token ?tProp ?tVal`. A *variable* predicate — even one
-# constrained by a join like `?tProp a rdf:Property` — defeats Oxigraph's GRAPH
-# scoping: even inside `GRAPH <urn:design:theme> { … }` it scans the default
-# graph (Swarm), so resolution scaled with store size (~8s on a hydrated
-# messenger2 store) and, as the persistent store grew, eventually never
-# returned. Ground VALUES keeps the lookup indexed and theme-graph-local, with
-# cost independent of Swarm size. (Measured: identical resolve time on a clean
-# store and one with 8k extra default-graph triples.)
+# THE EXTENDS CHAIN IS PRECOMPUTED IN RUST.  resolve_active_theme walks the
+# single-inheritance `design:extends` chain from the active theme once (a few
+# one-hop SELECTs, ~1ms) and injects it as a ground table via two placeholders:
+#   @@ACTIVE@@  -> the active theme IRI in `<iri>` form
+#   @@CHAIN@@   -> the ordered ancestor table `(<active> 0) (<parent> 1) …`
+#                  most-derived first; the integer is the derivation depth.
+# Both queries are INVALID SPARQL until those placeholders are substituted, so a
+# missed substitution fails loudly at parse time rather than silently resolving
+# nothing.
+#
+# WHY (perf): the previous version expressed the walk as `?activeTheme
+# design:extends* ?ancestor` plus a `FILTER NOT EXISTS { … design:extends* …
+# design:extends+ … }` override check. Oxigraph re-evaluates the two property
+# paths *inside that NOT EXISTS for every candidate solution* and never hoists
+# them, so resolution was O(solutions × path-walk): ~17s in a debug build
+# (12s of it in the has-token query alone — measured: deleting the NOT EXISTS
+# dropped that query from ~12000ms to ~2ms). Pinning the chain to a ground
+# VALUES table removes every property path; the override check becomes a plain
+# depth comparison over a ~1-3 row table. Resolution drops to well under a
+# second in debug (tens of ms in release) with byte-identical output. The cost
+# is no longer dominated by the build profile — it was an algorithmic property-
+# path blow-up, not "debug is slow".
+#
+# Last-wins precedence: the most-derived ancestor (smallest depth) that binds a
+# role / declares a hasToken with a given name / sets a strokeWidth wins. With
+# the depth table this is `FILTER NOT EXISTS { … a row with a smaller depth that
+# binds the same thing … }`.
+#
+# Token properties are still emitted with the PREDICATE pinned to a ground
+# VALUES list (`VALUES ?tProp { design:hex … } ?token ?tProp ?tVal`), never the
+# catch-all `?token ?tProp ?tVal`. A *variable* predicate — even one constrained
+# by a join — defeats Oxigraph's GRAPH scoping: even inside
+# `GRAPH <urn:design:theme> { … }` it scans the default graph (Swarm). Ground
+# VALUES keeps the lookup indexed and theme-graph-local.
 #
 # Graph scoping: all theme-definition data (`a design:Theme`, design:extends,
-# design:bindsRole, design:hasToken, token properties, design:strokeWidth)
-# lives in the named graph <urn:design:theme>; only the `radio:hasTheme`
-# selector reads the default graph (where the radio seed puts it). The walk
-# patterns are wrapped in `GRAPH <urn:design:theme> { … }` so resolution cost
-# is O(theme-graph), independent of how much radio/swarm data has accumulated
-# in the default graph. Without this, a populated store (e.g. messenger2 with a
-# hydrated Swarm) degraded the resolver to a whole-store scan that pinned the
-# embedded worker at ~100% CPU and never returned — Station's B2 boot gate then
-# hung black forever (theme bundle never emitted).
-#
-# Last-wins precedence over the design:extends inheritance chain. Most-derived
-# theme that binds a role / declares a hasToken with a given name / sets a
-# strokeWidth wins.
+# design:bindsRole, design:hasToken, token properties, design:strokeWidth) lives
+# in the named graph <urn:design:theme>; the walk patterns are wrapped in
+# `GRAPH <urn:design:theme> { … }`. The `radio:hasTheme` selector (default
+# graph) is read by the Rust runner, not here.
 #
 # Vocabulary:   ../../arch/ontology/design.ttl
-# Decision:     H2 — resolution lives as RDF data (these queries), not Rust.
+# Decision:     H2 — resolution logic lives as RDF data (these queries). The
+#               extends-chain enumeration is the one part lifted into Rust,
+#               because single inheritance makes it a trivial linear walk and
+#               keeping it in SPARQL cost ~30x (see WHY above).
 #
 # Output shape (consumed by Station's ThemeStore):
 #
@@ -56,7 +71,7 @@
 
 <urn:resolver:theme> a design:ThemeResolver ;
     rdfs:label "Voidline theme resolver" ;
-    rdfs:comment "Three SPARQL CONSTRUCT queries that resolve an extends-chain into a flat theme graph." ;
+    rdfs:comment "Three SPARQL CONSTRUCT queries that resolve an extends-chain (precomputed as a ground depth table) into a flat theme graph." ;
     design:resolves <urn:resolver:theme/role-bindings> ,
                     <urn:resolver:theme/has-token> ,
                     <urn:resolver:theme/stroke-width> .
@@ -64,44 +79,39 @@
 # -----------------------------------------------------------------------------
 # Query 1 — role bindings + token properties for bound tokens
 #
-# Walks the extends* chain from ?activeTheme. For each (role, token) binding
-# on any ancestor, emits ?role design:resolvesTo ?token unless a strictly more
-# derived ancestor also binds the same role. Emits the bound token's own
-# properties so consumers can read hex / family / size / etc. without a second
-# round-trip.
+# For each (role, token) binding on any ancestor in the @@CHAIN@@ table, emit
+# ?role design:resolvesTo ?token unless a strictly more-derived ancestor (a row
+# with a smaller depth) also binds the same role. Emits the bound token's own
+# properties so consumers can read hex / family / size without a second query.
 # -----------------------------------------------------------------------------
 
 <urn:resolver:theme/role-bindings> a sp:Construct ;
     rdfs:label "Resolve role bindings" ;
     sp:text """
 PREFIX design: <http://resonator.network/v2/design#>
-PREFIX radio:  <http://resonator.network/v2/radio#>
 CONSTRUCT {
-  ?activeTheme a design:ResolvedTheme .
+  @@ACTIVE@@ a design:ResolvedTheme .
   ?role design:resolvesTo ?token .
   ?token ?tProp ?tVal .
 }
 WHERE {
-  # ?activeTheme is bound to a constant by the Rust caller
-  # (theme::resolve_active_theme injects `VALUES ?activeTheme { <iri> }`).
   GRAPH <urn:design:theme> {
-    ?activeTheme design:extends* ?ancestor .
+    VALUES (?ancestor ?depth) { @@CHAIN@@ }
     ?ancestor design:bindsRole ?binding .
     ?binding design:role ?role ;
              design:to ?token .
     FILTER NOT EXISTS {
-      ?activeTheme design:extends* ?moreDerived .
-      ?moreDerived design:extends+ ?ancestor .
-      ?moreDerived design:bindsRole ?override .
+      VALUES (?md ?mdDepth) { @@CHAIN@@ }
+      FILTER(?mdDepth < ?depth)
+      ?md design:bindsRole ?override .
       ?override design:role ?role .
     }
-    # Emit the bound token's own properties. ?tProp MUST be ground (a VALUES
-    # list, NOT a `?tProp a rdf:Property` pattern): a variable predicate —
-    # even one constrained by a join — makes Oxigraph scan the default graph
-    # (Swarm), so resolution scaled with store size and eventually hung. With
-    # ?tProp pinned to the token-value predicates, this is an indexed,
-    # theme-graph-local lookup whose cost is independent of Swarm size.
-    # ⚠️ Keep this list in sync with the token-value properties in design.ttl.
+    # Emit the bound token's own properties. ?tProp MUST be ground (this VALUES
+    # list, NOT a `?tProp a rdf:Property` pattern): a variable predicate makes
+    # Oxigraph scan the default graph (Swarm), so resolution would scale with
+    # store size. With ?tProp pinned this is an indexed, theme-graph-local
+    # lookup. ⚠️ Keep this list in sync with the token-value properties in
+    # design.ttl.
     OPTIONAL {
       VALUES ?tProp {
         design:hex design:alpha design:name design:svgPath design:viewBox
@@ -117,30 +127,27 @@ WHERE {
 # -----------------------------------------------------------------------------
 # Query 2 — flat tokens (radii, spacing, icons)
 #
-# These are declared via ?theme design:hasToken ?t and identified by
-# design:name (e.g. "r2", "s4", "lock"). For each name, the most-derived
-# ancestor's token wins.
+# Declared via ?ancestor design:hasToken ?t and identified by design:name (e.g.
+# "r2", "s4", "lock"). For each name, the most-derived ancestor's token wins.
 # -----------------------------------------------------------------------------
 
 <urn:resolver:theme/has-token> a sp:Construct ;
     rdfs:label "Resolve flat tokens" ;
     sp:text """
 PREFIX design: <http://resonator.network/v2/design#>
-PREFIX radio:  <http://resonator.network/v2/radio#>
 CONSTRUCT {
-  ?activeTheme design:hasToken ?token .
+  @@ACTIVE@@ design:hasToken ?token .
   ?token ?tProp ?tVal .
 }
 WHERE {
-  # ?activeTheme bound to a constant by the Rust caller (see Query 1).
   GRAPH <urn:design:theme> {
-    ?activeTheme design:extends* ?ancestor .
+    VALUES (?ancestor ?depth) { @@CHAIN@@ }
     ?ancestor design:hasToken ?token .
     ?token design:name ?name .
     FILTER NOT EXISTS {
-      ?activeTheme design:extends* ?moreDerived .
-      ?moreDerived design:extends+ ?ancestor .
-      ?moreDerived design:hasToken ?override .
+      VALUES (?md ?mdDepth) { @@CHAIN@@ }
+      FILTER(?mdDepth < ?depth)
+      ?md design:hasToken ?override .
       ?override design:name ?name .
     }
     # Ground-predicate token-property emission (see Query 1's note).
@@ -162,19 +169,17 @@ WHERE {
     rdfs:label "Resolve stroke width" ;
     sp:text """
 PREFIX design: <http://resonator.network/v2/design#>
-PREFIX radio:  <http://resonator.network/v2/radio#>
 CONSTRUCT {
-  ?activeTheme design:strokeWidth ?sw .
+  @@ACTIVE@@ design:strokeWidth ?sw .
 }
 WHERE {
-  # ?activeTheme bound to a constant by the Rust caller (see Query 1).
   GRAPH <urn:design:theme> {
-    ?activeTheme design:extends* ?ancestor .
+    VALUES (?ancestor ?depth) { @@CHAIN@@ }
     ?ancestor design:strokeWidth ?sw .
     FILTER NOT EXISTS {
-      ?activeTheme design:extends* ?moreDerived .
-      ?moreDerived design:extends+ ?ancestor .
-      ?moreDerived design:strokeWidth ?override .
+      VALUES (?md ?mdDepth) { @@CHAIN@@ }
+      FILTER(?mdDepth < ?depth)
+      ?md design:strokeWidth ?override .
     }
   }
 }
