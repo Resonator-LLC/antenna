@@ -98,7 +98,7 @@ fn handle_subscribe_blocklist(line: &str, store: &RdfStore, dag: &Dag, out: &mut
     match crate::blocklist::verify_signed_blocklist(
         &payload,
         &sig,
-        &crate::blocklist::DEV_BLOCKLIST_PUBKEY,
+        &crate::blocklist::BLOCKLIST_PUBKEY,
     ) {
         Ok(entries) => {
             tracing::info!(target: "MODERATION", count = entries.len(), "blocklist verified");

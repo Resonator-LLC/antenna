@@ -644,23 +644,23 @@ fn reporting_a_contact_composes_an_evidence_bundle_and_offers_block() {
 // CMP-024 — default subscribable signed blocklist
 // ---------------------------------------------------------------------------
 
-/// Dev signing seed; its public key is pinned as `DEV_BLOCKLIST_PUBKEY` in
-/// `antenna::blocklist`. Dev-only — the real key's secret never enters the repo.
-const DEV_SEED: [u8; 32] = [0x42u8; 32];
+// Production-signed test vectors — the exact (payload_b64, sig_b64) pairs
+// Station would fetch and hand to antenna, signed by the real blocklist key
+// whose public half is pinned as `BLOCKLIST_PUBKEY` in `antenna::blocklist` and
+// whose secret lives only in 1Password (custody: compliance/plan/
+// cmp024-blocklist-key.md). They name the inert test fingerprint PEER_URI, so
+// the signed bytes are harmless public artifacts. Regenerate with the CUT-25
+// keygen helper if PEER_URI or the pinned key ever changes.
 
-/// Sign `payload` with the dev key, returning `(payload_b64, sig_b64)` — the
-/// exact pair Station would fetch and hand to antenna.
-fn sign_blocklist(payload: &str) -> (String, String) {
-    use base64::Engine;
-    use ed25519_dalek::{Signer, SigningKey};
-    let key = SigningKey::from_bytes(&DEV_SEED);
-    let sig = key.sign(payload.as_bytes());
-    let engine = base64::engine::general_purpose::STANDARD;
-    (
-        engine.encode(payload.as_bytes()),
-        engine.encode(sig.to_bytes()),
-    )
-}
+/// Signed `# resonator default blocklist\n{PEER_URI}\n`.
+const SIGNED_LIST_PAYLOAD: &str = "IyByZXNvbmF0b3IgZGVmYXVsdCBibG9ja2xpc3QKMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nwo=";
+const SIGNED_LIST_SIG: &str =
+    "+0xX46+KHmCiLYrOQhOpvjw8bdobB81OBG5kcEDTAbEpBhOeLwy01Lk9gJmI0R1dOp2SRH3wIKEOR8aXtpPkDQ==";
+
+/// Signed `{PEER_URI}\n` (no header line).
+const SIGNED_PEER_PAYLOAD: &str = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nwo=";
+const SIGNED_PEER_SIG: &str =
+    "BtKxVmPk/c2FfseDKJHe5VJSGjsH6esCI7W1vv3exv4GIrj8LbpXdo3G60Hxa/wzGwZdAGFDaf1HnPSa5L+0Bg==";
 
 fn subscribe_event(payload_b64: &str, sig_b64: &str) -> String {
     format!(
@@ -711,8 +711,14 @@ fn subscribed_blocklist_applies_through_the_same_gate() {
 
     // A developer-signed list naming the peer is applied (antenna verifies the
     // signature, re-emits BlocklistApply, the pipeline blocks via the same path).
-    let (p, s) = sign_blocklist(&format!("# resonator default blocklist\n{PEER_URI}\n"));
-    dispatch::dispatch(&subscribe_event(&p, &s), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &subscribe_event(SIGNED_LIST_PAYLOAD, SIGNED_LIST_SIG),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 40);
 
     // Same enforcement path as a manual block: blocklist graph + render gate.
@@ -764,8 +770,14 @@ fn subscribed_blocklist_override_is_sticky() {
     );
     settle(&dag, &store, &mut out, 30);
 
-    let (p, s) = sign_blocklist(&format!("{PEER_URI}\n"));
-    dispatch::dispatch(&subscribe_event(&p, &s), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &subscribe_event(SIGNED_PEER_PAYLOAD, SIGNED_PEER_SIG),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 40);
     assert!(peer_in_blocklist_graph(&store), "subscription applied");
 
@@ -785,7 +797,14 @@ fn subscribed_blocklist_override_is_sticky() {
     );
 
     // Re-applying the same signed list must NOT re-block the overridden entry.
-    dispatch::dispatch(&subscribe_event(&p, &s), &store, &dag, None, "", &mut out);
+    dispatch::dispatch(
+        &subscribe_event(SIGNED_PEER_PAYLOAD, SIGNED_PEER_SIG),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
     settle(&dag, &store, &mut out, 40);
     assert!(
         !peer_in_blocklist_graph(&store),
@@ -808,15 +827,15 @@ fn tampered_blocklist_is_rejected_not_applied() {
     );
     settle(&dag, &store, &mut out, 30);
 
-    // Sign one list, then ship a DIFFERENT payload under that signature.
-    let (_p, s) = sign_blocklist(&format!("{PEER_URI}\n"));
+    // Take a valid production signature over `{PEER_URI}\n`, then ship a
+    // DIFFERENT payload under it — antenna must reject the mismatch.
     let tampered = {
         use base64::Engine;
         base64::engine::general_purpose::STANDARD
             .encode(b"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n")
     };
     dispatch::dispatch(
-        &subscribe_event(&tampered, &s),
+        &subscribe_event(&tampered, SIGNED_PEER_SIG),
         &store,
         &dag,
         None,
