@@ -134,6 +134,15 @@ pub struct AntennaContext {
     /// Used by the onboarding-wait path to publish `antenna:OnboardingRequired`
     /// once the worker is actually pumping the OUT ring.
     bootstrap_emit: Option<String>,
+    /// Account id whose libjami load was deferred off the synchronous
+    /// `antenna_create` path (the `Some(id)` load path). `None` for the mint
+    /// and onboarding-wait paths, which need no deferred load. The actual
+    /// `carrier.load_account` runs on the worker's first `tick()` — see the
+    /// startup block there for why (cold-start UI-isolate freeze fix).
+    pending_account_load: Option<String>,
+    /// False until the worker's first `tick()` runs its one-shot startup block
+    /// (emit the resolved theme bundle, then kick off [`pending_account_load`]).
+    startup_emitted: bool,
 }
 
 impl AntennaContext {
@@ -221,12 +230,12 @@ impl AntennaContext {
         //                    `antenna:OnboardingRequired` on the first tick
         //                    so the pipeline can render the onboarding scene.
         //   * Some("<id>") → attach an account already on disk.
-        let (account, bootstrap_emit) = match account_id {
+        let (account, bootstrap_emit, pending_account_load) = match account_id {
             None => {
                 let new_id = carrier.create_account(None, None, None)?;
                 tracing::info!(target: "JAMI", account = %new_id, "created account");
                 eprintln!("antenna: created account {new_id}");
-                (new_id, None)
+                (new_id, None, None)
             }
             Some("") => {
                 tracing::info!(target: "JAMI", "onboarding-wait mode: no account on cold boot");
@@ -236,12 +245,21 @@ impl AntennaContext {
                         "[] a antenna:OnboardingRequired ; antenna:reason \"no-account\" ."
                             .to_string(),
                     ),
+                    None,
                 )
             }
             Some(id) => {
-                carrier.load_account(id)?;
-                tracing::info!(target: "JAMI", account = id, "loading account");
-                (id.to_string(), None)
+                // Cold-start UI-freeze fix: do NOT call `carrier.load_account`
+                // here. `new_with_ttl` runs inside `antenna_create`, which the
+                // Flutter embedding invokes *synchronously on the Dart UI
+                // isolate*. A cold libjami account registration blocks ~3.5s
+                // (measured on an iPhone 14 Pro Max), freezing Flutter's first
+                // frame behind the white launch screen. Defer the load to the
+                // worker's first `tick()` so `antenna_create` returns in ~0.5s.
+                // The id is known now, so the `out_account_id` contract and
+                // `antenna_account_id` are unaffected.
+                tracing::info!(target: "JAMI", account = id, "account load deferred to worker");
+                (id.to_string(), None, Some(id.to_string()))
             }
         };
 
@@ -252,11 +270,52 @@ impl AntennaContext {
             account_id: Arc::new(Mutex::new(account)),
             carrier_event_rx: event_rx,
             bootstrap_emit,
+            pending_account_load,
+            startup_emitted: false,
         })
     }
 
     /// One tick: iterate carrier, drain events to OUT, drain IN and dispatch.
     pub fn tick(&mut self, input: &mut dyn AntennaIn, output: &mut dyn AntennaOut) -> Result<()> {
+        // First-tick startup one-shot, run before any carrier account work:
+        //
+        //   1. Emit the resolved theme bundle immediately. The 408 design
+        //      triples are already in THEME_GRAPH (loaded in `new_with_ttl`),
+        //      so the resolve is self-contained — it needs neither the account
+        //      nor the Swarm. Station gates its first real frame on
+        //      `design:ThemeBundleComplete`; emitting it here, ahead of the
+        //      deferred load below, makes the bundle the first OUT message
+        //      instead of queuing it behind a cold Swarm sync (~16s on device).
+        //      Station also sends its own `ResolveActiveTheme` on connect — a
+        //      harmless idempotent re-resolve; this proactive emit just wins
+        //      the race so the boot gate opens in ~1s.
+        //
+        //   2. Kick off the deferred libjami account load (`Some(id)` path).
+        //      We're on the worker thread now, off the synchronous
+        //      `antenna_create` path, so this no longer freezes the UI isolate.
+        if !self.startup_emitted {
+            self.startup_emitted = true;
+            let acct = self.account_id.lock().expect("account_id poisoned").clone();
+            dispatch::dispatch(
+                "[] a design:ResolveActiveTheme .",
+                &self.store,
+                &self.dag,
+                Some(&self.carrier),
+                &acct,
+                output,
+            );
+            if let Some(id) = self.pending_account_load.take() {
+                match self.carrier.load_account(&id) {
+                    Ok(()) => {
+                        tracing::info!(target: "JAMI", account = %id, "loading account (deferred)")
+                    }
+                    Err(e) => {
+                        tracing::error!(target: "JAMI", %e, account = %id, "deferred load_account failed")
+                    }
+                }
+            }
+        }
+
         // Bootstrap one-shot: publish the onboarding-wait announcement on
         // the first tick after `new_with_ttl` returned. Emit + store so
         // both the pipeline (via the DAG) and any pure-canvas listener see
