@@ -387,6 +387,18 @@ extern "C" {
     fn carrier_remove_account(c: *mut Carrier, account_id: *const c_char) -> c_int;
     fn carrier_get_id(c: *mut Carrier, account_id: *const c_char) -> c_int;
     fn carrier_set_nick(c: *mut Carrier, account_id: *const c_char, nick: *const c_char) -> c_int;
+    fn carrier_apply_dht_preset(c: *mut Carrier, account_id: *const c_char) -> c_int;
+    fn carrier_set_account_config(
+        c: *mut Carrier,
+        account_id: *const c_char,
+        proxy_enabled: c_int,
+        dht_proxy_list_url_or_null: *const c_char,
+        proxy_server_or_null: *const c_char,
+        bootstrap_or_null: *const c_char,
+        turn_server_or_null: *const c_char,
+        turn_username_or_null: *const c_char,
+        turn_password_or_null: *const c_char,
+    ) -> c_int;
     fn carrier_send_trust_request(
         c: *mut Carrier,
         account_id: *const c_char,
@@ -1078,6 +1090,21 @@ pub struct CarrierClient {
 // that all subsequent iterate() calls come from the same thread.
 unsafe impl Send for CarrierClient {}
 
+/// Per-field network/DHT config for [`CarrierClient::set_account_config`].
+/// Every field is optional — `None` (or an empty string) leaves the
+/// corresponding libjami account detail unchanged. `proxy_enabled` is
+/// tri-state: `None` = unchanged, `Some(true/false)` = set.
+#[derive(Debug, Default, Clone)]
+pub struct AccountNetworkConfig<'a> {
+    pub proxy_enabled: Option<bool>,
+    pub dht_proxy_list_url: Option<&'a str>,
+    pub proxy_server: Option<&'a str>,
+    pub bootstrap: Option<&'a str>,
+    pub turn_server: Option<&'a str>,
+    pub turn_username: Option<&'a str>,
+    pub turn_password: Option<&'a str>,
+}
+
 impl CarrierClient {
     /// Construct a Carrier instance backed by `data_dir`. The instance
     /// holds no account yet; call `create_account` or `load_account`.
@@ -1247,6 +1274,65 @@ impl CarrierClient {
         let rc = unsafe { carrier_set_nick(self.ptr, id_c.as_ptr(), nick_c.as_ptr()) };
         if rc < 0 {
             bail!("carrier_set_nick failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    /// Apply Resonator's hardwired DHT defaults to `account_id` (the
+    /// "Use Resonator DHT" preset): proxy on, pointed at the bundled
+    /// proxy/bootstrap endpoints. Idempotent.
+    pub fn apply_dht_preset(&self, account_id: &str) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let rc = unsafe { carrier_apply_dht_preset(self.ptr, id_c.as_ptr()) };
+        if rc < 0 {
+            bail!("carrier_apply_dht_preset failed: {}", rc);
+        }
+        Ok(())
+    }
+
+    /// Set individual network/DHT knobs on `account_id`. See
+    /// [`AccountNetworkConfig`] for the per-field "leave unchanged" semantics.
+    pub fn set_account_config(
+        &self,
+        account_id: &str,
+        cfg: &AccountNetworkConfig,
+    ) -> Result<()> {
+        let id_c = CString::new(account_id)?;
+        let proxy_flag: c_int = match cfg.proxy_enabled {
+            None => -1,
+            Some(false) => 0,
+            Some(true) => 1,
+        };
+        // Hold each CString in a local so the pointers handed to C stay valid
+        // for the whole call; empty strings collapse to a null ("unchanged").
+        let to_c = |s: Option<&str>| -> Result<Option<CString>> {
+            match s {
+                Some(v) if !v.is_empty() => Ok(Some(CString::new(v)?)),
+                _ => Ok(None),
+            }
+        };
+        let dht_c = to_c(cfg.dht_proxy_list_url)?;
+        let proxy_c = to_c(cfg.proxy_server)?;
+        let boot_c = to_c(cfg.bootstrap)?;
+        let turn_c = to_c(cfg.turn_server)?;
+        let tuser_c = to_c(cfg.turn_username)?;
+        let tpass_c = to_c(cfg.turn_password)?;
+        let p = |o: &Option<CString>| o.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
+        let rc = unsafe {
+            carrier_set_account_config(
+                self.ptr,
+                id_c.as_ptr(),
+                proxy_flag,
+                p(&dht_c),
+                p(&proxy_c),
+                p(&boot_c),
+                p(&turn_c),
+                p(&tuser_c),
+                p(&tpass_c),
+            )
+        };
+        if rc < 0 {
+            bail!("carrier_set_account_config failed: {}", rc);
         }
         Ok(())
     }

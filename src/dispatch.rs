@@ -2,7 +2,7 @@
 
 //! Reactive router: parse incoming Turtle, dispatch by rdf:type.
 
-use crate::carrier::CarrierClient;
+use crate::carrier::{AccountNetworkConfig, CarrierClient};
 use crate::channel::AntennaOut;
 use crate::dag::Dag;
 use crate::store::RdfStore;
@@ -439,6 +439,39 @@ fn handle_carrier(
             };
             if let Err(e) = carrier.set_nick(&account, &nick) {
                 carrier_error(out, "SetNick", &e);
+            }
+        }
+        "SetAccountConfig" => {
+            let account = account_or_default(line, default_account);
+
+            // `carrier:preset "resonator"` short-circuits to the hardwired
+            // defaults so the radio never has to carry the endpoint values.
+            if extract_property(line, "carrier:preset").as_deref() == Some("resonator") {
+                if let Err(e) = carrier.apply_dht_preset(&account) {
+                    carrier_error(out, "SetAccountConfig", &e);
+                }
+                return;
+            }
+
+            let proxy_enabled = extract_property(line, "carrier:proxyEnabled").map(|v| v == "true");
+            // Bind each owned String so the &str borrows below outlive the call.
+            let dht = extract_property(line, "carrier:dhtProxyListUrl");
+            let proxy = extract_property(line, "carrier:proxyServer");
+            let boot = extract_property(line, "carrier:bootstrap");
+            let turn = extract_property(line, "carrier:turnServer");
+            let tuser = extract_property(line, "carrier:turnUsername");
+            let tpass = extract_property(line, "carrier:turnPassword");
+            let cfg = AccountNetworkConfig {
+                proxy_enabled,
+                dht_proxy_list_url: dht.as_deref(),
+                proxy_server: proxy.as_deref(),
+                bootstrap: boot.as_deref(),
+                turn_server: turn.as_deref(),
+                turn_username: tuser.as_deref(),
+                turn_password: tpass.as_deref(),
+            };
+            if let Err(e) = carrier.set_account_config(&account, &cfg) {
+                carrier_error(out, "SetAccountConfig", &e);
             }
         }
         "SendTrustRequest" => {
@@ -1102,6 +1135,45 @@ mod tests {
         assert_eq!(
             extract_property(line, "carrier:reaction"),
             Some("\u{1F44D}".to_string())
+        );
+    }
+
+    #[test]
+    fn set_account_config_fields_parse() {
+        // Pins the predicate names the SetAccountConfig dispatch arm reads
+        // against what the Station NETWORK pane emits — a drift on either side
+        // breaks here instead of silently no-op'ing the config.
+        let line = "[] a carrier:SetAccountConfig ; carrier:account \"acc1\" ; \
+                    carrier:proxyEnabled \"true\" ; carrier:proxyServer \"dhtproxy.jami.net\" ; \
+                    carrier:bootstrap \"bootstrap.jami.net\" .";
+        assert_eq!(
+            extract_property(line, "carrier:account").as_deref(),
+            Some("acc1")
+        );
+        assert_eq!(
+            extract_property(line, "carrier:proxyServer").as_deref(),
+            Some("dhtproxy.jami.net")
+        );
+        assert_eq!(
+            extract_property(line, "carrier:bootstrap").as_deref(),
+            Some("bootstrap.jami.net")
+        );
+        // Absent optional field stays unchanged (None), not empty-string.
+        assert_eq!(extract_property(line, "carrier:turnServer"), None);
+        // The "true"/anything-else → tri-state mapping the arm applies.
+        assert_eq!(
+            extract_property(line, "carrier:proxyEnabled").map(|v| v == "true"),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn set_account_config_preset_detected() {
+        let line = "[] a carrier:SetAccountConfig ; carrier:account \"acc1\" ; \
+                    carrier:preset \"resonator\" .";
+        assert_eq!(
+            extract_property(line, "carrier:preset").as_deref(),
+            Some("resonator")
         );
     }
 
