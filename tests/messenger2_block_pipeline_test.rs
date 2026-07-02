@@ -233,7 +233,21 @@ fn text_changed_event(target: &str, value: &str) -> String {
     )
 }
 
+/// The carrier's AccountReady header — sets `globalThis.account` (via
+/// noteAccount) + `globalThis.selfUri`. carrier:RemoveContact / carrier:
+/// RemoveConversation both *require* carrier:account, so the remove path only
+/// fires once an account is ready — exactly the production ordering (AccountReady
+/// always precedes any contact event).
+fn account_ready_event(account: &str, self_uri: &str) -> String {
+    format!(
+        "[] a antenna:Test ; carrier:AccountReady \"_\" ; \
+         carrier:account \"{account}\" ; \
+         carrier:selfUri \"{self_uri}\" ."
+    )
+}
+
 const PEER_URI: &str = "0123456789abcdef0123456789abcdef01234567";
+const SELF_URI: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 #[test]
 fn blocking_a_peer_hides_their_messages() {
@@ -899,5 +913,159 @@ fn safe_mode_defaults_on_and_toggles_with_persistence() {
         emits.iter().any(|e| e.contains("SafeModeOff")),
         "toggling safe mode off must persist a SafeModeOff marker; emits:\n  {}",
         emits.join("\n  "),
+    );
+}
+
+// ---------------------------------------------------------------------------
+// ISSUE-135 — remove contact (plain un-friend, not a ban)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn removing_a_contact_emits_carrier_removes_and_purges_the_scene() {
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+
+    // Account ready first — carrier:RemoveContact / RemoveConversation both
+    // require carrier:account, so the remove path is gated on it.
+    dispatch::dispatch(
+        &account_ready_event("acct-1", SELF_URI),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    // A peer comes online and exchanges a message: this creates the contact,
+    // emits its vCard scene, and records the 1:1 conversationId under
+    // contactConv[PEER_URI] (via the TextMessage handler's noteContactConv).
+    dispatch::dispatch(
+        &contact_online_event(PEER_URI),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+    dispatch::dispatch(
+        &text_message_event(PEER_URI, "conv-peer", "HELLO_BEFORE_REMOVE"),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    // Pre-conditions: the thread renders and the vCard offers a Remove CTA.
+    assert!(
+        inbox_widget(&store).contains("HELLO_BEFORE_REMOVE"),
+        "pre-remove message should render in the active thread",
+    );
+    let vcard = vcard_widget(&store, PEER_URI).expect("contact must have a vCard scene");
+    assert!(
+        vcard.contains(&format!("urn:msg2:remove:{PEER_URI}")),
+        "an established contact's vCard must offer a Remove CTA; got:\n{vcard}",
+    );
+
+    // Tap Remove.
+    dispatch::dispatch(
+        &tap_event(&format!("urn:msg2:remove:{PEER_URI}")),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    let emits = settle_collect_emits(&dag, &store, &mut out, 30);
+
+    // (a) Plain un-friend at the daemon: RemoveContact carrying the account.
+    assert!(
+        emits
+            .iter()
+            .any(|e| e.contains("carrier:RemoveContact") && e.contains(PEER_URI)),
+        "remove must emit carrier:RemoveContact for the peer; emits:\n  {}",
+        emits.join("\n  "),
+    );
+    // (b) ...and drops the 1:1 conversation by its swarm id.
+    assert!(
+        emits
+            .iter()
+            .any(|e| e.contains("carrier:RemoveConversation") && e.contains("conv-peer")),
+        "remove must emit carrier:RemoveConversation for the peer's thread; emits:\n  {}",
+        emits.join("\n  "),
+    );
+    // (c) Remove is an un-friend, NOT a ban: no BlockContact, no blocklist entry.
+    assert!(
+        !emits.iter().any(|e| e.contains("carrier:BlockContact")),
+        "remove must not ban the contact; emits:\n  {}",
+        emits.join("\n  "),
+    );
+    assert!(
+        !ask(
+            &store,
+            &format!(
+                "ASK {{ GRAPH <{BLOCKLIST_GRAPH}> {{ \
+                 <urn:resonator:blocked:{PEER_URI}> a <urn:resonator:BlockedPeer> }} }}"
+            ),
+        ),
+        "remove must not persist a blocklist entry",
+    );
+
+    // (d) The contact is gone from the rendered rail and its vCard scene/level
+    // are torn down.
+    assert!(
+        !inbox_widget(&store).contains("HELLO_BEFORE_REMOVE"),
+        "the removed contact's thread must no longer render",
+    );
+    assert!(
+        vcard_widget(&store, PEER_URI).is_none(),
+        "the removed contact's vCard Level must be deleted",
+    );
+    assert!(
+        !ask(
+            &store,
+            &format!(
+                "PREFIX ant: <{ANTENNA_NS}> \
+                 ASK {{ <urn:msg2:contact:{PEER_URI}:scene> a ant:Scene }}"
+            ),
+        ),
+        "the removed contact's vCard Scene must be deleted",
+    );
+}
+
+#[test]
+fn saved_messages_self_card_offers_no_remove_cta() {
+    // The Saved Messages self-thread must never be removable (it's the
+    // single-member-self swarm — decision #10 invite-lock). Its vCard is the
+    // kind==='self' branch, which returns before the Remove CTA is appended.
+    let (store, dag) = build_messenger2_pipeline();
+    let mut out = CaptureOut::new();
+
+    dispatch::dispatch(
+        &account_ready_event("acct-1", SELF_URI),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+    dispatch::dispatch(
+        &contact_online_event(PEER_URI),
+        &store,
+        &dag,
+        None,
+        "",
+        &mut out,
+    );
+    settle(&dag, &store, &mut out, 30);
+
+    let self_card = vcard_widget(&store, "urn:msg2:saved").expect("self card");
+    assert!(
+        !self_card.contains("urn:msg2:remove:"),
+        "the Saved Messages self card must never offer a Remove CTA; got:\n{self_card}",
     );
 }
